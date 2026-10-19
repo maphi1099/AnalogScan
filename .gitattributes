@@ -1,0 +1,24 @@
+# Einheitliche Zeilenenden auf allen Plattformen (Linux-Kompatibilität)
+* text=auto eol=lf
+
+# Windows-spezifische Skripte behalten CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binärdateien
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tif binary
+*.tiff binary
+*.jxl binary
+*.dng binary
+*.icc binary
+*.icm binary
+*.pdf binary
+*.xlsx binary
+*.ARW binary
+*.RAF binary
+*.3FR binary
+*.FFF binary

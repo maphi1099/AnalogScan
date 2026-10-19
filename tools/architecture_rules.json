@@ -1,0 +1,80 @@
+{
+  "description": "Erlaubte Abhängigkeiten laut Architektur 0.3 Kap. 4.3 mit den Anpassungen A-01 bis A-06 und A-09/A-10 (Planning/abweichungen_planung.txt). Module ohne Eintrag in 'foreign' dürfen keine Fremd-Header einbinden.",
+
+  "headerGroups": {
+    "libraw":  { "prefixes": ["libraw/"], "exact": ["libraw.h"] },
+    "oiio":    { "prefixes": ["OpenImageIO/"] },
+    "lcms":    { "exact": ["lcms2.h", "lcms2_plugin.h"] },
+    "opencv":  { "prefixes": ["opencv2/", "opencv/"] },
+    "json":    { "prefixes": ["nlohmann/"] },
+    "xxhash":  { "exact": ["xxhash.h", "xxh3.h", "xxh_x86dispatch.h"] },
+    "spdlog":  { "prefixes": ["spdlog/", "fmt/"] },
+    "tbb":     { "prefixes": ["tbb/", "oneapi/tbb"], "exact": ["oneapi/tbb.h"] },
+    "simd":    { "prefixes": ["hwy/"], "exact": ["Halide.h", "HalideBuffer.h", "HalideRuntime.h", "immintrin.h", "x86intrin.h", "arm_neon.h"] },
+    "qt":      { "prefixes": ["QtCore/", "QtGui/", "QtWidgets/", "QtPrintSupport/", "QtTest/", "QtSvg/"], "regex": ["^Q[A-Z][A-Za-z0-9]*$", "^q[a-z0-9_]+\\.h$"] },
+    "gtest":   { "prefixes": ["gtest/", "gmock/"] },
+    "vulkan":  { "prefixes": ["vulkan/"], "exact": ["volk.h"] },
+    "platform": {
+      "prefixes": ["sys/"],
+      "exact": ["windows.h", "Windows.h", "unistd.h", "fcntl.h", "io.h", "direct.h", "dirent.h", "pthread.h", "process.h", "shlobj.h", "ShlObj.h", "knownfolders.h", "winioctl.h", "tlhelp32.h", "psapi.h", "dlfcn.h", "pwd.h", "sched.h"]
+    }
+  },
+
+  "modules": {
+    "base":            { "layer": "core",        "deps": [] },
+    "model":           { "layer": "core",        "deps": ["base"] },
+    "image":           { "layer": "core",        "deps": ["base"] },
+    "layout":          { "layer": "core",        "deps": ["base", "model"] },
+    "ports":           { "layer": "core",        "deps": ["base", "model", "image", "layout"] },
+    "pipeline":        { "layer": "core",        "deps": ["base", "model", "image", "ports"] },
+    "steps":           { "layer": "core",        "deps": ["base", "model", "image", "ports", "pipeline"] },
+    "analysis":        { "layer": "core",        "deps": ["base", "model", "image", "ports"] },
+    "application":     { "layer": "application", "deps": ["base", "model", "image", "layout", "ports", "pipeline", "steps", "analysis"] },
+    "ui":              { "layer": "ui",          "deps": ["application", "base", "model", "image", "layout", "ports", "pipeline", "steps", "analysis"],
+                         "foreign": ["qt"], "externalTargets": ["^Qt6::"] },
+
+    "adapter_libraw":  { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["libraw", "platform"], "externalTargets": ["^libraw::"] },
+    "adapter_oiio":    { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["oiio", "platform"], "externalTargets": ["^OpenImageIO::"] },
+    "adapter_lcms":    { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["lcms", "platform"], "externalTargets": ["^lcms2::", "^unofficial::lcms2"] },
+    "adapter_opencv":  { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["opencv", "platform"], "externalTargets": ["^opencv_"] },
+    "adapter_json":    { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["json", "platform"], "externalTargets": ["^nlohmann_json::"] },
+    "adapter_xxhash":  { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["xxhash", "platform"], "externalTargets": ["^xxHash::"] },
+    "adapter_qtprint": { "layer": "adapter", "deps": ["base", "model", "image", "ports", "layout"], "foreign": ["qt", "platform"], "externalTargets": ["^Qt6::"] },
+    "adapter_spdlog":  { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["spdlog", "platform"], "externalTargets": ["^spdlog::", "^fmt::"] },
+    "adapter_tbb":     { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["tbb", "platform"], "externalTargets": ["^TBB::"] },
+    "backend_cpu":     { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["tbb", "simd", "platform"], "externalTargets": ["^TBB::", "^hwy::", "^Halide::"] },
+
+    "autoneg":         { "layer": "program", "deps": ["*"] },
+    "autoneg-cli":     { "layer": "program", "deps": ["*"] }
+  },
+
+  "includeRoots": {
+    "base": "autoneg/base/",
+    "model": "autoneg/model/",
+    "image": "autoneg/image/",
+    "layout": "autoneg/layout/",
+    "ports": "autoneg/ports/",
+    "pipeline": "autoneg/pipeline/",
+    "steps": "autoneg/steps/",
+    "analysis": "autoneg/analysis/",
+    "application": "autoneg/application/",
+    "ui": "autoneg/ui/",
+    "adapter_libraw": "autoneg/adapter/libraw/",
+    "adapter_oiio": "autoneg/adapter/oiio/",
+    "adapter_lcms": "autoneg/adapter/lcms/",
+    "adapter_opencv": "autoneg/adapter/opencv/",
+    "adapter_json": "autoneg/adapter/json/",
+    "adapter_xxhash": "autoneg/adapter/xxhash/",
+    "adapter_qtprint": "autoneg/adapter/qtprint/",
+    "adapter_spdlog": "autoneg/adapter/spdlog/",
+    "adapter_tbb": "autoneg/adapter/tbb/",
+    "backend_cpu": "autoneg/backend/cpu/"
+  },
+
+  "tests": {
+    "dirs": ["tests"],
+    "foreign": ["gtest", "platform"],
+    "componentDir": "tests/component",
+    "componentForeign": "*"
+  }
+}

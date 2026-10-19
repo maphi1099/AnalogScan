@@ -1,0 +1,48 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "autoneg",
+  "version": "1.0.0",
+  "description": "Konvertierung kameradigitalisierter Filmnegative und Dias",
+  "builtin-baseline": "664933b8d385dfc01f4e0cdff4c7c74e71f6a740",
+  "dependencies": [
+    "gtest"
+  ],
+  "features": {
+    "raw": {
+      "description": "RAW-Dekodierung (Adapter libraw)",
+      "dependencies": [ "libraw" ]
+    },
+    "imageio": {
+      "description": "Bilddateien lesen und schreiben (Adapter oiio)",
+      "dependencies": [ "openimageio" ]
+    },
+    "color": {
+      "description": "Farbmanagement (Adapter lcms)",
+      "dependencies": [ "lcms" ]
+    },
+    "vision": {
+      "description": "Bildanalyse (Adapter opencv)",
+      "dependencies": [ { "name": "opencv4", "default-features": false } ]
+    },
+    "threading": {
+      "description": "Aufgaben- und Datenparallelität (Adapter tbb, backend cpu)",
+      "dependencies": [ "tbb" ]
+    },
+    "persistence": {
+      "description": "JSON-Dateien (Adapter json)",
+      "dependencies": [ "nlohmann-json" ]
+    },
+    "hashing": {
+      "description": "Inhaltsprüfsumme (Adapter xxhash)",
+      "dependencies": [ "xxhash" ]
+    },
+    "logging": {
+      "description": "Protokoll (Adapter spdlog)",
+      "dependencies": [ "spdlog" ]
+    },
+    "gui": {
+      "description": "Oberfläche und Druck (autoneg_ui, Adapter qtprint)",
+      "dependencies": [ "qtbase" ]
+    }
+  }
+}
