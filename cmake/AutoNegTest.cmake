@@ -14,11 +14,19 @@ function(autoneg_add_test name)
     set(target autoneg_test_${name})
     add_executable(${target} ${arg_SOURCES})
     _autoneg_resolve_deps(deps ${arg_DEPS})
-    target_link_libraries(${target} PRIVATE ${deps} GTest::gtest GTest::gmock GTest::gtest_main)
+    # Nur gmock_main linken: Unter Windows (vcpkg, DLLs) enthält gmock.dll eine eigene
+    # Kopie von gtest. Mit gtest_main zusätzlich gäbe es zwei Test-Registrierungen,
+    # und main() fände keine Tests (BUGS.md B-07). gmock_main zieht gmock und gtest nach.
+    target_link_libraries(${target} PRIVATE ${deps} GTest::gmock_main)
     target_compile_definitions(${target} PRIVATE
         AUTONEG_TESTDATA_DIR="${AUTONEG_TESTDATA_DIR}")
     autoneg_set_warnings(${target})
     gtest_discover_tests(${target}
         DISCOVERY_MODE PRE_TEST
         PROPERTIES LABELS ${arg_LABEL})
+    # Schutz gegen still verschwundene Tests (BUGS.md B-07): schlägt fehl, wenn das
+    # Programm keinen einzigen TEST() registriert hat. Führt selbst keinen Test aus.
+    add_test(NAME ${target}.linked
+        COMMAND ${target} --gtest_fail_if_no_test_linked --gtest_filter=-*)
+    set_tests_properties(${target}.linked PROPERTIES LABELS ${arg_LABEL})
 endfunction()

@@ -21,9 +21,11 @@ Format je Eintrag:
 - Plattform: Windows
 - Symptom: Visual Studio Build Tools 2022 sind installiert, aber `VC\Tools\MSVC` und `Windows Kits\10` fehlen; clang (`x86_64-pc-windows-msvc`) findet weder STL noch CRT noch SDK-Header.
 - Ursache: Workload „Desktopentwicklung mit C++“ nicht installiert. clang-cl braucht unter Windows die MSVC-Standardbibliothek und das Windows SDK, auch wenn MSVC selbst nicht als Compiler dient.
-- Abhilfe: Im Visual Studio Installer bei Build Tools 2022 die Workload „Desktopentwicklung mit C++“ mit MSVC v143 und Windows 11 SDK installieren (braucht Administratorrechte, daher durch den Nutzer).
-- Folge: Preset `windows-clang` ist geschrieben, aber noch nie gelaufen. Bis zur Installation wird nur unter Linux (WSL) gebaut und getestet.
-- Status: offen
+- Abhilfe: Workload „Desktopentwicklung mit C++“ nachinstalliert (mit UAC-Bestätigung durch den Nutzer):
+  `setup.exe modify --installPath "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.26100 --includeRecommended --passive --norestart`
+  Ergebnis: MSVC 14.44.35207, Windows SDK 10.0.26100.0.
+- Hinweis: clang-cl mit Ninja braucht die VS-Umgebung (INCLUDE/LIB). Auf der Kommandozeile vorher `vcvars64.bat` aufrufen bzw. aus der „Developer PowerShell for VS 2022“ arbeiten; CMake Tools in VS Code richtet sie selbst ein. LLVM (`C:\Program Files\LLVM\bin`) muss im PATH stehen.
+- Status: behoben (19.10.2026)
 
 ## B-02: Linux-Werkzeuge in WSL (Arch) unvollständig
 - Erstmals: 19.10.2026, zuletzt: 19.10.2026, Häufigkeit: 1
@@ -46,6 +48,14 @@ Format je Eintrag:
 - Symptom: Architekturprüfung meldet „model linkt ::@(0x57e0…)“.
 - Ursache: `target_link_libraries` aus einem anderen Verzeichnis als dem des Ziels; CMake fügt Verzeichnismarker `::@(…)` in die Eigenschaft ein.
 - Abhilfe: `autoneg_finalize_architecture` überspringt Einträge `^::@`.
+- Status: behoben
+
+## B-07: Unter Windows findet gtest keine Tests („does NOT link in any test case“)
+- Erstmals: 19.10.2026, zuletzt: 19.10.2026, Häufigkeit: 1
+- Plattform: Windows (vcpkg `x64-windows`, gtest als DLL)
+- Symptom: CTest meldet nur die Architekturtests; das Testprogramm gibt „This test program does NOT link in any test case“ aus und endet trotzdem mit 0. Die Tests verschwinden still.
+- Ursache: `gmock.dll` enthält eine eigene Kopie von gtest. Das Testprogramm registrierte seine TESTs über `gmock.dll`, `main()` aus `gtest_main.dll` fragte aber die Registrierung in `gtest.dll` ab.
+- Abhilfe: Testprogramme linken nur `GTest::gmock_main` (zieht gmock und gtest nach, eine einzige Instanz). Schutz: Jedes Testprogramm hat zusätzlich den CTest `<ziel>.linked` mit `--gtest_fail_if_no_test_linked`; er schlägt fehl, wenn kein Test registriert ist.
 - Status: behoben
 
 ## B-03: Python-Ausgabe unter Windows mit falscher Kodierung

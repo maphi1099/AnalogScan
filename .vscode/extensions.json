@@ -3,6 +3,7 @@
     "llvm-vs-code-extensions.vscode-clangd",
     "ms-vscode.cmake-tools",
     "ms-python.python",
+    "ms-vscode-remote.remote-wsl",
     "xaver.clang-format"
   ],
   "unwantedRecommendations": [

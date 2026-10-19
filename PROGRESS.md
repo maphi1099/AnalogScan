@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 19.10.2026 – **M0 unter Linux fertig, wartet auf OK des Nutzers.** Windows-Build noch nicht möglich (BUGS B-01).
+Stand: 19.10.2026 – **M0 fertig unter Windows und Linux, wartet auf OK des Nutzers.**
 
 ## Ablage
 
@@ -37,14 +37,14 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 
 ### Arbeitsumgebung
 
-- Windows 11: CMake 4.4.4, Ninja, LLVM/clang 23.1.3, vcpkg `D:\vcpkg` (Commit `664933b8…`, 18.10.2026), Python 3.12. **MSVC-Toolset und Windows SDK fehlen** → B-01.
-- WSL 2 Arch Linux (Benutzer root): clang 23.1.3, GCC 16.1.1, CMake 4.4.4, Ninja 1.13.2, Python 3.14.8, vcpkg `~/vcpkg` (gleicher Commit). Aufruf aus Git-Bash siehe B-05.
+- Windows 11: CMake 4.4.4, Ninja, LLVM/clang-cl 23.1.3, Build Tools 2022 mit MSVC 14.44.35207 (nur STL/Linker-Umgebung) und Windows SDK 10.0.26100.0, vcpkg `D:\vcpkg` (Commit `664933b8…`, 18.10.2026, `VCPKG_ROOT` als Benutzervariable), Python 3.12. clang-cl braucht die VS-Umgebung (B-01).
+- WSL 2 Arch Linux (Benutzer root): clang 23.1.3, GCC 16.1.1, CMake 4.4.4, Ninja 1.13.2, Python 3.14.8, vcpkg `/root/vcpkg` (gleicher Commit, `VCPKG_ROOT` in `/root/.profile`). Aufruf aus Git-Bash siehe B-05.
 
 ## Meilensteine
 
 | MS | Inhalt | Status | Umgesetzte Szenarien |
 |---|---|---|---|
-| M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | **Fertig unter Linux, wartet auf OK**; Windows offen (B-01) | – (kein Szenario; Beispieltest `Scaffold.M0_ModelModuleIsLinked`) |
+| M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | **Fertig (Windows + Linux), wartet auf OK** | – (kein Szenario; Beispieltest `Scaffold.M0_ModelModuleIsLinked`) |
 | M1 | base, model, image, ports | Offen | – |
 | M2 | Pipeline, CPU-Backend (vorher OE-01-Benchmark) | Offen | – |
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Offen | – |
@@ -61,7 +61,7 @@ Dateien:
 - `CMakeLists.txt` (C++23, nur Clang/GCC zugelassen, Optionen `AUTONEG_BUILD_TESTS`, `AUTONEG_CHECK_ARCHITECTURE`, `AUTONEG_ARCH_VIOLATION_DEMO`, `AUTONEG_SANITIZER`, `AUTONEG_TESTDATA_DIR`)
 - `CMakePresets.json`: `windows-clang`, `linux-clang`, `linux-gcc`, `linux-clang-asan`, `linux-clang-tsan`; Build-/Test-Presets `<preset>-debug`, `-release` (Sanitizer nur Debug). Ninja Multi-Config, Ausgabe `build/<preset>`.
 - `vcpkg.json`: Baseline `664933b8d385dfc01f4e0cdff4c7c74e71f6a740`; Standard nur `gtest`; Features `raw`, `imageio`, `color`, `vision`, `threading`, `persistence`, `hashing`, `logging`, `gui` (noch nicht aktiviert).
-- `cmake/AutoNegModule.cmake` (`autoneg_add_module`, `autoneg_add_program`, `autoneg_finalize_architecture`), `cmake/AutoNegWarnings.cmake` (Warnungen als Fehler, Sanitizer), `cmake/AutoNegTest.cmake` (`autoneg_add_test` mit Labels unit/component/e2e).
+- `cmake/AutoNegModule.cmake` (`autoneg_add_module`, `autoneg_add_program`, `autoneg_finalize_architecture`), `cmake/AutoNegWarnings.cmake` (Warnungen als Fehler, Sanitizer), `cmake/AutoNegTest.cmake` (`autoneg_add_test` mit Labels unit/component/e2e; linkt nur `GTest::gmock_main`; zusätzlicher CTest `<ziel>.linked` gegen still verschwundene Tests, B-07).
 - 20 Module als statische Ziele mit Platzhalter `moduleName()`: `base`, `model`, `image`, `layout`, `ports`, `pipeline`, `steps`, `analysis`, `application`, `ui`, `adapter_{libraw,oiio,lcms,opencv,json,xxhash,qtprint,spdlog,tbb}`, `backend_cpu`. Kein Vulkan-Ziel.
 - Programme `autoneg` (leer) und `autoneg-cli` (`--version`).
 - `tools/check_architecture.py` + `tools/architecture_rules.json`: erlaubte direkte Abhängigkeiten, Fremdbibliotheken je Modul, Zyklen, Includes (Projekt-Header nur aus erlaubten Modulen, Fremd-/Qt-/OS-Header nur im zugehörigen Adapter, unbekannte Header abgelehnt). Läuft bei jedem Build (Ziel `check_architecture`) und als CTest `architecture.check`.
@@ -69,11 +69,12 @@ Dateien:
 - `tests/unit/model/scaffold_test.cpp`: Beispieltest.
 - `.gitignore`, `.gitattributes`, `.clang-format`, `.clang-tidy`, `.vscode/extensions.json`, `.vscode/settings.json`.
 
-Nachweise (19.10.2026, WSL Arch Linux):
-- `linux-clang` Debug und Release, `linux-gcc`, `linux-clang-asan`, `linux-clang-tsan` Debug: bauen ohne Warnungen; je 3/3 Tests grün (`unit` 1, `arch` 2).
-- Absichtlicher Verstoß (`-DAUTONEG_ARCH_VIOLATION_DEMO=ON`, model → ports): Build bricht ab mit „[Abhängigkeit] model -> ports ist nicht erlaubt“ und „[Zyklus] ports -> layout -> model -> ports“.
+Nachweise (19.10.2026):
+- Windows: `windows-clang` Debug und Release bauen ohne Warnungen; je 4/4 Tests grün (`unit` 2, `arch` 2).
+- Linux (WSL Arch): `linux-clang`, `linux-gcc`, `linux-clang-asan`, `linux-clang-tsan` Debug (clang auch Release): ohne Warnungen; je 4/4 grün.
+- Absichtlicher Verstoß (`-DAUTONEG_ARCH_VIOLATION_DEMO=ON`, model → ports) auf beiden Systemen: Build bricht ab mit „[Abhängigkeit] model -> ports ist nicht erlaubt“ und „[Zyklus] ports -> layout -> model -> ports“.
 - `clang-format --dry-run --Werror` auf allen Quellen: sauber.
-- **Nicht nachgewiesen:** `windows-clang` (B-01).
+- Gefundener Fehler B-07 (unter Windows verschwanden die gtest-Tests still): zuerst mit `autoneg_test_model.linked` reproduziert, dann behoben.
 
 ## Entscheidungen
 
@@ -98,9 +99,8 @@ Vorgeschlagen, Zustimmung offen: A-09 (ui → Kernmodule), A-10 (Adapterregeln, 
 
 1. Zustimmung zu A-09 bis A-12.
 2. Einordnung der Testordner, Annotationen (L-06).
-3. MSVC-Toolset und Windows SDK installieren (B-01), danach `windows-clang` nachweisen.
 
 ## Plattformabhängiger Code (auf dem anderen System prüfen)
 
-- `CMakePresets.json` / `cmake/AutoNegWarnings.cmake`: clang-cl-Zweig (`/W4 /WX /permissive- /utf-8`, `NOMINMAX`) ist unter Windows noch nie gelaufen.
-- `cmake/AutoNegModule.cmake`: Pfade in `targets.json` (Windows-Laufwerksbuchstaben, `file(RELATIVE_PATH)`) unter Windows ungetestet.
+- `cmake/AutoNegWarnings.cmake`: getrennte Warnungs-Zweige für clang-cl und clang/GCC – nach jeder Änderung beide Systeme bauen (beide am 19.10.2026 grün).
+- `cmake/AutoNegTest.cmake`: gtest wird unter Windows als DLL, unter Linux statisch gelinkt; unterschiedliches Verhalten siehe B-07.
