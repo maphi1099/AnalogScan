@@ -72,3 +72,11 @@ Format je Eintrag:
 - Symptom: `pdftotext` liefert Latin-1, Umlaute werden beim Lesen zu `�`; mit `-layout` werden mehrspaltige Tabellen verschoben (IDs und Texte nicht mehr zugeordnet).
 - Abhilfe: `pdftotext -enc UTF-8`; Tabellen seitenweise ohne `-layout` extrahieren.
 - Status: umgangen
+
+## B-08: Python schreibt unter Windows CRLF-Zeilenenden
+- Erstmals: 19.10.2026, zuletzt: 19.10.2026, Häufigkeit: 1
+- Plattform: Windows
+- Symptom: Git warnt „CRLF will be replaced by LF“ für Dateien, die per Python-Skript geändert wurden.
+- Ursache: `Path.write_text`/`open(..., "w")` übersetzt `\n` unter Windows in `\r\n`.
+- Abhilfe: Beim Schreiben immer `newline="\n"` angeben (`open(p, "w", encoding="utf-8", newline="\n")`, `Path.write_text(..., newline="\n")` ab Python 3.10). Im Repository sorgt `.gitattributes` (`eol=lf`) ohnehin für LF.
+- Status: umgangen
