@@ -1,5 +1,8 @@
 autoneg_add_test(model
     LABEL unit
-    SOURCES scaffold_test.cpp
-    DEPS model
+    SOURCES
+        edit_history_test.cpp
+        edit_list_test.cpp
+        values_test.cpp
+    DEPS model test_support
 )

@@ -167,6 +167,8 @@ def check_includes(root: Path, rules: dict, targets: list[dict], report: Report)
     include_roots = rules.get("includeRoots", {})
     groups = load_groups(rules)
 
+    test_roots = tuple(rules.get("tests", {}).get("includeRoots", []))
+
     def check_file(path: Path, owner: str, allowed_modules: set[str] | None,
                    allowed_groups: set[str] | str) -> None:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -177,6 +179,8 @@ def check_includes(root: Path, rules: dict, targets: list[dict], report: Report)
             kind, detail = classify(header, quoted, path.parent, include_roots, groups)
             where = f"{rel}:{line}"
             if kind == "project":
+                if detail is None and owner == "tests" and header.startswith(test_roots):
+                    continue  # Testhilfen und Attrappen nur in Tests
                 if detail is None:
                     report.add(f"[Include] {where}: <{header}> gehört zu keinem bekannten Modul")
                 elif allowed_modules is not None and detail != owner and detail not in allowed_modules:

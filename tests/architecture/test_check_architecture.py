@@ -135,6 +135,13 @@ class ArchitectureCheckTest(unittest.TestCase):
         self.write("src/model/bad.cpp", '#include "autoneg/ports/i_raw_decoder.hpp"\n')
         self.assertViolation(self.run_check(), "[Include]", "model bindet <autoneg/ports/i_raw_decoder.hpp>")
 
+    def test_test_helpers_allowed_in_tests_only(self) -> None:
+        self.write("tests/unit/model/y_test.cpp",
+                   '#include "autoneg/mocks/ports.hpp"\n#include "autoneg/testing/edit_fixtures.hpp"\n')
+        self.assertEqual(self.run_check(), [])
+        self.write("src/model/bad.cpp", '#include "autoneg/mocks/ports.hpp"\n')
+        self.assertViolation(self.run_check(), "[Include]", "src/model/bad.cpp:1")
+
     def test_local_quoted_include_is_allowed(self) -> None:
         self.write("src/model/detail.hpp", "#pragma once\n")
         self.write("src/model/a.cpp", '#include "detail.hpp"\n')

@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 19.10.2026 – **M0 fertig unter Windows und Linux, wartet auf OK des Nutzers.**
+Stand: 19.10.2026 – **M1 fertig unter Windows und Linux, wartet auf OK des Nutzers.** Nächster Schritt danach: M2, beginnend mit dem Benchmark-Prototyp für OE-01.
 
 ## Ablage
 
@@ -44,8 +44,8 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 
 | MS | Inhalt | Status | Umgesetzte Szenarien |
 |---|---|---|---|
-| M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | **Fertig (Windows + Linux), wartet auf OK** | – (kein Szenario; Beispieltest `Scaffold.M0_ModelModuleIsLinked`) |
-| M1 | base, model, image, ports | Offen | – |
+| M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | Fertig, OK am 19.10.2026 | – (kein Szenario) |
+| M1 | base, model, image, ports | **Fertig (Windows + Linux), wartet auf OK** | U-MOD-01…13, U-IMG-01…04 (alle grün) |
 | M2 | Pipeline, CPU-Backend (vorher OE-01-Benchmark) | Offen | – |
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Offen | – |
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Offen | – |
@@ -76,6 +76,25 @@ Nachweise (19.10.2026):
 - `clang-format --dry-run --Werror` auf allen Quellen: sauber.
 - Gefundener Fehler B-07 (unter Windows verschwanden die gtest-Tests still): zuerst mit `autoneg_test_model.linked` reproduziert, dann behoben.
 
+### M1 – Ergebnis
+
+Umgesetzt (Architektur 9.1, 9.2, 9.9–9.11 mit A-01…A-07; Abweichungen K-M1-01…14 in `abweichungen_planung.txt`):
+- `autoneg::base`: `error.hpp` (Error, ErrorCode, Expected, makeError), `hash.hpp` (Hasher), `geometry.hpp` (Vec3, Point2, Size, Mat3, Mat2x3), `bytes.hpp`.
+- `autoneg::model`: `ids.hpp` (FrameId, RollId, StepId, UndoGroupId), `film.hpp` (FilmType, Rating, Origin, SourceFormat, FilmInfo, SourceInfo), `values.hpp` (NormPoint, NormRect, Curve, Spot, SpotList), `param_set.hpp` (ParamValue, ParamSet), `edit_entry.hpp`, `edit_list.hpp`, `edit_history.hpp` (Revision, EditHistory), `roll.hpp` (Frame, Roll), `json_value.hpp`.
+- `autoneg::image`: `image_spec.hpp` (PixelFormat, ColorSpace, MemoryLocation, ImageSpec, Roi), `storage.hpp` (IStorage, AlignedAllocator, HostStorage, DeviceStorage), `image_buffer.hpp` (ImageBuffer, ImageView), `tile_grid.hpp` (Tile, TileGrid), `cancel_token.hpp`, `pixel_program.hpp` (Lut1D, Lut3D, PixelOp, PixelProgram), `warp_plan.hpp`, `histogram.hpp`.
+- `autoneg::ports` (nur Schnittstellen): `raw_decoder.hpp`, `image_io.hpp`, `color.hpp`, `compute_backend.hpp` (KernelContext, IComputeBackend), `vision.hpp`, `repositories.hpp` (SourceStamp, SidecarData, SidecarRef, IRollRepository, IEditRepository, IPresetRepository, ISettingsStore, ICacheStore), `services.hpp` (IContentHasher, ILogger), `task_executor.hpp` (Priority, ITaskExecutor), `inference.hpp`, `film_profile_source.hpp`. `IDocumentRenderer` folgt in M7 (K-M1-13).
+- Tests: `tests/mocks` (gmock-Attrappen aller Ports, Ziel `autoneg_test_mocks`), `tests/support` (Testhilfen, Ziel `autoneg_test_support`, Ränge der Stufenfolge), Unit-Tests in `tests/unit/{base,model,image,ports}`.
+- Architekturprüfung: `autoneg/mocks/` und `autoneg/testing/` nur in `tests/` erlaubt (Selbsttest 16 Fälle).
+
+Szenarien (alle grün auf beiden Systemen): U-MOD-01, -02, -03, -04, -05, -06, -07, -08, -09, -10, -11, -12, -13; U-IMG-01, -02, -03, -04.
+Zusätzliche Tests ohne Szenario (Präfix `M1_`): 13 (base, ParamSet, Roll, JsonValue, ImageBuffer, CancelToken, Ports).
+
+Nachweise (19.10.2026): `windows-clang` Debug + Release, `linux-clang`, `linux-gcc`, `linux-clang-asan`, `linux-clang-tsan` – je 37/37 Tests grün, keine Warnungen; `clang-format --dry-run --Werror` sauber. Die festgelegte Prüfsumme in `Hasher.M1_DeterministicAndSensitive` ist auf Windows und Linux identisch.
+
+Offen aus M1:
+- Platzhalter-Implementierungen für `IInferenceRuntime` und `IFilmProfileSource` (NF-ARC-15 „vorhanden und getestet“) → M6.
+- `IDocumentRenderer` → M7.
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -93,14 +112,18 @@ Nachweise (19.10.2026):
 | D-12 | 19.10.2026 | Neuer Adapter `autoneg_adapter_tbb` mit Port `ITaskExecutor` |
 | A-01…A-07 | 19.10.2026 | Architekturanpassungen genehmigt (Wertetypen nach image, TBB hinter Port, eigener JsonValue, Basismodul, steps→ports, ports→layout, Ergänzung fehlender Typen) |
 
-Vorgeschlagen, Zustimmung offen: A-09 (ui → Kernmodule), A-10 (Adapterregeln, TBB in adapter_tbb und backend_cpu, OS-Header nur in Adaptern), A-11 (Drittbibliotheken unter Windows mit vcpkg-Standard-Toolchain), A-12 (statische Module). In `architecture_rules.json` bereits so umgesetzt.
+| A-09…A-12 | 19.10.2026 | genehmigt: ui → Kernmodule, Adapterregeln (TBB in adapter_tbb und backend_cpu, OS-Header nur in Adaptern), Drittbibliotheken unter Windows mit vcpkg-Standard-Toolchain, statische Module |
+| K-M1-01…14 | 19.10.2026 | Abweichungen von den Klassendiagrammen in M1 (Details in `abweichungen_planung.txt`, Abschnitt G) |
 
 ## Offene Fragen an den Nutzer
 
-1. Zustimmung zu A-09 bis A-12.
-2. Einordnung der Testordner, Annotationen (L-06).
+1. Einordnung der Testordner, Annotationen (L-06) – spätestens für M3/M5.
+2. OE-01 (Halide oder Highway + oneTBB): Benchmark kommt zu Beginn von M2.
 
 ## Plattformabhängiger Code (auf dem anderen System prüfen)
 
 - `cmake/AutoNegWarnings.cmake`: getrennte Warnungs-Zweige für clang-cl und clang/GCC – nach jeder Änderung beide Systeme bauen (beide am 19.10.2026 grün).
 - `cmake/AutoNegTest.cmake`: gtest wird unter Windows als DLL, unter Linux statisch gelinkt; unterschiedliches Verhalten siehe B-07.
+- `src/image/include/autoneg/image/storage.hpp`: `AlignedAllocator` nutzt `operator new(size, align_val_t)` – auf beiden Systemen getestet (U-IMG-03).
+- `src/base/src/hash.cpp`: plattformunabhängige Prüfsumme (feste Bytereihenfolge); Referenzwert im Test auf beiden Systemen gleich.
+- `src/model/include/autoneg/model/roll.hpp`: `Frame::path`/`Roll::folder` sind `std::filesystem::path` – Pfadtrennzeichen und Kodierung (Umlaute, z. B. „Marius Götz“) ab M4/M6 auf beiden Systemen prüfen.

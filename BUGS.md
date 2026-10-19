@@ -59,11 +59,11 @@ Format je Eintrag:
 - Status: behoben
 
 ## B-03: Python-Ausgabe unter Windows mit falscher Kodierung
-- Erstmals: 19.10.2026, zuletzt: 19.10.2026, Häufigkeit: 2
+- Erstmals: 19.10.2026, zuletzt: 19.10.2026, Häufigkeit: 3
 - Plattform: Windows
-- Symptom: Umlaute in Ausgaben von Python-Skripten (z. B. Ordner „Marius Götz“, Texte aus der Excel-Datei) erscheinen als `�`.
-- Ursache: Konsole/Umleitung nutzt die ANSI-Codepage statt UTF-8.
-- Abhilfe: Skripte mit `PYTHONIOENCODING=utf-8` bzw. `python -X utf8` starten; Python-Werkzeuge im Repository schreiben Dateien immer mit `encoding="utf-8"`.
+- Symptom: Umlaute in Ausgaben von Python-Skripten (z. B. Ordner „Marius Götz“, Texte aus der Excel-Datei) erscheinen als `�`; per Heredoc über stdin übergebene Skripte finden Textstellen mit „…“ oder Umlauten nicht.
+- Ursache: Konsole, Umleitung und stdin nutzen die ANSI-Codepage statt UTF-8.
+- Abhilfe: Python immer mit `python -X utf8` starten (gilt für stdin, stdout und Dateien); Python-Werkzeuge im Repository öffnen Dateien immer mit `encoding="utf-8"`; `check_architecture.py` stellt stdout/stderr selbst auf UTF-8 um.
 - Status: umgangen
 
 ## B-04: Text aus den Planungs-PDFs mit falscher Kodierung
