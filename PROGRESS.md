@@ -48,7 +48,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M1 | base, model, image, ports | Fertig, OK am 22.10.2026 | U-MOD-01…13, U-IMG-01…04 (alle grün) |
 | M2 | Pipeline, CPU-Backend | Fertig, OK am 22.10.2026 | U-PIP-01…18, U-BCK-01…06 (alle grün; U-BCK-01 mit Toleranz nach T-07) |
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Fertig (Weiterarbeit auf Anweisung des Nutzers, OK formal offen) | U-STP-01…28, K-08, K-09, K-10 (alle grün) |
-| M4 | LibRaw, OIIO, LCMS, Vertragstests | **In Arbeit** | K-01…K-05, K-07, K-14 (Teil Dateien/Farbe) – Windows grün |
+| M4 | LibRaw, OIIO, LCMS, Vertragstests | Fertig (Weiterarbeit auf Anweisung, OK formal offen) | K-01…K-05, K-07, K-14 (Teil Dateien/Farbe) |
 | M5 | Analyse, K-11 | Offen | – |
 | M6 | Datenhaltung und Anwendung | Offen | – |
 | M7 | Kontaktabzug | Offen | – |
@@ -133,13 +133,15 @@ Offen aus M3:
 - FlatFieldCache aus dem Repository laden → M6.
 - SIMD für Retusche, Rauschminderung, Verzerrung → M9.
 
-### M4 – Stand
+### M4 – Ergebnis
 
 - `autoneg::adapter::libraw::LibRawDecoder` (Pool von LibRaw-Instanzen, Rec. 2020 linear, Weißabgleich der Aufnahme, Erkennung abgeschnittener Dateien, verständliche Fehler mit Abhilfe).
 - `autoneg::adapter::oiio::OiioImageReader` (TIFF/PNG/JPEG, ICC-Profil über `profile()`) und `OiioImageWriter` (TIFF 8/16/32, PNG 8/16, JPEG, JPEG XL; ICC, EXIF; temporäre Datei + Umbenennen; `encode()` in den Speicher).
 - `autoneg::adapter::lcms::LcmsColorEngine` / `LcmsTransform` (Profile Rec. 2020 linear, sRGB, Adobe RGB, ProPhoto, Grau 2,2; float, threadsicher, `lut3d`).
 - Port-Ergänzungen K-M4-01/02; vcpkg-Features `raw;imageio;color` in den Presets, Overlay-Port OIIO (B-16).
 - Tests: `tests/component/contracts` (K-14 gegen Fakes und echte Adapter), `tests/component/adapters` (K-01, K-03, K-04, K-05, K-07; K-02 über `k02_linearity.py` + `tests/tools/decode_raw`), eingecheckte Testdateien `tests/component/data` aus `tools/gen_testdata/gen_component_data.py`, Fakes `tests/mocks/fakes.hpp`, `testing::TempDir`.
+- Nachweise (22.10.2026): windows-clang Debug + Release, linux-clang, linux-gcc, linux-clang-asan, linux-clang-tsan je 151/151. Unter TSan zwei gutartige Meldungen in Fremdcode unterdrückt (`tests/tsan.supp`, B-19).
+- Gefundene und behobene Probleme: JPEG XL fehlte (B-16, Overlay-Port), statische JXL-Abhängigkeiten (B-16), TSan-Toolchain ohne `CMAKE_SYSTEM_PROCESSOR` (B-18), abgeschnittene RAW-Dateien wurden stillschweigend aufgefüllt (K-M4-06), Thread-Pool von OIIO (K-M4-11).
 - Messwerte (Windows Debug): K-01 448 × ILCE-7RM4 + 1 × X-E5, Schachbrettenergie 0,9 % (< 3 %); K-02 99. Perzentil 0,04 % (< 1 %); K-05 alle verlustfreien Formate bitgleich, JPEG 1,38 Stufen; K-07 größtes dE00 0,003 (sRGB, Adobe RGB, ProPhoto, Monitor P3).
 
 ## Entscheidungen

@@ -162,3 +162,11 @@ Format je Eintrag:
 - Ursache: Mit eigener Chainload-Toolchain und gesetztem `CMAKE_SYSTEM_NAME` bleibt `CMAKE_SYSTEM_PROCESSOR` leer; die Standard-Toolchain von vcpkg setzt es, unsere `clang-linux-toolchain.cmake` nicht.
 - Abhilfe: `CMAKE_SYSTEM_PROCESSOR` in `cmake/triplets/clang-linux-toolchain.cmake` auf `x86_64` setzen. Achtung: jede Änderung an der Toolchain ändert den ABI-Hash; alle TSan-Abhängigkeiten werden neu gebaut.
 - Status: behoben
+
+## B-19: ThreadSanitizer meldet Rennen in OpenImageIO und in glibc (über LibRaw)
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: Linux, Preset `linux-clang-tsan`
+- Symptom: „data race“ in `OpenImageIO::spin_mutex::lock` (Thread-Pool von OIIO) bei jedem Schreiben; „data race“ mit `free`/`malloc` unter `LibRaw::get_timestamp` → `mktime` bei gleichzeitigem Dekodieren.
+- Ursache: Beides gutartig und in Fremdcode. OIIO liest den Sperrzustand in der Spin-Schleife absichtlich nicht-atomar. glibc legt in `mktime`/`tzset` den Zeitzonenpuffer unter internen Futex-Sperren neu an, die TSan nicht sieht. Ein einmaliger Vorab-Aufruf von `mktime` hilft nicht: Ohne `TZ` prüft glibc `/etc/localtime` bei jedem Aufruf.
+- Abhilfe: Die Adapter schalten den Thread-Pool von OIIO je Instanz ab (`threads(1)`); die Nebenläufigkeit steuert die Anwendung. Unterdrückungen eng gefasst in `tests/tsan.supp` (nur `spin_mutex::lock` von OIIO und `LibRaw::get_timestamp`), gesetzt über `CMAKE_TEST_LAUNCHER` (`TSAN_OPTIONS`). Eigener Code wird nie unterdrückt.
+- Status: Umgehung

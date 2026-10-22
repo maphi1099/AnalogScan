@@ -5,7 +5,9 @@ include(AutoNegTest)
 # Tests nicht fertig werden (BUGS.md B-12). Testprogramme dort auf 8 CPUs begrenzen.
 if(AUTONEG_SANITIZER STREQUAL "thread" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_program(AUTONEG_TASKSET taskset REQUIRED)
-    set(CMAKE_TEST_LAUNCHER ${AUTONEG_TASKSET} -c 0-7)
+    # Gutartige Rennen in Fremdcode unterdrücken (tests/tsan.supp, B-19)
+    set(CMAKE_TEST_LAUNCHER ${CMAKE_COMMAND} -E env
+        "TSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/tsan.supp" ${AUTONEG_TASKSET} -c 0-7)
 endif()
 
 add_subdirectory(support)

@@ -48,7 +48,12 @@ base::Expected<std::unique_ptr<OIIO::ImageInput>> openInput(const std::filesyste
     if (std::filesystem::file_size(p, ec) == 0 || ec) {
         return base::makeError(base::ErrorCode::Corrupt, describe(p) + ": Datei ist leer");
     }
+    // Kein eigener Thread-Pool von OpenImageIO: die Anwendung steuert die Nebenläufigkeit
+    // (oneTBB, JobScheduler); der Pool von OIIO meldet unter ThreadSanitizer Rennen (B-19).
     auto in = OIIO::ImageInput::open(utf8(p));
+    if (in) {
+        in->threads(1);
+    }
     if (!in) {
         const std::string why = OIIO::geterror();
         const bool unknown = why.find("format") != std::string::npos && why.find("not") != std::string::npos;
@@ -264,6 +269,9 @@ base::Expected<void> OiioImageWriter::write(const std::filesystem::path& p, cons
         return std::unexpected(type.error());
     }
     auto out = OIIO::ImageOutput::create(formatName(o.format));
+    if (out) {
+        out->threads(1); // siehe openInput
+    }
     if (!out) {
         return base::makeError(base::ErrorCode::Unsupported, OIIO::geterror());
     }
@@ -296,6 +304,9 @@ base::Expected<base::Bytes> OiioImageWriter::encode(const image::ImageBuffer& im
         return std::unexpected(type.error());
     }
     auto out = OIIO::ImageOutput::create(formatName(o.format));
+    if (out) {
+        out->threads(1); // siehe openInput
+    }
     if (!out || !out->supports("ioproxy")) {
         return base::makeError(base::ErrorCode::Unsupported, std::string("Format ") + formatName(o.format) +
                                                                  " kann nicht in den Speicher schreiben");

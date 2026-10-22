@@ -1,0 +1,11 @@
+# ThreadSanitizer-Unterdrückungen (BUGS.md B-19). Nur gutartige Rennen in Fremdcode, eng
+# gefasst; eigener Code wird nie unterdrückt. Jeder Eintrag mit Begründung.
+
+# OpenImageIO: spin_mutex::lock liest den Sperrzustand absichtlich nicht-atomar (Spin-Schleife
+# vor try_lock mit atomic_flag); die eigentliche Sperre ist atomar. Betrifft den internen
+# Thread-Pool von OIIO, den die Adapter mit threads(1) nicht benutzen, dessen Worker aber laufen.
+race:OpenImageIO::*::spin_mutex::lock
+
+# glibc mktime/tzset: Zeitzonenpuffer wird unter glibc-internen Sperren (Futex, für TSan
+# unsichtbar) freigegeben und neu angelegt. Aufrufer ist LibRaw beim Lesen der Aufnahmezeit.
+race:LibRaw::get_timestamp
