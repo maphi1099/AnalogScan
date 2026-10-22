@@ -137,3 +137,19 @@ Format je Eintrag:
 - Ursache: Die Befehlszeile wird vor der Ausführung umkodiert und gequotet; Sonderzeichen im Heredoc verschieben die Quote-Erkennung.
 - Abhilfe: Dateien mit Umlauten oder Backslashes direkt schreiben (Editor bzw. Schreibwerkzeug), Heredocs nur für reines ASCII. Längere WSL-Befehle als Skriptdatei übergeben (siehe B-05).
 - Status: Umgehung
+
+## B-16: OpenImageIO aus vcpkg ohne JPEG XL trotz Feature `jpegxl`
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: beide
+- Symptom: `OiioImageWriter::formats()` enthält kein JPEG XL; OpenImageIO meldet beim Bau „JXL library not found“, obwohl `libjxl` installiert ist.
+- Ursache: Der Port `openimageio` (Baseline 664933b8, OIIO 3.1.14) löscht `src/cmake/modules/FindJXL.cmake`; `libjxl` liefert keine CMake-Konfiguration, nur pkg-config.
+- Abhilfe: Overlay-Port `cmake/ports/openimageio` (Kopie mit erhaltenem `FindJXL.cmake`), eingebunden über `VCPKG_OVERLAY_PORTS` in `CMakePresets.json`. Bei einer neuen Baseline prüfen, ob der Port korrigiert ist, und das Overlay dann entfernen.
+- Status: Umgehung
+
+## B-17: Python-Testleser unter WSL (Arch) nicht installierbar
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: Linux (WSL)
+- Symptom: `pacman -S python-numpy` scheitert („failed to retrieve some files“), `pip` fehlt bzw. ist „externally managed“.
+- Ursache: veraltete Paketdatenbank (B-02); ein Komplett-Update während eines laufenden Baus würde den Compiler tauschen.
+- Abhilfe: eigene Umgebung `python -m venv /root/pyenv`, darin `pip install numpy pillow tifffile imagecodecs rawpy`. CMake unter Linux mit `-DPython3_EXECUTABLE=/root/pyenv/bin/python` konfigurieren (K-02, K-05 rufen Python auf). Unter Windows liegen die Pakete in der Benutzerinstallation von Python 3.12.
+- Status: Umgehung

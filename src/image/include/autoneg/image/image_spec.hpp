@@ -22,7 +22,8 @@ enum class ColorSpace
     WorkingLinear, ///< linear Rec. 2020, Arbeitsfarbraum (AE-11)
     Density,       ///< Dichte D = -log10 T
     Display,       ///< Monitorprofil
-    Output         ///< Ausgabeprofil des Exports
+    Output,        ///< Ausgabeprofil des Exports
+    Source         ///< Farbraum einer gelesenen Datei (Profil: IImageReader::profile)
 };
 
 /// Speicherort eines Puffers (NF-ARC-06).

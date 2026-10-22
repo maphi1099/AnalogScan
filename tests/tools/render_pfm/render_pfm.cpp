@@ -68,7 +68,9 @@ bool writePfm(const std::string& path, const image::ImageBuffer& img)
 {
     const auto& s = img.spec();
     std::ofstream out(path, std::ios::binary);
-    out << "PF\n" << s.width << " " << s.height << "\n" << (std::endian::native == std::endian::little ? "-1" : "1") << "\n";
+    out << "PF\n"
+        << s.width << " " << s.height << "\n"
+        << (std::endian::native == std::endian::little ? "-1" : "1") << "\n";
     const auto v = img.host();
     const std::size_t row = static_cast<std::size_t>(s.width) * static_cast<std::size_t>(s.channels);
     std::vector<float> rgb(static_cast<std::size_t>(s.width) * 3);
@@ -80,7 +82,8 @@ bool writePfm(const std::string& path, const image::ImageBuffer& img)
                     v[static_cast<std::size_t>(y) * row + static_cast<std::size_t>(x * s.channels + k)];
             }
         }
-        out.write(reinterpret_cast<const char*>(rgb.data()), static_cast<std::streamsize>(rgb.size() * sizeof(float)));
+        out.write(reinterpret_cast<const char*>(rgb.data()),
+                  static_cast<std::streamsize>(rgb.size() * sizeof(float)));
     }
     return static_cast<bool>(out);
 }
@@ -141,6 +144,10 @@ public:
     {
         return base::makeError(base::ErrorCode::Unsupported, "kein Bild");
     }
+    base::Expected<ports::IccProfile> profile(const std::filesystem::path& /*p*/) override
+    {
+        return base::makeError(base::ErrorCode::Unsupported, "kein Bild");
+    }
 };
 
 class NoDecoder final : public ports::IRawDecoder
@@ -166,7 +173,8 @@ public:
 int main(int argc, char** argv)
 {
     if (argc < 4) {
-        std::cerr << "Aufruf: autoneg_render_pfm <ein.pfm> <aus.pfm> <color|bw|slide> [schritt.param=wert ...]\n";
+        std::cerr
+            << "Aufruf: autoneg_render_pfm <ein.pfm> <aus.pfm> <color|bw|slide> [schritt.param=wert ...]\n";
         return 2;
     }
     const auto src = readPfm(argv[1]);
@@ -243,7 +251,8 @@ int main(int argc, char** argv)
         std::cerr << "Fehler: " << out.error().message << "\n";
         return 1;
     }
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0);
+    const auto ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0);
     std::cout << src->spec().width << "x" << src->spec().height << " -> " << out->spec().width << "x"
               << out->spec().height << ", " << cp.stages.size() << " Stufen, " << ms.count() << " ms\n";
     return writePfm(argv[2], *out) ? 0 : 1;

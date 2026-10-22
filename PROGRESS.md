@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 22.10.2026 – **M3 fertig, wartet auf OK des Nutzers.** Zur Zustimmung: K-M3-01…15, T-10, T-11 (siehe `abweichungen_planung.txt`).
+Stand: 22.10.2026 – **M4 in Arbeit** (Nutzer: selbstständig weiterarbeiten). M3 fertig; zur Zustimmung stehen K-M3-01…15, T-10, T-11 sowie für M4 K-M4-01…10, T-12, T-13 (siehe `abweichungen_planung.txt`).
 
 ## Ablage
 
@@ -47,8 +47,8 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | Fertig, OK am 19.10.2026 | – (kein Szenario) |
 | M1 | base, model, image, ports | Fertig, OK am 22.10.2026 | U-MOD-01…13, U-IMG-01…04 (alle grün) |
 | M2 | Pipeline, CPU-Backend | Fertig, OK am 22.10.2026 | U-PIP-01…18, U-BCK-01…06 (alle grün; U-BCK-01 mit Toleranz nach T-07) |
-| M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | **Fertig, wartet auf OK** | U-STP-01…28, K-08, K-09, K-10 (alle grün) |
-| M4 | LibRaw, OIIO, LCMS, Vertragstests | Offen | – |
+| M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Fertig (Weiterarbeit auf Anweisung des Nutzers, OK formal offen) | U-STP-01…28, K-08, K-09, K-10 (alle grün) |
+| M4 | LibRaw, OIIO, LCMS, Vertragstests | **In Arbeit** | K-01…K-05, K-07, K-14 (Teil Dateien/Farbe) – Windows grün |
 | M5 | Analyse, K-11 | Offen | – |
 | M6 | Datenhaltung und Anwendung | Offen | – |
 | M7 | Kontaktabzug | Offen | – |
@@ -133,6 +133,15 @@ Offen aus M3:
 - FlatFieldCache aus dem Repository laden → M6.
 - SIMD für Retusche, Rauschminderung, Verzerrung → M9.
 
+### M4 – Stand
+
+- `autoneg::adapter::libraw::LibRawDecoder` (Pool von LibRaw-Instanzen, Rec. 2020 linear, Weißabgleich der Aufnahme, Erkennung abgeschnittener Dateien, verständliche Fehler mit Abhilfe).
+- `autoneg::adapter::oiio::OiioImageReader` (TIFF/PNG/JPEG, ICC-Profil über `profile()`) und `OiioImageWriter` (TIFF 8/16/32, PNG 8/16, JPEG, JPEG XL; ICC, EXIF; temporäre Datei + Umbenennen; `encode()` in den Speicher).
+- `autoneg::adapter::lcms::LcmsColorEngine` / `LcmsTransform` (Profile Rec. 2020 linear, sRGB, Adobe RGB, ProPhoto, Grau 2,2; float, threadsicher, `lut3d`).
+- Port-Ergänzungen K-M4-01/02; vcpkg-Features `raw;imageio;color` in den Presets, Overlay-Port OIIO (B-16).
+- Tests: `tests/component/contracts` (K-14 gegen Fakes und echte Adapter), `tests/component/adapters` (K-01, K-03, K-04, K-05, K-07; K-02 über `k02_linearity.py` + `tests/tools/decode_raw`), eingecheckte Testdateien `tests/component/data` aus `tools/gen_testdata/gen_component_data.py`, Fakes `tests/mocks/fakes.hpp`, `testing::TempDir`.
+- Messwerte (Windows Debug): K-01 448 × ILCE-7RM4 + 1 × X-E5, Schachbrettenergie 0,9 % (< 3 %); K-02 99. Perzentil 0,04 % (< 1 %); K-05 alle verlustfreien Formate bitgleich, JPEG 1,38 Stufen; K-07 größtes dE00 0,003 (sRGB, Adobe RGB, ProPhoto, Monitor P3).
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -172,5 +181,9 @@ Offen aus M3:
 - `cmake/AutoNegTest.cmake`: gtest wird unter Windows als DLL, unter Linux statisch gelinkt; unterschiedliches Verhalten siehe B-07.
 - `src/image/include/autoneg/image/storage.hpp`: `AlignedAllocator` nutzt `operator new(size, align_val_t)` – auf beiden Systemen getestet (U-IMG-03).
 - `src/base/src/hash.cpp`: plattformunabhängige Prüfsumme (feste Bytereihenfolge); Referenzwert im Test auf beiden Systemen gleich.
+- `src/adapters/libraw/src/libraw_decoder.cpp`: Windows öffnet mit `wstring` (Umlaute im Pfad, z. B. „Marius Götz“), Linux mit UTF-8.
+- `src/adapters/oiio/src/oiio_image_io.cpp`: Umbenennen über vorhandene Datei (`std::filesystem::rename`) – Windows ersetzt per MoveFileEx, Linux per rename(2); Contract-Test K-14 auf beiden Systemen.
+- `tests/component/adapters/oiio_test.cpp`: `std::system` mit unterschiedlicher Quotierung (cmd.exe vs. sh).
+- `tests/component/adapters/libraw_test.cpp`: `_dupenv_s` unter Windows statt `getenv`.
 - `tools/visual_check/visual_check.py`: ruft das Linux-Programm aus Windows über `wsl` auf (WSL-Pfade); unter Linux direkt mit dem Programmpfad.
 - `src/model/include/autoneg/model/roll.hpp`: `Frame::path`/`Roll::folder` sind `std::filesystem::path` – Pfadtrennzeichen und Kodierung (Umlaute, z. B. „Marius Götz“) ab M4/M6 auf beiden Systemen prüfen.

@@ -35,6 +35,7 @@ class MockImageReader : public ports::IImageReader
 public:
     MOCK_METHOD(Expected<model::SourceInfo>, probe, (const fs::path&), (override));
     MOCK_METHOD(Expected<ImageBuffer>, read, (const fs::path&), (override));
+    MOCK_METHOD(Expected<ports::IccProfile>, profile, (const fs::path&), (override));
 };
 
 class MockImageWriter : public ports::IImageWriter

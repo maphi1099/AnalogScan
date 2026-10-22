@@ -109,6 +109,10 @@ public:
     {
         return base::makeError(base::ErrorCode::Unsupported, "kein Bild");
     }
+    base::Expected<ports::IccProfile> profile(const std::filesystem::path& /*p*/) override
+    {
+        return base::makeError(base::ErrorCode::Unsupported, "kein Bild");
+    }
 };
 
 RenderProfile profile(RenderMode mode, bool cache = false)

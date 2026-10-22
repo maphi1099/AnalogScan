@@ -11,7 +11,10 @@ Ablauf je Fall aus cases.json:
 
 Testwerkzeug, keine Laufzeitabhängigkeit. Testdaten werden nur gelesen.
 
-  python -X utf8 tools/visual_check/visual_check.py <Testdaten> <Ausgabeordner> <render-Befehl...>
+  python -X utf8 tools/visual_check/visual_check.py [--decoder <autoneg_decode_raw>] <Testdaten> <Ausgabeordner> <render-Befehl...>
+
+Mit --decoder dekodiert der echte Adapter LibRawDecoder (ab M4) statt rawpy; der Weißabgleich
+der Aufnahme und die Umrechnung nach Rec. 2020 macht dann der Adapter.
 
 Ein mehrteiliger render-Befehl (z. B. "wsl -d archlinux -- /pfad/autoneg_render_pfm") bekommt
 die Dateipfade als WSL-Pfade (/mnt/<laufwerk>/...).
@@ -42,6 +45,16 @@ def decode(path):
                             use_camera_wb=True, output_color=rawpy.ColorSpace.XYZ)
     xyz = rgb.astype(np.float64) / 65535.0
     return np.clip(xyz @ XYZ_TO_REC2020.T, 0.0, None).astype(np.float32), float((rgb >= 65535).mean())
+
+
+def decode_with(tool, path, work):
+    """Dekodierung mit dem echten Adapter (autoneg_decode_raw, halbe Auflösung)."""
+    out = os.path.join(work, 'decoded.pfm')
+    r = subprocess.run([tool, path, out, 'half'], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip())
+    img = np.ascontiguousarray(read_pfm(out))
+    return img, float((img >= 1.0).mean())
 
 
 def write_pfm(path, img):
@@ -119,7 +132,16 @@ def wsl_path(p):
 
 
 def main():
-    data, out_dir, render = sys.argv[1], sys.argv[2], sys.argv[3:]
+    args = sys.argv[1:]
+    decoder = None
+    if args and args[0] == '--decoder':
+        decoder, args = args[1], args[2:]
+    data, out_dir, render = args[0], args[1], args[2:]
+    # Programmpfade absolut (Windows findet relative Pfade mit / nicht)
+    if decoder:
+        decoder = os.path.abspath(decoder)
+    if render and os.path.exists(render[0]):
+        render[0] = os.path.abspath(render[0])
     os.makedirs(out_dir, exist_ok=True)
     here = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(here, 'cases.json'), encoding='utf-8') as f:
@@ -127,7 +149,8 @@ def main():
     to_path = (lambda p: p) if len(render) == 1 else wsl_path
     tiles = []
     for i, case in enumerate(cases):
-        img, clipped = decode(os.path.join(data, case['file']))
+        raw_path = os.path.join(data, case['file'])
+        img, clipped = decode_with(decoder, raw_path, out_dir) if decoder else decode(raw_path)
         src = os.path.join(out_dir, f'{i:02d}_scan.pfm')
         dst = os.path.join(out_dir, f'{i:02d}_positiv.pfm')
         write_pfm(src, img)

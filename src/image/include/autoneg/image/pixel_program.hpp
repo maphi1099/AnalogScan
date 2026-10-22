@@ -24,6 +24,8 @@ struct Lut1D
 
 /// Dreidimensionale Farbtabelle (z. B. Ausgabetransformation), size^3 Einträge zu je 3 Werten,
 /// Index (r * size + g) * size + b.
+/// 3D-Tabelle mit size³ Stützstellen auf [0, 1]³, je drei Werte. Belegung: Index
+/// ((b · size + g) · size + r) · 3 + Kanal, R läuft am schnellsten.
 struct Lut3D
 {
     int size = 0;

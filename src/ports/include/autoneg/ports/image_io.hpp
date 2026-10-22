@@ -68,8 +68,12 @@ public:
     virtual ~IImageReader() = default;
 
     [[nodiscard]] virtual base::Expected<model::SourceInfo> probe(const std::filesystem::path& p) = 0;
-    /// Bild als F32 im Farbraum der Datei (Umrechnung in den Arbeitsfarbraum: IColorEngine).
+    /// Bild als F32 im Farbraum der Datei (ColorSpace::Source) (Umrechnung in den Arbeitsfarbraum:
+    /// IColorEngine).
     [[nodiscard]] virtual base::Expected<image::ImageBuffer> read(const std::filesystem::path& p) = 0;
+    /// Eingebettetes ICC-Profil der Datei; ohne Profil ein leeres IccProfile (bytes leer).
+    /// Ergänzung K-M4-01: read liefert nur die Pixel, die Umrechnung braucht das Profil.
+    [[nodiscard]] virtual base::Expected<IccProfile> profile(const std::filesystem::path& p) = 0;
 };
 
 /// Schreiben von Exportdateien. Adapter: OiioImageWriter. Threadsicher.
