@@ -124,7 +124,7 @@ Offen aus M2:
 - Sichtprüfung (D-14): `tests/tools/render_pfm` (C++, PFM durch Pipeline + CpuBackend, kein CTest) und `tools/visual_check/visual_check.py` mit `cases.json` (rawpy → PFM → Pipeline → PNG). Ergebnis an 6 echten Scans (2 Farbnegativ, 2 S/W, 2 Dia, je 12–15 MP in 0,8–1,7 s): Konvertierung aller Filmtypen plausibel, S/W neutral, Multigrade 0/2/5 mit stabilem Mittelton. Befunde für M4/M5 als K-M3-14/-15 eingetragen (Basis bei S/W hinter bwmix messen; Weißabgleich vor der Farbmatrix; robuste Perzentile).
 
 Szenarien (grün): U-STP-01…28, K-08, K-09, K-10. Auslegung einzelner Erwartungen: T-10, T-11.
-Nachweise (22.10.2026): siehe unten (6 Konfigurationen).
+Nachweise (22.10.2026, Stand 3d3a55a): windows-clang Debug + Release, linux-clang, linux-gcc, linux-clang-asan, linux-clang-tsan je 103/103, keine Warnungen; clang-format sauber.
 
 Gefundene und behobene Fehler: Halo bei Lichter/Tiefen (K-M3-05), Rand bei der Retusche auf Verläufen (K-M3-06), synthetisches S/W-Negativ mit Farbmaske (Generator), Namenskollision der Testziele (B-13).
 
