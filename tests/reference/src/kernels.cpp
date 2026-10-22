@@ -229,6 +229,18 @@ std::array<float, 3> applyProgram(const image::PixelProgram& p, std::array<float
             for (int c = 0; c < n; ++c) {
                 v[static_cast<std::size_t>(c)] = std::clamp(v[static_cast<std::size_t>(c)], cl->lo, cl->hi);
             }
+        } else if (const auto* sat = std::get_if<image::Saturate>(&op)) {
+            if (n == 3) {
+                const float lum = 0.2627F * v[0] + 0.6780F * v[1] + 0.0593F * v[2];
+                const std::array<float, 3> chroma{v[0] - lum, v[1] - lum, v[2] - lum};
+                const float pixelSat = std::min(
+                    1.0F, std::max(std::abs(chroma[0]), std::max(std::abs(chroma[1]), std::abs(chroma[2]))) /
+                              std::max(lum, 1e-4F));
+                const float gain = (1.0F + sat->saturation) * (1.0F + sat->vibrance * (1.0F - pixelSat));
+                for (std::size_t k = 0; k < 3; ++k) {
+                    v[k] = lum + gain * chroma[k];
+                }
+            }
         }
     }
     return v;
@@ -372,7 +384,44 @@ image::ImageBuffer localTone(const image::ImageBuffer& in, float shadows, float 
                                                0.0593F * img.at(x, y, 2);
         }
     }
-    const Img base = gaussianImg(lum, radius);
+    // Guided Filter (He et al.) der Luminanz mit sich selbst: kantenerhaltende Basis
+    const int r = std::max(1, static_cast<int>(std::lround(radius)));
+    constexpr double eps = 0.01;
+    const auto box = [r](const Img& src) {
+        Img out(src.w, src.h, 1);
+        const double n = static_cast<double>((2 * r + 1) * (2 * r + 1));
+        for (int y = 0; y < src.h; ++y) {
+            for (int x = 0; x < src.w; ++x) {
+                double sum = 0.0;
+                for (int dy = -r; dy <= r; ++dy) {
+                    for (int dx = -r; dx <= r; ++dx) {
+                        sum += src.clamped(x + dx, y + dy, 0);
+                    }
+                }
+                out.at(x, y, 0) = static_cast<float>(sum / n);
+            }
+        }
+        return out;
+    };
+    Img sq(img.w, img.h, 1);
+    for (std::size_t i = 0; i < lum.v.size(); ++i) {
+        sq.v[i] = lum.v[i] * lum.v[i];
+    }
+    const Img meanI = box(lum);
+    const Img corrI = box(sq);
+    Img a(img.w, img.h, 1);
+    Img bb(img.w, img.h, 1);
+    for (std::size_t i = 0; i < lum.v.size(); ++i) {
+        const float var = std::max(0.0F, corrI.v[i] - meanI.v[i] * meanI.v[i]);
+        a.v[i] = var / (var + static_cast<float>(eps));
+        bb.v[i] = meanI.v[i] - a.v[i] * meanI.v[i];
+    }
+    const Img meanA = box(a);
+    const Img meanB = box(bb);
+    Img base(img.w, img.h, 1);
+    for (std::size_t i = 0; i < lum.v.size(); ++i) {
+        base.v[i] = meanA.v[i] * lum.v[i] + meanB.v[i];
+    }
     for (int y = 0; y < img.h; ++y) {
         for (int x = 0; x < img.w; ++x) {
             const float b = base.at(x, y, 0);

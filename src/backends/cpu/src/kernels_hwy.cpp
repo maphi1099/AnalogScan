@@ -226,6 +226,43 @@ void PixelRow(const image::PixelProgram& prog, const float* in, float* out, std:
             Flat(
                 out, len, [lo, hi](D d, V v) { return hn::Min(hn::Max(v, hn::Set(d, lo)), hn::Set(d, hi)); },
                 [lo, hi](float v) { return std::clamp(v, lo, hi); });
+        } else if (const auto* sat = std::get_if<image::Saturate>(&op)) {
+            if (!rgb) {
+                continue; // ohne Wirkung bei einem Kanal
+            }
+            const float s1 = 1.0F + sat->saturation;
+            const float vib = sat->vibrance;
+            Rgb(
+                out, pixels,
+                [&](D d, V& r, V& g, V& b) {
+                    const V l =
+                        hn::MulAdd(hn::Set(d, 0.0593F), b,
+                                   hn::MulAdd(hn::Set(d, 0.6780F), g, hn::Mul(hn::Set(d, 0.2627F), r)));
+                    const V cr = hn::Sub(r, l);
+                    const V cg = hn::Sub(g, l);
+                    const V cb = hn::Sub(b, l);
+                    const V mx = hn::Max(hn::Abs(cr), hn::Max(hn::Abs(cg), hn::Abs(cb)));
+                    const V m = hn::Min(hn::Set(d, 1.0F), hn::Div(mx, hn::Max(l, hn::Set(d, 1e-4F))));
+                    const V gain =
+                        hn::Mul(hn::Set(d, s1),
+                                hn::MulAdd(hn::Set(d, vib), hn::Sub(hn::Set(d, 1.0F), m), hn::Set(d, 1.0F)));
+                    r = hn::MulAdd(gain, cr, l);
+                    g = hn::MulAdd(gain, cg, l);
+                    b = hn::MulAdd(gain, cb, l);
+                },
+                [&](float& r, float& g, float& b) {
+                    const float l = 0.2627F * r + 0.6780F * g + 0.0593F * b;
+                    const float cr = r - l;
+                    const float cg = g - l;
+                    const float cb = b - l;
+                    const float m =
+                        std::min(1.0F, std::max(std::abs(cr), std::max(std::abs(cg), std::abs(cb))) /
+                                           std::max(l, 1e-4F));
+                    const float gain = s1 * (1.0F + vib * (1.0F - m));
+                    r = l + gain * cr;
+                    g = l + gain * cg;
+                    b = l + gain * cb;
+                });
         }
     }
 }

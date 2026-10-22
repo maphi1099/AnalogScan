@@ -26,6 +26,8 @@ public:
     PixelProgramBuilder& lut(image::Lut1D l);
     PixelProgramBuilder& lut(image::LutRef l);
     PixelProgramBuilder& clamp(float lo, float hi);
+    /// Sättigung/Dynamik, siehe image::Saturate.
+    PixelProgramBuilder& saturate(float saturation, float vibrance);
 
     [[nodiscard]] bool empty() const noexcept { return program_.ops.empty(); }
     [[nodiscard]] image::PixelProgram build() const { return program_; }

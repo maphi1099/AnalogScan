@@ -45,6 +45,10 @@ struct OpHasher
     {
         h.add(static_cast<double>(c.lo)).add(static_cast<double>(c.hi));
     }
+    void operator()(const image::Saturate& s) const
+    {
+        h.add(static_cast<double>(s.saturation)).add(static_cast<double>(s.vibrance));
+    }
 };
 
 /// Stützweite der Filter in Pixeln (für die Kachelausführung).

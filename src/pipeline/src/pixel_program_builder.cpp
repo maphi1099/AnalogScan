@@ -21,6 +21,9 @@ base::Vec3 mul(const base::Vec3& a, const base::Vec3& b)
 
 PixelProgramBuilder& PixelProgramBuilder::matrix(const base::Mat3& m)
 {
+    if (m == base::Mat3::identity()) {
+        return *this; // wirkungslos
+    }
     if (auto* last = lastAs<image::Matrix3>(program_)) {
         last->m = m * last->m; // erst die vorhandene, dann die neue Matrix
     } else if (auto* s = lastAs<image::Scale3>(program_)) {
@@ -33,6 +36,9 @@ PixelProgramBuilder& PixelProgramBuilder::matrix(const base::Mat3& m)
 
 PixelProgramBuilder& PixelProgramBuilder::offset(const base::Vec3& v)
 {
+    if (v == base::Vec3{}) {
+        return *this;
+    }
     if (auto* last = lastAs<image::Offset3>(program_)) {
         last->v = {last->v.x + v.x, last->v.y + v.y, last->v.z + v.z};
     } else {
@@ -43,6 +49,9 @@ PixelProgramBuilder& PixelProgramBuilder::offset(const base::Vec3& v)
 
 PixelProgramBuilder& PixelProgramBuilder::scale(const base::Vec3& v)
 {
+    if (v == base::Vec3{1, 1, 1}) {
+        return *this;
+    }
     if (auto* last = lastAs<image::Scale3>(program_)) {
         last->v = mul(last->v, v);
     } else if (auto* m = lastAs<image::Matrix3>(program_)) {
@@ -83,6 +92,14 @@ PixelProgramBuilder& PixelProgramBuilder::clamp(float lo, float hi)
         last->hi = std::min(last->hi, hi);
     } else {
         program_.ops.emplace_back(image::Clamp{lo, hi});
+    }
+    return *this;
+}
+
+PixelProgramBuilder& PixelProgramBuilder::saturate(float saturation, float vibrance)
+{
+    if (saturation != 0.0F || vibrance != 0.0F) {
+        program_.ops.emplace_back(image::Saturate{saturation, vibrance});
     }
     return *this;
 }

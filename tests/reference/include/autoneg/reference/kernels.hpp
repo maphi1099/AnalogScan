@@ -17,8 +17,11 @@
 //    Randwiederholung; σ <= 0: unverändert.
 //  - unsharp(a, r, t): blur = gaussian(σ = r); d = in − blur; |d| > t ? in + a·d : in.
 //  - multiply: in · gain; gain mit 1 Kanal oder gleich vielen Kanälen, gleiche Größe.
-//  - localTone(s, h, r): L = 0,2627R + 0,6780G + 0,0593B; B = gaussian(L, r);
-//    Faktor = (1 + s·2·max(0; 0,5 − B))·(1 − h·max(0; B − 0,5)); out = in·Faktor.
+//  - localTone(s, h, r): L = 0,2627R + 0,6780G + 0,0593B (1 Kanal: L = v); B = Guided Filter
+//    von L mit sich selbst (Box-Radius q = max(1; round(r)), ε = 0,01, Box mit
+//    Randwiederholung über (2q + 1)² Werte): a = var/(var + ε), b = mean − a·mean,
+//    B = box(a)·L + box(b). Faktor = (1 + s·2·max(0; 0,5 − B))·(1 − h·max(0; B − 0,5));
+//    out = in·Faktor. Kantenerhaltend, damit keine Halos entstehen (U-STP-19).
 //  - denoise(strength): bilateral 5×5, σs = 1,5, σr = 0,02 + 0,2·strength, Abstand über alle
 //    Kanäle; strength <= 0: unverändert.
 //  - inpaint(spots): je Stelle nacheinander: R = radius·B; für Pixel im Abstand d < R:

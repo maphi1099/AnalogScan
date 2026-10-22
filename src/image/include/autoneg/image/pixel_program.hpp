@@ -63,10 +63,21 @@ struct Clamp
     friend bool operator==(const Clamp&, const Clamp&) = default;
 };
 
+/// Sättigung und Dynamik (LF-EDT-09), Ergänzung zu Architektur 9.3: nicht mit Matrizen
+/// ausdrückbar, weil die Dynamik von der Sättigung des Pixels abhängt. Je RGB-Pixel:
+/// L = 0,2627R + 0,6780G + 0,0593B; c = v − L; m = min(1; max|c| / max(L; 1e-4));
+/// v' = L + (1 + saturation)·(1 + vibrance·(1 − m))·c. Bei einem Kanal ohne Wirkung.
+struct Saturate
+{
+    float saturation = 0.0F;
+    float vibrance = 0.0F;
+    friend bool operator==(const Saturate&, const Saturate&) = default;
+};
+
 /// Tabellen werden geteilt, damit Kopien des Programms billig bleiben.
 using LutRef = std::shared_ptr<const Lut1D>;
 
-using PixelOp = std::variant<Matrix3, Offset3, Scale3, Log10, Exp10, LutRef, Clamp>;
+using PixelOp = std::variant<Matrix3, Offset3, Scale3, Log10, Exp10, LutRef, Clamp, Saturate>;
 
 /// Folge punktweiser Operationen, in einem Speicherdurchlauf je Pixel ausgeführt (AE-05).
 struct PixelProgram

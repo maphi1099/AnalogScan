@@ -94,6 +94,56 @@ bool forBlocks(int height, const image::CancelToken& cancel, Fn&& fn)
     return !stopped.load() && !cancel.cancelled();
 }
 
+/// Mittelwert über (2q + 1)² Werte mit Randwiederholung für eine Ebene mit einem Kanal.
+/// Horizontal gleitende Summe je Zeile, vertikal gleitende Summe je Zeilenblock; der Startwert
+/// wird je Block neu summiert (feste Blockeinteilung), daher unabhängig von der Threadzahl.
+bool boxPlane(const std::vector<float>& src, std::vector<float>& dst, int w, int h, int q,
+              const image::CancelToken& cancel)
+{
+    const auto width = static_cast<std::size_t>(w);
+    const auto at = [width](int x, int y) {
+        return static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x);
+    };
+    std::vector<float> hsum(src.size());
+    if (!forBlocks(h, cancel, [&](int y0, int y1) {
+            for (int y = y0; y < y1; ++y) {
+                double acc = 0.0;
+                for (int k = -q; k <= q; ++k) {
+                    acc += src[at(std::clamp(k, 0, w - 1), y)];
+                }
+                hsum[at(0, y)] = static_cast<float>(acc);
+                for (int x = 1; x < w; ++x) {
+                    acc += src[at(std::min(x + q, w - 1), y)];
+                    acc -= src[at(std::max(x - 1 - q, 0), y)];
+                    hsum[at(x, y)] = static_cast<float>(acc);
+                }
+            }
+        })) {
+        return false;
+    }
+    const double n = static_cast<double>((2 * q + 1) * (2 * q + 1));
+    return forBlocks(h, cancel, [&](int y0, int y1) {
+        std::vector<double> acc(width, 0.0);
+        const auto add = [&](int y, double sign) {
+            const float* row = hsum.data() + at(0, std::clamp(y, 0, h - 1));
+            for (std::size_t x = 0; x < width; ++x) {
+                acc[x] += sign * row[x];
+            }
+        };
+        for (int k = -q; k <= q; ++k) {
+            add(y0 + k, 1.0);
+        }
+        for (int y = y0; y < y1; ++y) {
+            float* o = dst.data() + at(0, y);
+            for (std::size_t x = 0; x < width; ++x) {
+                o[x] = static_cast<float>(acc[x] / n);
+            }
+            add(y + 1 + q, 1.0);
+            add(y - q, -1.0);
+        }
+    });
+}
+
 std::vector<float> gaussianWeights(float sigma)
 {
     const int r = std::max(1, static_cast<int>(std::ceil(3.0F * sigma)));
@@ -330,35 +380,63 @@ CpuBackend::Result CpuBackend::localTone(Ctx c, In in, float sh, float hl, float
     }
     const image::ImageSpec& s = in.spec();
     const auto width = static_cast<std::size_t>(s.width);
-    std::vector<float> lum(width * static_cast<std::size_t>(s.height));
-    const auto lumRow = [&](int y) { return lum.data() + static_cast<std::size_t>(y) * width; };
-    const auto w = gaussianWeights(r);
+    const std::size_t count = width * static_cast<std::size_t>(s.height);
+    const int q = std::max(1, static_cast<int>(std::lround(r)));
+    constexpr float eps = 0.01F;
+    // Ebenen mit einem Kanal: Luminanz, Quadrat, Mittelwerte, Koeffizienten a/b
+    std::vector<float> lum(count), sq(count), meanI(count), corrI(count), a(count), b(count);
+    const auto rows = [width](std::vector<float>& plane) {
+        return [&plane, width](int y) { return plane.data() + static_cast<std::size_t>(y) * width; };
+    };
     Output out(s);
     const bool done = impl_->run([&] {
-        // 1. Luminanz des ganzen Bildes (die Unschärfe braucht Nachbarzeilen anderer Blöcke)
+        // Guided Filter der Luminanz mit sich selbst (Definition: tests/reference)
         if (!forBlocks(s.height, c.cancel, [&](int y0, int y1) {
                 for (int y = y0; y < y1; ++y) {
-                    detail::luminanceRow(rowOf(in, y), lumRow(y), width, s.channels);
+                    float* l = rows(lum)(y);
+                    detail::luminanceRow(rowOf(in, y), l, width, s.channels);
+                    float* q2 = rows(sq)(y);
+                    for (std::size_t x = 0; x < width; ++x) {
+                        q2[x] = l[x] * l[x];
+                    }
                 }
             })) {
             return false;
         }
-        // 2. Unschärfe der Luminanz und Anwendung blockweise
-        return forBlocks(s.height, c.cancel, [&](int y0, int y1) {
-            std::vector<float> base(static_cast<std::size_t>(y1 - y0) * width);
-            const auto baseRow = [&](int y) {
-                return base.data() + static_cast<std::size_t>(y - y0) * width;
-            };
-            if (r > 0.0F) {
-                blurBlock([&](int y) { return static_cast<const float*>(lumRow(y)); }, baseRow, s.width,
-                          s.height, 1, w, y0, y1);
-            } else {
+        if (!boxPlane(lum, meanI, s.width, s.height, q, c.cancel) ||
+            !boxPlane(sq, corrI, s.width, s.height, q, c.cancel)) {
+            return false;
+        }
+        if (!forBlocks(s.height, c.cancel, [&](int y0, int y1) {
                 for (int y = y0; y < y1; ++y) {
-                    std::copy(lumRow(y), lumRow(y) + width, baseRow(y));
+                    const float* m = rows(meanI)(y);
+                    const float* cr = rows(corrI)(y);
+                    float* pa = rows(a)(y);
+                    float* pb = rows(b)(y);
+                    for (std::size_t x = 0; x < width; ++x) {
+                        const float var = std::max(0.0F, cr[x] - m[x] * m[x]);
+                        pa[x] = var / (var + eps);
+                        pb[x] = m[x] - pa[x] * m[x];
+                    }
                 }
-            }
+            })) {
+            return false;
+        }
+        // meanI/corrI werden als Ziel für box(a)/box(b) wiederverwendet
+        if (!boxPlane(a, meanI, s.width, s.height, q, c.cancel) ||
+            !boxPlane(b, corrI, s.width, s.height, q, c.cancel)) {
+            return false;
+        }
+        return forBlocks(s.height, c.cancel, [&](int y0, int y1) {
+            std::vector<float> base(width);
             for (int y = y0; y < y1; ++y) {
-                detail::toneRow(rowOf(in, y), baseRow(y), out.row(y), width, s.channels, sh, hl);
+                const float* ma = rows(meanI)(y);
+                const float* mb = rows(corrI)(y);
+                const float* l = rows(lum)(y);
+                for (std::size_t x = 0; x < width; ++x) {
+                    base[x] = ma[x] * l[x] + mb[x];
+                }
+                detail::toneRow(rowOf(in, y), base.data(), out.row(y), width, s.channels, sh, hl);
             }
         });
     });

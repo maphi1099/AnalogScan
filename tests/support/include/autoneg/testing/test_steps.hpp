@@ -249,7 +249,11 @@ inline std::unique_ptr<pipeline::StepRegistry> standardRegistry()
                                         }));
     add(std::make_unique<TestRegion>(
         descriptor("shadowshighlights", rank::shadowshighlights, {dbl("shadows", 0), dbl("radius", 0)}),
-        [](const auto& p, double s) { return gaussHalo(std::max(1.0, paramOr(p, "radius", 0)) * s); },
+        [](const auto& p, double s) { // Guided Filter: zweimal Box mit Radius q
+            return 2 * std::max(1,
+                                static_cast<int>(std::lround(std::max(1.0, paramOr(p, "radius", 0)) * s))) +
+                   1;
+        },
         [](ExecContext& x, const image::ImageBuffer& in, const auto& p) {
             return x.backend.localTone(x.kernel(), in, static_cast<float>(paramOr(p, "shadows", 0)), 0.0F,
                                        static_cast<float>(std::max(1.0, paramOr(p, "radius", 0)) * x.scale));

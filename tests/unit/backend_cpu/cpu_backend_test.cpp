@@ -109,7 +109,11 @@ image::PixelProgram randomProgram(std::mt19937_64& rng, bool transcendental)
     }
     const int n = 1 + static_cast<int>(rng() % 5);
     for (int i = 0; i < n; ++i) {
-        switch (rng() % 5) {
+        switch (rng() % 6) {
+        case 5:
+            p.ops.emplace_back(
+                image::Saturate{static_cast<float>(val(-1, 1)), static_cast<float>(val(-0.5, 1))});
+            break;
         case 0:
             p.ops.emplace_back(matrix(-0.5, 1.5));
             break;
