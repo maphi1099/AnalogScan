@@ -22,3 +22,6 @@
 *.RAF binary
 *.3FR binary
 *.FFF binary
+
+# vcpkg-Overlay-Ports unverändert lassen (Patches enthalten teils CRLF, B-16)
+cmake/ports/** -text
