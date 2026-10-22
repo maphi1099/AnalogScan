@@ -50,6 +50,10 @@ struct NegativeSpec
     bool holder = true;      ///< dunkler Filmhalter oben und unten
     int dust = 0;            ///< Anzahl Staubkörner
     bool lightLeak = false;  ///< Lichtleck im Filmrand
+    /// Weitere Bildfelder rechts vom ersten (Filmstreifen, U-ANA-05): Anzahl insgesamt und
+    /// Steg zwischen zwei Feldern (Anteil der Bildbreite). Alle Felder müssen in den Scan passen.
+    int frames = 1;
+    double frameGap = 0.02;
     std::uint64_t seed = 1;
 };
 
@@ -63,6 +67,7 @@ struct NegativeTruth
     double angleDeg = 0.0;
     model::NormRect rebateTop; ///< Filmrand oberhalb des Bildfelds (vor der Drehung)
     model::NormRect rebateBottom;
+    std::vector<model::NormRect> frames; ///< alle Bildfelder von links nach rechts (frames[0] = frame)
 };
 
 struct SyntheticScan

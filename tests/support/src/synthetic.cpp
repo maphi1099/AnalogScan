@@ -4,6 +4,8 @@
 #include <cmath>
 #include <numbers>
 #include <random>
+#include <utility>
+#include <vector>
 
 namespace autoneg::testing {
 
@@ -46,7 +48,8 @@ struct Layout
 {
     int w = 0;
     int h = 0;
-    double fx0 = 0, fx1 = 0, fy0 = 0, fy1 = 0; // Bildfeld (Pixel)
+    double fx0 = 0, fx1 = 0, fy0 = 0, fy1 = 0; // erstes Bildfeld (Pixel)
+    std::vector<std::pair<double, double>> fx; // waagerechte Grenzen aller Bildfelder
     double sy0 = 0, sy1 = 0;                   // Filmstreifen
     double hy0 = 0, hy1 = 0;                   // Halteröffnung
     double band = 0;                           // Höhe des Filmrands
@@ -103,6 +106,10 @@ SyntheticScan makeNegative(const NegativeSpec& s)
     l.fx1 = std::round((s.frame.x + s.frame.w) * l.w);
     l.fy0 = std::round(s.frame.y * l.h);
     l.fy1 = std::round((s.frame.y + s.frame.h) * l.h);
+    for (int i = 0; i < std::max(1, s.frames); ++i) {
+        const double left = s.frame.x + i * (s.frame.w + s.frameGap);
+        l.fx.emplace_back(std::round(left * l.w), std::round((left + s.frame.w) * l.w));
+    }
     l.band = std::round(0.08 * l.h);
     l.sy0 = s.rebate ? l.fy0 - l.band : l.fy0;
     l.sy1 = s.rebate ? l.fy1 + l.band : l.fy1;
@@ -135,10 +142,12 @@ SyntheticScan makeNegative(const NegativeSpec& s)
         if (y < l.hy0 || y >= l.hy1) {
             t = {0.02, 0.02, 0.02}; // Filmhalter
         } else if (y >= l.sy0 && y < l.sy1) {
-            const bool inFrame = x >= l.fx0 && x < l.fx1 && y >= l.fy0 && y < l.fy1;
-            if (inFrame) {
+            const auto frameAt = std::ranges::find_if(
+                l.fx, [&](const auto& f) { return x >= f.first && x < f.second && y >= l.fy0 && y < l.fy1; });
+            if (frameAt != l.fx.end()) {
                 const base::Vec3 v =
-                    positiveAt(s.pattern, (x - l.fx0) / (l.fx1 - l.fx0), (y - l.fy0) / (l.fy1 - l.fy0));
+                    positiveAt(s.pattern, (x - frameAt->first) / (frameAt->second - frameAt->first),
+                               (y - l.fy0) / (l.fy1 - l.fy0));
                 if (slide) {
                     t = v;
                 } else {
@@ -200,6 +209,9 @@ SyntheticScan makeNegative(const NegativeSpec& s)
     out.truth.angleDeg = s.angleDeg;
     out.truth.rebateTop = {0.0, l.sy0 / l.h, 1.0, (l.fy0 - l.sy0) / l.h};
     out.truth.rebateBottom = {0.0, l.fy1 / l.h, 1.0, (l.sy1 - l.fy1) / l.h};
+    for (const auto& [x0, x1] : l.fx) {
+        out.truth.frames.push_back({x0 / l.w, l.fy0 / l.h, (x1 - x0) / l.w, (l.fy1 - l.fy0) / l.h});
+    }
     return out;
 }
 
