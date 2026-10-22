@@ -113,3 +113,27 @@ Format je Eintrag:
 - Folgeproblem: Mit instrumentiertem oneTBB und 32 Threads spinnen die wartenden Worker so langsam, dass einzelne Tests nicht fertig werden (auch ein 301x211-Bild > 45 min). Mit 4 oder 8 CPUs: 4 s. Deshalb startet `tests/CMakeLists.txt` im TSan-Preset alle Testprogramme mit `taskset -c 0-7` (CMAKE_TEST_LAUNCHER). Gesamtlauf TSan ca. 6,5 min.
 - Abhilfe: Eigenes Triplet `cmake/triplets/x64-linux-tsan.cmake` mit Toolchain `clang-linux-toolchain.cmake`: alle Abhängigkeiten mit clang und `-fsanitize=thread` bauen. oneTBB 2023.1 braucht mit clang zusätzlich `-mwaitpkg` (`_tpause`; das TBB-Build setzt es nur für GCC). Erster Bau der Abhängigkeiten ca. 5 min.
 - Status: behoben
+
+## B-13: Namenskollision zwischen Testprogramm und Testhilfe
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: beide
+- Symptom: CMake: „target_compile_definitions may only set INTERFACE properties on INTERFACE targets“ bzw. „add_executable cannot create target … because another target with the same name already exists“.
+- Ursache: `autoneg_add_test(<name>)` legt `autoneg_test_<name>` an; die Testhilfen heißen ebenfalls `autoneg_test_<x>` (`autoneg_test_support`, `_mocks`, `_reference`, `_synthetic`, `_fakesteps`). Das Testprogramm `steps` kollidierte mit der früheren Hilfe `autoneg_test_steps`.
+- Abhilfe: Hilfe umbenannt in `autoneg_test_fakesteps`. Neue Testprogramme nicht nach einer vorhandenen Testhilfe benennen (und umgekehrt).
+- Status: behoben
+
+## B-14: Veraltete Testergebnisse nach abgebrochener Befehlskette
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: Linux (WSL), gilt allgemein
+- Symptom: Ein bereits behobener Test schlägt in Debug weiter fehl, in Release nicht.
+- Ursache: `clang-format -i $(git ls-files …) && … && cmake --build …; ctest …` – die Dateiliste war leer, `clang-format` brach ab („cannot use -i when reading from stdin“), die `&&`-Kette übersprang den Build, `ctest` lief danach trotzdem mit den alten Programmen.
+- Abhilfe: Formatieren, Bauen und Testen als Skript mit expliziter Dateiliste (`git diff --name-only --diff-filter=AM` plus `git ls-files -o --exclude-standard`); `ctest` nur nach erfolgreichem Build.
+- Status: behoben
+
+## B-15: Heredocs aus Git-Bash mit Umlauten oder Apostrophen brechen ab
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: wiederholt
+- Plattform: Windows (Git-Bash)
+- Symptom: „unexpected EOF while looking for matching `''“ bei längeren Heredocs (Python- oder Quelltext mit Umlauten, typografischen Anführungszeichen, Backslashes).
+- Ursache: Die Befehlszeile wird vor der Ausführung umkodiert und gequotet; Sonderzeichen im Heredoc verschieben die Quote-Erkennung.
+- Abhilfe: Dateien mit Umlauten oder Backslashes direkt schreiben (Editor bzw. Schreibwerkzeug), Heredocs nur für reines ASCII. Längere WSL-Befehle als Skriptdatei übergeben (siehe B-05).
+- Status: Umgehung

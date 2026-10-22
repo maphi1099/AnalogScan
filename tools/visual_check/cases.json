@@ -1,0 +1,11 @@
+{
+  "_kommentar": "Sichtprüfung (D-14). Rechtecke normiert auf den Scan (x, y, w, h), am Raster abgelesen. base: unbelichtete Filmbasis (Negative); light: Perforationsloch = Lichtquelle (Dias, optional).",
+  "cases": [
+    {"file": "103MSDCF/MAT05197.ARW", "film": "color", "crop": [0.10, 0.13, 0.79, 0.78], "base": [0.92, 0.20, 0.05, 0.60]},
+    {"file": "102MSDCF-2/DSC07575.ARW", "film": "color", "crop": [0.11, 0.09, 0.82, 0.81], "base": [0.01, 0.20, 0.06, 0.60]},
+    {"file": "Ali/MAT04234.ARW", "film": "bw", "crop": [0.17, 0.13, 0.73, 0.72], "base": [0.125, 0.20, 0.025, 0.60]},
+    {"file": "Marius Götz/MAT05913.ARW", "film": "bw", "crop": [0.17, 0.17, 0.63, 0.62], "base": [0.82, 0.25, 0.02, 0.50]},
+    {"file": "100MSDCF/MAT05092.ARW", "film": "slide", "crop": [0.11, 0.08, 0.80, 0.80], "light": [0.125, 0.005, 0.025, 0.02]},
+    {"file": "DSC08009.ARW", "film": "slide", "crop": [0.04, 0.04, 0.92, 0.92]}
+  ]
+}

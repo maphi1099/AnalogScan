@@ -15,10 +15,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <map>
+#include <numbers>
 #include <random>
 #include <sstream>
 #include <string>
@@ -633,7 +635,7 @@ TEST_F(Steps, U_STP_21_RetouchRemovesSpotWithoutEdge)
 TEST(CropStepTest, U_STP_22_AspectRatiosAndNormalizedCoordinates)
 {
     const std::pair<double, double> ratios[] = {{3, 2}, {4, 3}, {1, 1}, {5, 4}, {7, 6}, {65, 24}};
-    for (const auto [aw, ah] : ratios) {
+    for (const auto& [aw, ah] : ratios) {
         for (const base::Size canvas : {base::Size{600, 400}, base::Size{6000, 4000}}) {
             const model::NormRect r = CropStep::fitAspect({0.05, 0.1, 0.9, 0.8}, aw, ah, canvas);
             const double pw = r.w * canvas.width;
@@ -696,7 +698,7 @@ TEST_F(Steps, U_STP_25_FlatFieldCorrection)
               blank, FilmType::Slide);
     const double center = t::meanRgb(out, 75, 55, 10, 10).y;
     double worst = 0.0;
-    for (const auto [x, y] :
+    for (const auto& [x, y] :
          {std::pair{2, 2}, std::pair{150, 2}, std::pair{2, 110}, std::pair{150, 110}, std::pair{75, 2}}) {
         worst = std::max(worst, std::abs(t::meanRgb(out, x, y, 6, 6).y - center) / center);
     }

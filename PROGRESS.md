@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 22.10.2026 – **M2 fertig unter Windows und Linux, wartet auf OK des Nutzers.** Offen zur Entscheidung: T-07 (Toleranz exp10).
+Stand: 22.10.2026 – **M3 fertig, wartet auf OK des Nutzers.** Zur Zustimmung: K-M3-01…15, T-10, T-11 (siehe `abweichungen_planung.txt`).
 
 ## Ablage
 
@@ -27,13 +27,13 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | `Testing/Data/*.ARW` (DSC08009–08082) | 64 | Dia |
 | `100MSDCF` | 43 | Dia |
 | `100MSDCF-2` | 37 | S/W-Negativ |
-| `101MSDCF` | 29 | Dia (oder Positiv) |
-| `101MSDCF-2` | 52 | S/W-Negativ |
+| `101MSDCF` | 29 | Dia (Sichtprüfung M3) |
+| `101MSDCF-2` | 52 | gemischt: S/W-Negativ (DSC07505) und Farbnegativ (DSC07531) |
 | `102MSDCF`, `102MSDCF-2`, `103MSDCF` | 33 / 36 / 43 | Farbnegativ |
 | `Ali` | 36 | S/W-Negativ |
 | `Ying` | 36 | S/W-Negativ |
-| `Marius Götz` | 39 | unklar (erstes Bild unscharfe Leuchtfläche) |
-| `Fuji RAW` | 1 | noch nicht angesehen |
+| `Marius Götz` | 39 | S/W-Negativ (erstes Bild unscharfe Leuchtfläche) |
+| `Fuji RAW` | 1 | S/W-Negativ |
 
 ### Arbeitsumgebung
 
@@ -46,8 +46,8 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 |---|---|---|---|
 | M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | Fertig, OK am 19.10.2026 | – (kein Szenario) |
 | M1 | base, model, image, ports | Fertig, OK am 22.10.2026 | U-MOD-01…13, U-IMG-01…04 (alle grün) |
-| M2 | Pipeline, CPU-Backend | **Fertig (Windows + Linux), wartet auf OK** | U-PIP-01…18, U-BCK-01…06 (alle grün; U-BCK-01 mit Toleranz nach T-07) |
-| M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Offen | – |
+| M2 | Pipeline, CPU-Backend | Fertig, OK am 22.10.2026 | U-PIP-01…18, U-BCK-01…06 (alle grün; U-BCK-01 mit Toleranz nach T-07) |
+| M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | **Fertig, wartet auf OK** | U-STP-01…28, K-08, K-09, K-10 (alle grün) |
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Offen | – |
 | M5 | Analyse, K-11 | Offen | – |
 | M6 | Datenhaltung und Anwendung | Offen | – |
@@ -114,6 +114,25 @@ Offen aus M2:
 - T-01 (U-PIP-05 nach Architektur geprüft), T-08 (monotone Kante weich), T-09 (Proxy im Cache): zur Einarbeitung.
 - Parallele Kacheln (Ebene 2) mit dem JobScheduler in M6; SIMD für Verzerrung/Skalierung/Rauschminderung/Retusche mit der Leistungsmessung in M9.
 
+### M3 – Ergebnis
+
+- `autoneg::steps` (Architektur 5, 9.5, 9.6): `multigrade.hpp` (GradeData, SplitGrade, PaperCurve, MultigradeModel mit 12 Stufen nach L-05), `pointwise_steps.hpp` (BwMix, FilmBase, Density, DensityRange, Exposure, WhiteBalance, Gradation, ColorGrade, Contrast, ToneCurve, Saturation), `other_steps.hpp` (FilmMode, Orientation, Rotation, Crop, FlatFieldCache/FlatField, Retouch, ShadowsHighlights, Denoise, Sharpen), `step_ids.hpp` (Kennungen, Ränge), `registry.hpp` (`registerStandardSteps`). 20 Schritte, alle Version 1 (Referenzliste `tests/unit/steps/step_ids.txt`).
+- `pipeline`: `StepDescriptor::alwaysActive`, `RegionStep::halo(p, scale, image)`, `WarpBuilder::canvas()`. `image`: Punktoperation `Saturate`.
+- `localTone` (Lichter/Tiefen): Guided Filter im log2-Raum (Halo 0,6 % statt 3,6 %). `inpaint` (Retusche): Heilen mit Helligkeitsausgleich über einen Ring. Beides in Referenz und CpuBackend.
+- Testhilfen: `autoneg_test_synthetic` (`synthetic.hpp`: künstliche Farb-/S/W-Negative und Dias mit Filmrand, Perforation, Halter, Staub, Lichtleck, Drehung und Sollwerten; `color_metrics.hpp`: Rec. 2020 → Lab, CIEDE2000). Hilfe `autoneg_test_steps` heißt jetzt `autoneg_test_fakesteps` (B-13).
+- Tests: `tests/unit/steps` (U-STP-01…28), `tests/component/pipeline` (K-08, K-09, K-10, Label `component`, echtes CpuBackend).
+- Sichtprüfung (D-14): `tests/tools/render_pfm` (C++, PFM durch Pipeline + CpuBackend, kein CTest) und `tools/visual_check/visual_check.py` mit `cases.json` (rawpy → PFM → Pipeline → PNG). Ergebnis an 6 echten Scans (2 Farbnegativ, 2 S/W, 2 Dia, je 12–15 MP in 0,8–1,7 s): Konvertierung aller Filmtypen plausibel, S/W neutral, Multigrade 0/2/5 mit stabilem Mittelton. Befunde für M4/M5 als K-M3-14/-15 eingetragen (Basis bei S/W hinter bwmix messen; Weißabgleich vor der Farbmatrix; robuste Perzentile).
+
+Szenarien (grün): U-STP-01…28, K-08, K-09, K-10. Auslegung einzelner Erwartungen: T-10, T-11.
+Nachweise (22.10.2026): siehe unten (6 Konfigurationen).
+
+Gefundene und behobene Fehler: Halo bei Lichter/Tiefen (K-M3-05), Rand bei der Retusche auf Verläufen (K-M3-06), synthetisches S/W-Negativ mit Farbmaske (Generator), Namenskollision der Testziele (B-13).
+
+Offen aus M3:
+- Automatiken (Bildfeld, Basis, Dichtegrenzen, Auto-Tonwerte) → M5; U-STP-04/K-08 dann zusätzlich mit echten Automatiken (T-10).
+- FlatFieldCache aus dem Repository laden → M6.
+- SIMD für Retusche, Rauschminderung, Verzerrung → M9.
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -132,13 +151,16 @@ Offen aus M2:
 | A-01…A-07 | 19.10.2026 | Architekturanpassungen genehmigt (Wertetypen nach image, TBB hinter Port, eigener JsonValue, Basismodul, steps→ports, ports→layout, Ergänzung fehlender Typen) |
 
 | D-13 | 22.10.2026 | OE-01 entschieden: Google Highway + oneTBB |
+| D-14 | 22.10.2026 | Sichtprüfung echter Scans bis M4 über Python `rawpy` (`tools/visual_check`) |
+| T-07 | 22.10.2026 | Toleranz 2e-6 für Punktprogramme mit exp10 |
+| L-05 | 22.10.2026 | Multigrade-Kennwerte aus Ilford MULTIGRADE IV RC DeLuxe |
 | A-09…A-12 | 19.10.2026 | genehmigt: ui → Kernmodule, Adapterregeln (TBB in adapter_tbb und backend_cpu, OS-Header nur in Adaptern), Drittbibliotheken unter Windows mit vcpkg-Standard-Toolchain, statische Module |
 | K-M1-01…14 | 19.10.2026 | Abweichungen von den Klassendiagrammen in M1 (Details in `abweichungen_planung.txt`, Abschnitt G) |
 
 ## Offene Fragen an den Nutzer
 
-1. Einordnung der Testordner, Annotationen (L-06) – spätestens für M3/M5.
-2. T-07: Toleranz für Punktprogramme mit exp10 (Vorschlag 2e-6).
+1. Annotationen (L-06) – spätestens für M5. Einordnung der Testordner siehe Tabelle (nach Sichtprüfung M3, bitte bestätigen).
+2. Zustimmung zu K-M3-01…15, T-10, T-11.
 
 ## Plattformabhängiger Code (auf dem anderen System prüfen)
 
@@ -150,4 +172,5 @@ Offen aus M2:
 - `cmake/AutoNegTest.cmake`: gtest wird unter Windows als DLL, unter Linux statisch gelinkt; unterschiedliches Verhalten siehe B-07.
 - `src/image/include/autoneg/image/storage.hpp`: `AlignedAllocator` nutzt `operator new(size, align_val_t)` – auf beiden Systemen getestet (U-IMG-03).
 - `src/base/src/hash.cpp`: plattformunabhängige Prüfsumme (feste Bytereihenfolge); Referenzwert im Test auf beiden Systemen gleich.
+- `tools/visual_check/visual_check.py`: ruft das Linux-Programm aus Windows über `wsl` auf (WSL-Pfade); unter Linux direkt mit dem Programmpfad.
 - `src/model/include/autoneg/model/roll.hpp`: `Frame::path`/`Roll::folder` sind `std::filesystem::path` – Pfadtrennzeichen und Kodierung (Umlaute, z. B. „Marius Götz“) ab M4/M6 auf beiden Systemen prüfen.

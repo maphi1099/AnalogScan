@@ -235,33 +235,33 @@ void PixelRow(const image::PixelProgram& prog, const float* in, float* out, std:
             Rgb(
                 out, pixels,
                 [&](D d, V& r, V& g, V& b) {
-                    const V l =
+                    const V luma =
                         hn::MulAdd(hn::Set(d, 0.0593F), b,
                                    hn::MulAdd(hn::Set(d, 0.6780F), g, hn::Mul(hn::Set(d, 0.2627F), r)));
-                    const V cr = hn::Sub(r, l);
-                    const V cg = hn::Sub(g, l);
-                    const V cb = hn::Sub(b, l);
+                    const V cr = hn::Sub(r, luma);
+                    const V cg = hn::Sub(g, luma);
+                    const V cb = hn::Sub(b, luma);
                     const V mx = hn::Max(hn::Abs(cr), hn::Max(hn::Abs(cg), hn::Abs(cb)));
-                    const V m = hn::Min(hn::Set(d, 1.0F), hn::Div(mx, hn::Max(l, hn::Set(d, 1e-4F))));
+                    const V rel = hn::Min(hn::Set(d, 1.0F), hn::Div(mx, hn::Max(luma, hn::Set(d, 1e-4F))));
                     const V gain =
                         hn::Mul(hn::Set(d, s1),
-                                hn::MulAdd(hn::Set(d, vib), hn::Sub(hn::Set(d, 1.0F), m), hn::Set(d, 1.0F)));
-                    r = hn::MulAdd(gain, cr, l);
-                    g = hn::MulAdd(gain, cg, l);
-                    b = hn::MulAdd(gain, cb, l);
+                                hn::MulAdd(hn::Set(d, vib), hn::Sub(hn::Set(d, 1.0F), rel), hn::Set(d, 1.0F)));
+                    r = hn::MulAdd(gain, cr, luma);
+                    g = hn::MulAdd(gain, cg, luma);
+                    b = hn::MulAdd(gain, cb, luma);
                 },
                 [&](float& r, float& g, float& b) {
-                    const float l = 0.2627F * r + 0.6780F * g + 0.0593F * b;
-                    const float cr = r - l;
-                    const float cg = g - l;
-                    const float cb = b - l;
-                    const float m =
+                    const float luma = 0.2627F * r + 0.6780F * g + 0.0593F * b;
+                    const float cr = r - luma;
+                    const float cg = g - luma;
+                    const float cb = b - luma;
+                    const float rel =
                         std::min(1.0F, std::max(std::abs(cr), std::max(std::abs(cg), std::abs(cb))) /
-                                           std::max(l, 1e-4F));
-                    const float gain = s1 * (1.0F + vib * (1.0F - m));
-                    r = l + gain * cr;
-                    g = l + gain * cg;
-                    b = l + gain * cb;
+                                           std::max(luma, 1e-4F));
+                    const float gain = s1 * (1.0F + vib * (1.0F - rel));
+                    r = luma + gain * cr;
+                    g = luma + gain * cg;
+                    b = luma + gain * cb;
                 });
         }
     }
