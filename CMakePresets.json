@@ -15,7 +15,7 @@
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "VCPKG_MANIFEST_FEATURES": "raw;imageio;color",
+        "VCPKG_MANIFEST_FEATURES": "raw;imageio;color;vision",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports"
       }
     },

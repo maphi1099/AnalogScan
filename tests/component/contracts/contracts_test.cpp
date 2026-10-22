@@ -1,11 +1,13 @@
 // Vertragstests der Ports (K-14, NF-ARC-03, NF-ARC-12): dieselbe Suite läuft gegen den Fake
 // (tests/mocks/fakes.hpp) und gegen den echten Adapter. So bleibt gesichert, dass Unit-Tests
 // mit Fakes dasselbe Verhalten voraussetzen wie die Anwendung.
-// Umfang M4: IRawDecoder, IImageWriter, IColorEngine; die Repositories folgen in M6.
+// Umfang M4/M5: IRawDecoder, IImageWriter, IColorEngine, IVision; die Repositories folgen in M6.
 
 #include "autoneg/adapter/lcms/lcms_color_engine.hpp"
 #include "autoneg/adapter/libraw/libraw_decoder.hpp"
 #include "autoneg/adapter/oiio/oiio_image_io.hpp"
+#include "autoneg/adapter/opencv/opencv_vision.hpp"
+#include "autoneg/mocks/fake_vision.hpp"
 #include "autoneg/mocks/fakes.hpp"
 #include "autoneg/testing/synthetic.hpp"
 #include "autoneg/testing/temp_dir.hpp"
@@ -13,9 +15,12 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <thread>
 #include <vector>
@@ -458,6 +463,156 @@ TYPED_TEST(ColorEngineContract, K_14_ConcurrentApplyIsIdentical)
     std::vector<std::thread> threads;
     for (std::size_t i = 0; i < results.size(); ++i) {
         threads.emplace_back([&, i] { results[i] = x->apply(src).value(); });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+    for (const auto& r : results) {
+        EXPECT_TRUE(bitEqual(r, reference));
+    }
+}
+
+// --- IVision -------------------------------------------------------------------------------
+
+struct FakeVis
+{
+    static constexpr const char* name = "Fake";
+    static std::unique_ptr<ports::IVision> make() { return std::make_unique<mocks::FakeVision>(); }
+};
+
+struct OpenCv
+{
+    static constexpr const char* name = "OpenCV";
+    static std::unique_ptr<ports::IVision> make()
+    {
+        return std::make_unique<adapter::opencv::OpenCvVision>();
+    }
+};
+
+template <typename Setup>
+class VisionContract : public ::testing::Test
+{
+protected:
+    std::unique_ptr<ports::IVision> vision = Setup::make();
+
+    static image::ImageBuffer mask(int w, int h, const std::function<bool(int, int)>& on)
+    {
+        return t::imageFrom(w, h, 1, [&](int x, int y, int) { return on(x, y) ? 1.0F : 0.0F; });
+    }
+    static int count(const image::ImageBuffer& m)
+    {
+        return static_cast<int>(std::ranges::count_if(m.host(), [](float v) { return v > 0.5F; }));
+    }
+};
+
+using VisionSetups = ::testing::Types<FakeVis, OpenCv>;
+TYPED_TEST_SUITE(VisionContract, VisionSetups, SetupName);
+
+TYPED_TEST(VisionContract, K_14_EdgesFollowRectangleBoundary)
+{
+    // helles Rechteck 60..139 x 40..99 auf dunklem Grund
+    const image::ImageBuffer img = t::imageFrom(200, 140, 1, [](int x, int y, int) {
+        return (x >= 60 && x < 140 && y >= 40 && y < 100) ? 0.8F : 0.2F;
+    });
+    const auto e = this->vision->edges(img, 1.0F);
+    ASSERT_TRUE(e.has_value()) << e.error().message;
+    ASSERT_EQ(e->spec().channels, 1);
+    int far = 0;
+    int total = 0;
+    for (int y = 0; y < 140; ++y) {
+        for (int x = 0; x < 200; ++x) {
+            if (e->host()[static_cast<std::size_t>(y * 200 + x)] < 0.5F) {
+                continue;
+            }
+            ++total;
+            const double dx = std::min(std::abs(x + 0.5 - 60.0), std::abs(x + 0.5 - 140.0));
+            const double dy = std::min(std::abs(y + 0.5 - 40.0), std::abs(y + 0.5 - 100.0));
+            const bool onV = dx <= 2.0 && y >= 38 && y <= 101;
+            const bool onH = dy <= 2.0 && x >= 58 && x <= 141;
+            far += onV || onH ? 0 : 1;
+        }
+    }
+    // Umfang 280 px; eine geschlossene, ein Pixel dünne Kante hat etwa 276 Pixel
+    EXPECT_GE(total, 9 * 2 * (80 + 60) / 10);
+    EXPECT_LE(total, 2 * 2 * (80 + 60));
+    EXPECT_EQ(far, 0);
+}
+
+TYPED_TEST(VisionContract, K_14_LinesFindTiltedEdge)
+{
+    // Kante unter 3 Grad über die ganze Breite
+    const double k = std::tan(3.0 * std::numbers::pi / 180.0);
+    const image::ImageBuffer img = t::imageFrom(
+        300, 200, 1, [k](int x, int y, int) { return (y + 0.5) > 80.0 + k * (x + 0.5) ? 0.8F : 0.2F; });
+    const auto e = this->vision->edges(img, 1.0F);
+    ASSERT_TRUE(e.has_value());
+    const auto l = this->vision->lines(*e);
+    ASSERT_TRUE(l.has_value()) << l.error().message;
+    bool found = false;
+    for (const ports::Line& ln : *l) {
+        const double angle = std::atan2(ln.b.y - ln.a.y, ln.b.x - ln.a.x) * 180.0 / std::numbers::pi;
+        const double a = angle > 90 ? angle - 180 : angle < -90 ? angle + 180 : angle;
+        const double len = std::hypot(ln.b.x - ln.a.x, ln.b.y - ln.a.y);
+        found = found || (std::abs(a - 3.0) <= 0.5 && len >= 150.0);
+    }
+    EXPECT_TRUE(found) << l->size() << " Strecken";
+}
+
+TYPED_TEST(VisionContract, K_14_ContoursPerBlob)
+{
+    const auto m = this->mask(120, 80, [](int x, int y) {
+        return (x >= 10 && x < 40 && y >= 10 && y < 30) || (x >= 70 && x < 110 && y >= 40 && y < 75);
+    });
+    const auto c = this->vision->contours(m);
+    ASSERT_TRUE(c.has_value());
+    ASSERT_EQ(c->size(), 2U);
+    std::vector<std::array<double, 4>> boxes;
+    for (const ports::Polygon& p : *c) {
+        std::array<double, 4> b{1e9, 1e9, -1e9, -1e9};
+        for (const auto& pt : p.points) {
+            b[0] = std::min(b[0], pt.x);
+            b[1] = std::min(b[1], pt.y);
+            b[2] = std::max(b[2], pt.x);
+            b[3] = std::max(b[3], pt.y);
+        }
+        boxes.push_back(b);
+    }
+    std::ranges::sort(boxes);
+    EXPECT_EQ(boxes[0], (std::array<double, 4>{10, 10, 39, 29}));
+    EXPECT_EQ(boxes[1], (std::array<double, 4>{70, 40, 109, 74}));
+}
+
+TYPED_TEST(VisionContract, K_14_MorphologyWithEllipse)
+{
+    const auto dot = this->mask(15, 15, [](int x, int y) { return x == 7 && y == 7; });
+    const auto dil = this->vision->morphology(dot, ports::MorphOp::Dilate, 1);
+    ASSERT_TRUE(dil.has_value());
+    EXPECT_EQ(this->count(*dil), 5); // Ellipse 3 x 3 = Kreuz
+    const auto square = this->mask(15, 15, [](int x, int y) { return x >= 5 && x < 10 && y >= 5 && y < 10; });
+    const auto ero = this->vision->morphology(square, ports::MorphOp::Erode, 1);
+    ASSERT_TRUE(ero.has_value());
+    EXPECT_EQ(this->count(*ero), 9);
+    // Öffnen entfernt Einzelpixel, Schließen füllt ein Loch
+    const auto noisy = this->mask(
+        15, 15, [](int x, int y) { return (x >= 3 && x < 12 && y >= 3 && y < 12) || (x == 0 && y == 14); });
+    const auto open = this->vision->morphology(noisy, ports::MorphOp::Open, 1);
+    ASSERT_TRUE(open.has_value());
+    EXPECT_EQ(open->host()[14 * 15 + 0], 0.0F);
+    const auto holed = this->mask(
+        15, 15, [](int x, int y) { return x >= 3 && x < 12 && y >= 3 && y < 12 && !(x == 7 && y == 7); });
+    const auto close = this->vision->morphology(holed, ports::MorphOp::Close, 1);
+    ASSERT_TRUE(close.has_value());
+    EXPECT_EQ(close->host()[7 * 15 + 7], 1.0F);
+}
+
+TYPED_TEST(VisionContract, K_14_ConcurrentEdgesAreIdentical)
+{
+    const image::ImageBuffer img = testImage(160, 120, 1);
+    const auto reference = this->vision->edges(img, 1.5F).value();
+    std::vector<image::ImageBuffer> results(6);
+    std::vector<std::thread> threads;
+    for (std::size_t i = 0; i < results.size(); ++i) {
+        threads.emplace_back([&, i] { results[i] = this->vision->edges(img, 1.5F).value(); });
     }
     for (auto& th : threads) {
         th.join();
