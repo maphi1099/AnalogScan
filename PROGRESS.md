@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 23.10.2026 – **M6 fertig (Windows, linux-clang, TSan grün; GCC/ASan laufen).** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`). M3–M6 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
+Stand: 23.10.2026 – **M6 fertig, alle 6 Konfigurationen grün; M7 in Arbeit (autonom bis M9, D-15).** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`). M3–M6 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
 
 ## Ablage
 
@@ -50,7 +50,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Fertig (Weiterarbeit auf Anweisung des Nutzers, OK formal offen) | U-STP-01…28, K-08, K-09, K-10 (alle grün) |
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Fertig (Weiterarbeit auf Anweisung, OK formal offen) | K-01…K-05, K-07, K-14 (Teil Dateien/Farbe) |
 | M5 | Analyse, K-11 | **Technik fertig, K-11 wartet auf Annotationen (L-06/L-07)** | U-ANA-01…12, K-14 (IVision) |
-| M6 | Datenhaltung und Anwendung | **Fertig (Nachweis läuft)** | U-DAT-01…15, U-APP-01…16, K-14 (ITaskExecutor) |
+| M6 | Datenhaltung und Anwendung | Fertig (autonom, D-15) | U-DAT-01…15, U-APP-01…16, K-14 (ITaskExecutor) |
 | M7 | Kontaktabzug | Offen | – |
 | M8 | Oberfläche, E2E | Offen | – |
 | M9 | CLI, Leistung, Abschluss | Offen | – |
@@ -166,6 +166,7 @@ Offen aus M5:
 - Ports: `StepCatalog`, `lock`/`unlock`, `relink`, `ErrorCode::Conflict`; `Roll::extra`.
 - Tests: `tests/unit/data` (U-DAT-01…15), `tests/unit/application` (U-APP-01…16 + 4 × `M6_`), K-14 für `ITaskExecutor` (Fake und oneTBB), Fakes `FakeTaskExecutor`.
 - Gefundener und behobener Fehler (zuerst durch Test reproduziert): `TbbTaskExecutor` benachrichtigte nach dem Freigeben der Sperre; `shutdown()` konnte zurückkehren und das Objekt zerstören, bevor `notify_all()` lief (TSan, Vertragstest). Ebenso in `MemoryBudget::release` vorsorglich umgestellt. Weitere: Datei beim Umbenennen nach `.defekt` noch geöffnet (Windows), `extra` = `{}` statt leer.
+- Nachweise (23.10.2026, Stand f4844c3): windows-clang Debug + Release, linux-clang, linux-gcc, linux-clang-asan, linux-clang-tsan je 216/216.
 - Laufzeit Unit-Tests Debug 58 s (Vorgabe < 1 min, knapp), Release 9,4 s.
 
 Offen aus M6:
