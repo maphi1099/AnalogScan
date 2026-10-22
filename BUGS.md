@@ -143,7 +143,8 @@ Format je Eintrag:
 - Plattform: beide
 - Symptom: `OiioImageWriter::formats()` enthält kein JPEG XL; OpenImageIO meldet beim Bau „JXL library not found“, obwohl `libjxl` installiert ist.
 - Ursache: Der Port `openimageio` (Baseline 664933b8, OIIO 3.1.14) löscht `src/cmake/modules/FindJXL.cmake`; `libjxl` liefert keine CMake-Konfiguration, nur pkg-config.
-- Abhilfe: Overlay-Port `cmake/ports/openimageio` (Kopie mit erhaltenem `FindJXL.cmake`), eingebunden über `VCPKG_OVERLAY_PORTS` in `CMakePresets.json`. Bei einer neuen Baseline prüfen, ob der Port korrigiert ist, und das Overlay dann entfernen.
+- Folgeproblem (Linux, statisch): Das Original-`FindJXL.cmake` nennt nur `jxl` und `jxl_threads`; beim Linken fehlen `jxl_cms`, Brotli, Highway und Little CMS („undefined reference to BrotliEncoderCreateInstance … JxlGetDefaultCms … hwy::GetChosenTarget“). Unter Windows (DLLs) unsichtbar.
+- Abhilfe: Overlay-Port `cmake/ports/openimageio` mit eigenem `FindJXL.cmake` (hängt bei statischem Bau die Abhängigkeiten aus `libjxl.pc` an), eingebunden über `VCPKG_OVERLAY_PORTS` in `CMakePresets.json`. Patches im Overlay behalten CRLF (`.gitattributes`: `cmake/ports/** -text`). Bei einer neuen Baseline prüfen, ob der Port korrigiert ist, und das Overlay dann entfernen.
 - Status: Umgehung
 
 ## B-17: Python-Testleser unter WSL (Arch) nicht installierbar
@@ -153,3 +154,11 @@ Format je Eintrag:
 - Ursache: veraltete Paketdatenbank (B-02); ein Komplett-Update während eines laufenden Baus würde den Compiler tauschen.
 - Abhilfe: eigene Umgebung `python -m venv /root/pyenv`, darin `pip install numpy pillow tifffile imagecodecs rawpy`. CMake unter Linux mit `-DPython3_EXECUTABLE=/root/pyenv/bin/python` konfigurieren (K-02, K-05 rufen Python auf). Unter Windows liegen die Pakete in der Benutzerinstallation von Python 3.12.
 - Status: Umgehung
+
+## B-18: OpenImageIO scheitert im TSan-Triplet an CMAKE_SYSTEM_PROCESSOR
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: Linux, Preset `linux-clang-tsan`
+- Symptom: vcpkg-Bau von `openimageio:x64-linux-tsan` bricht ab: „CMake Error at src/cmake/compiler.cmake:210 (if): … "Linux" "STREQUAL" "FreeBSD" "AND" "STREQUAL" "i386" Unknown arguments“.
+- Ursache: Mit eigener Chainload-Toolchain und gesetztem `CMAKE_SYSTEM_NAME` bleibt `CMAKE_SYSTEM_PROCESSOR` leer; die Standard-Toolchain von vcpkg setzt es, unsere `clang-linux-toolchain.cmake` nicht.
+- Abhilfe: `CMAKE_SYSTEM_PROCESSOR` in `cmake/triplets/clang-linux-toolchain.cmake` auf `x86_64` setzen. Achtung: jede Änderung an der Toolchain ändert den ABI-Hash; alle TSan-Abhängigkeiten werden neu gebaut.
+- Status: behoben

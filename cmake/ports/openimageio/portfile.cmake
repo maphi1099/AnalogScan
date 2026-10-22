@@ -1,6 +1,7 @@
 # Overlay-Port (AutoNeg, BUGS.md B-16): Kopie von vcpkg ports/openimageio (Baseline
-# 664933b8), aber FindJXL.cmake bleibt erhalten. libjxl liefert keine CMake-Konfiguration;
-# ohne das Find-Modul baut OpenImageIO trotz Feature jpegxl ohne JPEG XL.
+# 664933b8) mit eigenem FindJXL.cmake. libjxl liefert keine CMake-Konfiguration; ohne
+# Find-Modul baut OpenImageIO trotz Feature jpegxl ohne JPEG XL, mit dem Original fehlen bei
+# statischem Bau die Abhängigkeiten von libjxl.
 set(PATCHES
     fix-dependencies.patch
     fix-static-ffmpeg.patch
@@ -37,6 +38,9 @@ vcpkg_from_github(
 )
 
 file(REMOVE_RECURSE "${SOURCE_PATH}/ext")
+
+# AutoNeg: eigenes Find-Modul für libjxl (statische Abhängigkeiten, B-16)
+file(COPY_FILE "${CMAKE_CURRENT_LIST_DIR}/FindJXL.cmake" "${SOURCE_PATH}/src/cmake/modules/FindJXL.cmake")
 
 file(REMOVE
     "${SOURCE_PATH}/src/cmake/modules/FindFFmpeg.cmake"
