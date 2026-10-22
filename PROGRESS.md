@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 19.10.2026 – **M1 fertig unter Windows und Linux, wartet auf OK des Nutzers.** Nächster Schritt danach: M2, beginnend mit dem Benchmark-Prototyp für OE-01.
+Stand: 22.10.2026 – **M2 begonnen: Benchmark OE-01 abgeschlossen, wartet auf die Entscheidung des Nutzers (Halide oder Highway + oneTBB).** Ergebnis: `prototypes/oe01-benchmark/ERGEBNIS.md`.
 
 ## Ablage
 
@@ -45,8 +45,8 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | MS | Inhalt | Status | Umgesetzte Szenarien |
 |---|---|---|---|
 | M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | Fertig, OK am 19.10.2026 | – (kein Szenario) |
-| M1 | base, model, image, ports | **Fertig (Windows + Linux), wartet auf OK** | U-MOD-01…13, U-IMG-01…04 (alle grün) |
-| M2 | Pipeline, CPU-Backend (vorher OE-01-Benchmark) | Offen | – |
+| M1 | base, model, image, ports | Fertig, OK am 22.10.2026 | U-MOD-01…13, U-IMG-01…04 (alle grün) |
+| M2 | Pipeline, CPU-Backend (vorher OE-01-Benchmark) | **Benchmark fertig, wartet auf OE-01** | – |
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Offen | – |
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Offen | – |
 | M5 | Analyse, K-11 | Offen | – |
@@ -95,6 +95,12 @@ Offen aus M1:
 - Platzhalter-Implementierungen für `IInferenceRuntime` und `IFilmProfileSource` (NF-ARC-15 „vorhanden und getestet“) → M6.
 - `IDocumentRenderer` → M7.
 
+### M2 – Stand
+
+- Benchmark-Prototyp `prototypes/oe01-benchmark/` (eigenständiges CMake-Projekt, nicht im Produkt-Build): skalar + oneTBB, Highway + oneTBB, Halide 21 (AOT) für Basiskorrektur, Gradation, verschmolzen, Schärfen; 8 und 100 MP, 1/8/32 Threads, Windows und Linux. Ergebnisse `results-windows.md`, `results-linux.md`, Auswertung `ERGEBNIS.md`.
+- Halide für die Messung aus dem offiziellen Python-Wheel (Windows: Scratchpad, Linux: `/root/tools/halide-21`), nicht über vcpkg (der Port baut LLVM).
+- Highway und oneTBB über vcpkg (Prototyp-Manifest); unter Windows zieht oneTBB `hwloc` mit (Build über MSYS2, langsam).
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -118,7 +124,7 @@ Offen aus M1:
 ## Offene Fragen an den Nutzer
 
 1. Einordnung der Testordner, Annotationen (L-06) – spätestens für M3/M5.
-2. OE-01 (Halide oder Highway + oneTBB): Benchmark kommt zu Beginn von M2.
+2. **OE-01 entscheiden** (Empfehlung: Highway + oneTBB, siehe `prototypes/oe01-benchmark/ERGEBNIS.md`).
 
 ## Plattformabhängiger Code (auf dem anderen System prüfen)
 

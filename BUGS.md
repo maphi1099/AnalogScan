@@ -80,3 +80,11 @@ Format je Eintrag:
 - Ursache: `Path.write_text`/`open(..., "w")` übersetzt `\n` unter Windows in `\r\n`.
 - Abhilfe: Beim Schreiben immer `newline="\n"` angeben (`open(p, "w", encoding="utf-8", newline="\n")`, `Path.write_text(..., newline="\n")` ab Python 3.10). Im Repository sorgt `.gitattributes` (`eol=lf`) ohnehin für LF.
 - Status: umgangen
+
+## B-09: WSL-VM stürzt bei stark parallelen Builds ab („Wsl/Service/E_UNEXPECTED“)
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 3
+- Plattform: Linux (WSL 2.6.3, Kernel 6.6.87, Arch) auf Windows 11, Ryzen 9 5900XT (32 Threads), WSL-VM mit 15 GB
+- Symptom: Während vcpkg Highway baut, endet `wsl.exe` ohne Ausgabe bzw. mit „Catastrophic failure – Error code: Wsl/Service/E_UNEXPECTED“; die VM startet neu, `/tmp` ist leer.
+- Ursache: nicht abschließend geklärt. Tritt nur bei voller Parallelität (vcpkg/Ninja mit 32 Jobs) auf; mit 2 Jobs läuft derselbe Build stabil (Spitze 2,9 GB).
+- Abhilfe: In WSL `VCPKG_MAX_CONCURRENCY=4` setzen und Ninja mit `-j 8` aufrufen; danach `wsl --shutdown`, falls WSL hängt. Lange Läufe aus PowerShell starten und das Protokoll auf die persistente Platte (`/root/…`) schreiben, nicht nach `/tmp`.
+- Status: umgangen
