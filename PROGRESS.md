@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 22.10.2026 – **M4 in Arbeit** (Nutzer: selbstständig weiterarbeiten). M3 fertig; zur Zustimmung stehen K-M3-01…15, T-10, T-11 sowie für M4 K-M4-01…10, T-12, T-13 (siehe `abweichungen_planung.txt`).
+Stand: 22.10.2026 – **M5 fertig (Technik), alle 6 Konfigurationen grün.** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3-…, K-M4-…, K-M5-…, T-10…T-14 (siehe `abweichungen_planung.txt`). M3/M4 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
 
 ## Ablage
 
@@ -49,7 +49,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M2 | Pipeline, CPU-Backend | Fertig, OK am 22.10.2026 | U-PIP-01…18, U-BCK-01…06 (alle grün; U-BCK-01 mit Toleranz nach T-07) |
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Fertig (Weiterarbeit auf Anweisung des Nutzers, OK formal offen) | U-STP-01…28, K-08, K-09, K-10 (alle grün) |
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Fertig (Weiterarbeit auf Anweisung, OK formal offen) | K-01…K-05, K-07, K-14 (Teil Dateien/Farbe) |
-| M5 | Analyse, K-11 | Offen | – |
+| M5 | Analyse, K-11 | **Technik fertig, K-11 wartet auf Annotationen (L-06/L-07)** | U-ANA-01…12, K-14 (IVision) |
 | M6 | Datenhaltung und Anwendung | Offen | – |
 | M7 | Kontaktabzug | Offen | – |
 | M8 | Oberfläche, E2E | Offen | – |
@@ -143,6 +143,20 @@ Offen aus M3:
 - Nachweise (22.10.2026): windows-clang Debug + Release, linux-clang, linux-gcc, linux-clang-asan, linux-clang-tsan je 151/151. Unter TSan zwei gutartige Meldungen in Fremdcode unterdrückt (`tests/tsan.supp`, B-19).
 - Gefundene und behobene Probleme: JPEG XL fehlte (B-16, Overlay-Port), statische JXL-Abhängigkeiten (B-16), TSan-Toolchain ohne `CMAKE_SYSTEM_PROCESSOR` (B-18), abgeschnittene RAW-Dateien wurden stillschweigend aufgefüllt (K-M4-06), Thread-Pool von OIIO (K-M4-11).
 - Messwerte (Windows Debug): K-01 448 × ILCE-7RM4 + 1 × X-E5, Schachbrettenergie 0,9 % (< 3 %); K-02 99. Perzentil 0,04 % (< 1 %); K-05 alle verlustfreien Formate bitgleich, JPEG 1,38 Stufen; K-07 größtes dE00 0,003 (sRGB, Adobe RGB, ProPhoto, Monitor P3).
+
+### M5 – Ergebnis
+
+- `autoneg::analysis`: `FrameDetector` (`detect`, `detectAll`), `SkewEstimator`, `RegionMap`/`RegionClass`, `BaseMeter` (`measure`, `measureRect`), `BaseEstimator`, `AutoLevels`, `AutoNeutral`, `HistogramCalculator`; interne Ebenen-Hilfen `src/planes.hpp`.
+- `autoneg::adapter::opencv::OpenCvVision` (Canny, Konturen, HoughLinesP, Morphologie; vcpkg-Feature `vision`, nur core/imgproc). Vertrag von `IVision` präzisiert (K-M5-03), `FakeVision` in `tests/mocks`.
+- Generator: mehrere Bildfelder je Streifen (`NegativeSpec::frames`).
+- Tests: `tests/unit/analysis` (U-ANA-01…12), K-14 für `IVision` (Fake und OpenCV), Werkzeug `tests/tools/analyze` (Bericht + Übersichtsbilder für K-11).
+- Echte Scans (Stichprobe 31, Sichtprüfung): etwa 21 von 26 bewertbaren richtig; Schräglage durchweg plausibel (Konsens paralleler Kanten). Fehlerfälle und Bedarf an Annotationen: L-07.
+- Nachweise (22.10.2026): windows-clang Debug + Release, linux-clang, linux-gcc, linux-clang-asan, linux-clang-tsan je 174/174 (GCC nach Behebung zweier Warnungen).
+- Laufzeit: Unit-Tests im Debug-Bau sequenziell 57 s (Vorgabe < 1 min, knapp; Release 8,5 s). Größter Einzeltest U-PIP-13 (18 s).
+
+Offen aus M5:
+- K-11 (Abnahme an echten Scans) braucht Soll-Annotationen (L-06). Vorschlag: Annotationen als JSON je Scan (Bildfeld-Ecken, Basis-Rechteck), erstellt mit einem kleinen Python-Werkzeug; danach Kennzahlen automatisch.
+- Erkennung verbessern für: dunkle Bildränder (Dia/Negativ unterbelichtet), dünne Farbnegative, schwarze Masken (Fuji-RAF), leere Scans ablehnen.
 
 ## Entscheidungen
 

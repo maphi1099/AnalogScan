@@ -245,7 +245,7 @@ TEST(AutoLevelsTest, U_ANA_10_ClipShare)
 {
     std::mt19937 rng(10);
     const image::ImageBuffer d = t::imageFrom(400, 250, 3, [&](int, int, int c) {
-        return static_cast<float>(0.1 + 0.3 * c + 1.5 * (rng() % 100000) / 100000.0);
+        return static_cast<float>(0.1 + 0.3 * c + 1.5 * static_cast<double>(rng() % 100000) / 100000.0);
     });
     for (const double clip : {0.0, 0.005, 0.02}) {
         const DensityRange r = AutoLevels{}.compute(d, clip);

@@ -263,7 +263,7 @@ base::Expected<std::vector<ports::Line>> FakeVision::lines(const image::ImageBuf
         cs[static_cast<std::size_t>(t)] = std::cos(a);
         sn[static_cast<std::size_t>(t)] = std::sin(a);
     }
-    for (const auto [x, y] : pts) {
+    for (const auto& [x, y] : pts) {
         for (int t = 0; t < thetas; ++t) {
             const int r = static_cast<int>(std::lround(x * cs[static_cast<std::size_t>(t)] +
                                                        y * sn[static_cast<std::size_t>(t)])) +
@@ -307,7 +307,7 @@ base::Expected<std::vector<ports::Line>> FakeVision::lines(const image::ImageBuf
         const double s = sn[static_cast<std::size_t>(p.t)];
         const double rho = p.r - maxRho;
         std::vector<double> along;
-        for (const auto [x, y] : pts) {
+        for (const auto& [x, y] : pts) {
             if (std::abs(x * c + y * s - rho) <= 1.0) {
                 along.push_back(-x * s + y * c);
             }
@@ -352,7 +352,7 @@ base::Expected<image::ImageBuffer> FakeVision::morphology(const image::ImageBuff
         for (int y = 0; y < in.h; ++y) {
             for (int x = 0; x < in.w; ++x) {
                 bool v = !dilate;
-                for (const auto [dx, dy] : element) {
+                for (const auto& [dx, dy] : element) {
                     const int nx = x + dx;
                     const int ny = y + dy;
                     if (nx < 0 || ny < 0 || nx >= in.w || ny >= in.h) {

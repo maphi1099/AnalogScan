@@ -121,7 +121,7 @@ image::Histogram HistogramCalculator::compute(const image::ImageBuffer& img, int
         ++h.bins[image::Histogram::luminance][binOf(0.2627F * px[0] + 0.6780F * px[1] + 0.0593F * px[2])];
     }
     const double total = static_cast<double>(std::max<std::size_t>(pixels, 1));
-    const auto share = [total](std::size_t n) { return static_cast<double>(n) / total; };
+    const auto share = [total](std::size_t count) { return static_cast<double>(count) / total; };
     h.clipLow = {share(low[0]), share(low[1]), share(low[2])};
     h.clipHigh = {share(high[0]), share(high[1]), share(high[2])};
     return h;

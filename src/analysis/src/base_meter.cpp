@@ -70,7 +70,7 @@ base::Expected<BaseMeasurement> BaseMeter::measure(const image::ImageBuffer& img
                 continue;
             }
             bool interior = true;
-            for (const auto [dx, dy] :
+            for (const auto& [dx, dy] :
                  {std::pair{margin, 0}, std::pair{-margin, 0}, std::pair{0, margin}, std::pair{0, -margin}}) {
                 const model::NormPoint q{p.x + dx / (sx * s.width), p.y + dy / (sy * s.height)};
                 interior = interior && m.classOf(q) == RegionClass::Rebate;
