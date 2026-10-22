@@ -2,5 +2,5 @@
 autoneg_add_test(contracts
     LABEL component
     SOURCES contracts_test.cpp
-    DEPS adapter_libraw adapter_oiio adapter_lcms adapter_opencv test_fakes test_synthetic
+    DEPS adapter_libraw adapter_oiio adapter_lcms adapter_opencv adapter_tbb test_fakes test_synthetic
 )

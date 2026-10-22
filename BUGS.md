@@ -171,10 +171,11 @@ Format je Eintrag:
 - Abhilfe: Die Adapter schalten den Thread-Pool von OIIO je Instanz ab (`threads(1)`); die Nebenläufigkeit steuert die Anwendung. Unterdrückungen eng gefasst in `tests/tsan.supp` (nur `spin_mutex::lock` von OIIO und `LibRaw::get_timestamp`), gesetzt über `CMAKE_TEST_LAUNCHER` (`TSAN_OPTIONS`). Eigener Code wird nie unterdrückt.
 - Status: Umgehung
 
-## B-20: GCC meldet Warnungen, die clang nicht meldet
-- Erstmals: 22.10.2026 (M3), zuletzt: 22.10.2026 (M5), Häufigkeit: 2
+## B-20: Unter Windows gebauter Code scheitert unter Linux (Warnungen, Includes, Linker)
+- Erstmals: 22.10.2026 (M3), zuletzt: 23.10.2026 (M6), Häufigkeit: 4
 - Plattform: Linux, Preset `linux-gcc`
 - Symptom: `-Werror=range-loop-construct` („loop variable '<structured bindings>' creates a copy“), `-Werror=shadow` (Lambda-Parameter verdeckt eine lokale Variable, z. B. `n`), `-Werror=conversion` (`std::mt19937::result_type` → `double`).
 - Ursache: GCC prüft diese Fälle strenger als clang; unter clang-cl/clang baut derselbe Code ohne Warnung.
-- Abhilfe: In Range-Schleifen mit strukturierter Bindung immer `const auto&`; Lambda-Parameter nicht wie lokale Variablen nennen; Zufallswerte explizit umwandeln. GCC nach größeren Änderungen früh mitbauen (`scratchpad/gcc_only.sh` mit `-k 0`).
+- Weitere Fälle: fehlende Includes, die die MSVC-Standardbibliothek indirekt mitbringt (`<algorithm>` für `std::ranges::sort`/`is_sorted`, `<utility>` für `std::exchange`, `<cmath>`, `<numbers>`); Linkfehler „undefined reference to `tbb::detail::d1::task_arena_base::automatic`“, wenn eine statische Konstante ohne Definition per Referenz übergeben wird (ODR-Nutzung, nur im Debug-Bau).
+- Abhilfe: In Range-Schleifen mit strukturierter Bindung immer `const auto&`; Lambda-Parameter nicht wie lokale Variablen nennen; Zufallswerte explizit umwandeln; jeden benutzten Standard-Header selbst einbinden; statische Konstanten fremder Bibliotheken als Wert übergeben (`static_cast<int>(…)`). Nach jedem Teilschritt früh unter Linux bauen (`scratchpad/linux_quick.sh` mit `-k 0`).
 - Status: wiederkehrend

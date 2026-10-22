@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 22.10.2026 – **M5 fertig (Technik), alle 6 Konfigurationen grün.** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3-…, K-M4-…, K-M5-…, T-10…T-14 (siehe `abweichungen_planung.txt`). M3/M4 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
+Stand: 23.10.2026 – **M6 fertig (Windows, linux-clang, TSan grün; GCC/ASan laufen).** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`). M3–M6 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
 
 ## Ablage
 
@@ -50,7 +50,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Fertig (Weiterarbeit auf Anweisung des Nutzers, OK formal offen) | U-STP-01…28, K-08, K-09, K-10 (alle grün) |
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Fertig (Weiterarbeit auf Anweisung, OK formal offen) | K-01…K-05, K-07, K-14 (Teil Dateien/Farbe) |
 | M5 | Analyse, K-11 | **Technik fertig, K-11 wartet auf Annotationen (L-06/L-07)** | U-ANA-01…12, K-14 (IVision) |
-| M6 | Datenhaltung und Anwendung | Offen | – |
+| M6 | Datenhaltung und Anwendung | **Fertig (Nachweis läuft)** | U-DAT-01…15, U-APP-01…16, K-14 (ITaskExecutor) |
 | M7 | Kontaktabzug | Offen | – |
 | M8 | Oberfläche, E2E | Offen | – |
 | M9 | CLI, Leistung, Abschluss | Offen | – |
@@ -158,6 +158,20 @@ Offen aus M5:
 - K-11 (Abnahme an echten Scans) braucht Soll-Annotationen (L-06). Vorschlag: Annotationen als JSON je Scan (Bildfeld-Ecken, Basis-Rechteck), erstellt mit einem kleinen Python-Werkzeug; danach Kennzahlen automatisch.
 - Erkennung verbessern für: dunkle Bildränder (Dia/Negativ unterbelichtet), dünne Farbnegative, schwarze Masken (Fuji-RAF), leere Scans ablehnen.
 
+### M6 – Ergebnis
+
+- `autoneg::adapter::json`: `AtomicFileWriter` (temporär, fsync/FlushFileBuffers, rename/ReplaceFileW, Ordner-Sync; Prüfpunkte für Tests), `SchemaMigrator`, `EditCodec` (Bearbeitungsliste ↔ JSON über `ports::StepCatalog`), `JsonSidecarStore` (Begleit- und Rollendateien, Ersatzablage, Zuordnung über Größe/Zeit/Prüfsumme, defekte Dateien, neueres Schema nur lesend, Sperrdatei, Umbenennen), `JsonConfigStore` (Einstellungen ohne Standardwerte, Vorlagen je Art).
+- `autoneg::adapter::xxhash::XxHasher` (XXH3-128, 8-MB-Blöcke). `autoneg::adapter::tbb::TbbTaskExecutor` (drei Arenen mit Priorität, Threadzahl zur Laufzeit).
+- `autoneg::application`: Befehle (`SetEntry`, `RemoveEntry`, `ToggleEntry`, `Paste` mit `PasteMode`, `ApplyPreset`, `SetRollDefaults`, `SetAutomaticEntries`), `EditClipboard`, `CommandBus` mit `UndoStack`/`UndoGroup`, `Session`, `SyncController`, `PersistenceQueue`, `MemoryBudget`, `JobScheduler`/`JobHandle`/`ThreadConfig`, `RenderService` (+ `IRenderer`, `PipelineRenderer`), `AnalysisService`, `ExportService` (Dateinamen, Export-Job), `stepCatalog(registry)`, Platzhalter `NoInferenceRuntime`, `NoFilmProfiles`.
+- Ports: `StepCatalog`, `lock`/`unlock`, `relink`, `ErrorCode::Conflict`; `Roll::extra`.
+- Tests: `tests/unit/data` (U-DAT-01…15), `tests/unit/application` (U-APP-01…16 + 4 × `M6_`), K-14 für `ITaskExecutor` (Fake und oneTBB), Fakes `FakeTaskExecutor`.
+- Gefundener und behobener Fehler (zuerst durch Test reproduziert): `TbbTaskExecutor` benachrichtigte nach dem Freigeben der Sperre; `shutdown()` konnte zurückkehren und das Objekt zerstören, bevor `notify_all()` lief (TSan, Vertragstest). Ebenso in `MemoryBudget::release` vorsorglich umgestellt. Weitere: Datei beim Umbenennen nach `.defekt` noch geöffnet (Windows), `extra` = `{}` statt leer.
+- Laufzeit Unit-Tests Debug 58 s (Vorgabe < 1 min, knapp), Release 9,4 s.
+
+Offen aus M6:
+- `FileThumbnailCache`, `ThumbnailService`, `RollService` (Ordner öffnen, Frames, Prüfsummen) mit der Oberfläche (M8); K-14 für die Repositories (IEditRepository, IRollRepository) folgt mit `RollService`.
+- Unit-Laufzeit: U-PIP-13 (18 s) und die Analyse-Tests verkürzen, bevor neue Unit-Tests dazukommen.
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -201,5 +215,8 @@ Offen aus M5:
 - `src/adapters/oiio/src/oiio_image_io.cpp`: Umbenennen über vorhandene Datei (`std::filesystem::rename`) – Windows ersetzt per MoveFileEx, Linux per rename(2); Contract-Test K-14 auf beiden Systemen.
 - `tests/component/adapters/oiio_test.cpp`: `std::system` mit unterschiedlicher Quotierung (cmd.exe vs. sh).
 - `tests/component/adapters/libraw_test.cpp`: `_dupenv_s` unter Windows statt `getenv`.
+- `src/adapters/json/src/atomic_file_writer.cpp`: Windows CreateFileW/FlushFileBuffers/ReplaceFileW bzw. MoveFileExW, Linux open/fsync/rename/fsync(Ordner) – auf beiden Systemen geprüft (U-DAT-06).
+- `src/adapters/json/src/json_sidecar_store.cpp`: Prozesskennung, Rechnername, Lebenszeichen (OpenProcess/WaitForSingleObject bzw. kill(pid, 0)); Änderungszeit über `clock_cast` (U-DAT-13, U-DAT-10).
+- `src/adapters/tbb/src/tbb_task_executor.cpp`: Arena-Prioritäten und global_control; Verhalten unter TSan geprüft.
 - `tools/visual_check/visual_check.py`: ruft das Linux-Programm aus Windows über `wsl` auf (WSL-Pfade); unter Linux direkt mit dem Programmpfad.
 - `src/model/include/autoneg/model/roll.hpp`: `Frame::path`/`Roll::folder` sind `std::filesystem::path` – Pfadtrennzeichen und Kodierung (Umlaute, z. B. „Marius Götz“) ab M4/M6 auf beiden Systemen prüfen.

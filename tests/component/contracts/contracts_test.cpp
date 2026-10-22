@@ -1,12 +1,14 @@
 // Vertragstests der Ports (K-14, NF-ARC-03, NF-ARC-12): dieselbe Suite läuft gegen den Fake
 // (tests/mocks/fakes.hpp) und gegen den echten Adapter. So bleibt gesichert, dass Unit-Tests
 // mit Fakes dasselbe Verhalten voraussetzen wie die Anwendung.
-// Umfang M4/M5: IRawDecoder, IImageWriter, IColorEngine, IVision; die Repositories folgen in M6.
+// Umfang: IRawDecoder, IImageWriter, IColorEngine, IVision, ITaskExecutor; Repositories folgen.
 
 #include "autoneg/adapter/lcms/lcms_color_engine.hpp"
 #include "autoneg/adapter/libraw/libraw_decoder.hpp"
 #include "autoneg/adapter/oiio/oiio_image_io.hpp"
 #include "autoneg/adapter/opencv/opencv_vision.hpp"
+#include "autoneg/adapter/tbb/tbb_task_executor.hpp"
+#include "autoneg/mocks/fake_task_executor.hpp"
 #include "autoneg/mocks/fake_vision.hpp"
 #include "autoneg/mocks/fakes.hpp"
 #include "autoneg/testing/synthetic.hpp"
@@ -16,10 +18,13 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <numbers>
 #include <string>
 #include <thread>
@@ -620,6 +625,124 @@ TYPED_TEST(VisionContract, K_14_ConcurrentEdgesAreIdentical)
     for (const auto& r : results) {
         EXPECT_TRUE(bitEqual(r, reference));
     }
+}
+
+// --- ITaskExecutor -------------------------------------------------------------------------
+
+struct FakeExec
+{
+    static constexpr const char* name = "Fake";
+    static std::unique_ptr<ports::ITaskExecutor> make(int workers)
+    {
+        auto e = std::make_unique<mocks::FakeTaskExecutor>(8);
+        e->setConcurrency(workers);
+        return e;
+    }
+};
+
+struct TbbExec
+{
+    static constexpr const char* name = "oneTBB";
+    static std::unique_ptr<ports::ITaskExecutor> make(int workers)
+    {
+        return std::make_unique<adapter::tbb::TbbTaskExecutor>(workers);
+    }
+};
+
+template <typename Setup>
+class TaskExecutorContract : public ::testing::Test
+{};
+
+using ExecSetups = ::testing::Types<FakeExec, TbbExec>;
+TYPED_TEST_SUITE(TaskExecutorContract, ExecSetups, SetupName);
+
+TYPED_TEST(TaskExecutorContract, K_14_ConcurrencyLimitAppliesToNewTasks)
+{
+    auto exec = TypeParam::make(8);
+    const auto measure = [&] {
+        std::atomic<int> running{0};
+        std::atomic<int> peak{0};
+        std::atomic<int> left{16};
+        for (int i = 0; i < 16; ++i) {
+            exec->enqueue(ports::Priority::Background, [&] {
+                const int now = ++running;
+                int p = peak.load();
+                while (now > p && !peak.compare_exchange_weak(p, now)) {
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(4));
+                --running;
+                --left;
+            });
+        }
+        while (left.load() > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        return peak.load();
+    };
+    EXPECT_GT(measure(), 2);
+    exec->setConcurrency(2);
+    EXPECT_EQ(exec->concurrency(), 2);
+    EXPECT_LE(measure(), 2);
+    exec->shutdown();
+}
+
+TYPED_TEST(TaskExecutorContract, K_14_InteractiveBeforeQueuedBatch)
+{
+    auto exec = TypeParam::make(2);
+    std::mutex mutex;
+    std::vector<std::string> started;
+    std::atomic<bool> release{false};
+    std::atomic<int> left{7};
+    const auto task = [&](std::string name) {
+        return [&, name] {
+            {
+                const std::scoped_lock lock(mutex);
+                started.push_back(name);
+            }
+            while (!release.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            --left;
+        };
+    };
+    for (int i = 0; i < 6; ++i) {
+        exec->enqueue(ports::Priority::Batch, task("stapel"));
+    }
+    while (true) {
+        const std::scoped_lock lock(mutex);
+        if (started.size() >= 2) {
+            break;
+        }
+    }
+    exec->enqueue(ports::Priority::Interactive, task("interaktiv"));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    release = true;
+    while (left.load() > 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    const auto pos = std::ranges::find(started, "interaktiv") - started.begin();
+    EXPECT_LE(pos, 3) << "Interaktive Aufgabe erst an Stelle " << pos; // vor den wartenden Stapel-Aufgaben
+    exec->shutdown();
+}
+
+TYPED_TEST(TaskExecutorContract, K_14_ShutdownWaitsAndRejects)
+{
+    auto exec = TypeParam::make(4);
+    std::atomic<int> done{0};
+    for (int i = 0; i < 20; ++i) {
+        exec->enqueue(ports::Priority::Batch, [&] {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            ++done;
+        });
+    }
+    exec->shutdown();
+    EXPECT_EQ(done.load(), 20);
+    exec->enqueue(ports::Priority::Batch, [&] { ++done; });
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    EXPECT_EQ(done.load(), 20);
+    int ran = 0;
+    exec->run(ports::Priority::Interactive, [&] { ran = 1; });
+    EXPECT_EQ(ran, 1);
 }
 
 } // namespace
