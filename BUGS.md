@@ -170,3 +170,11 @@ Format je Eintrag:
 - Ursache: Beides gutartig und in Fremdcode. OIIO liest den Sperrzustand in der Spin-Schleife absichtlich nicht-atomar. glibc legt in `mktime`/`tzset` den Zeitzonenpuffer unter internen Futex-Sperren neu an, die TSan nicht sieht. Ein einmaliger Vorab-Aufruf von `mktime` hilft nicht: Ohne `TZ` prüft glibc `/etc/localtime` bei jedem Aufruf.
 - Abhilfe: Die Adapter schalten den Thread-Pool von OIIO je Instanz ab (`threads(1)`); die Nebenläufigkeit steuert die Anwendung. Unterdrückungen eng gefasst in `tests/tsan.supp` (nur `spin_mutex::lock` von OIIO und `LibRaw::get_timestamp`), gesetzt über `CMAKE_TEST_LAUNCHER` (`TSAN_OPTIONS`). Eigener Code wird nie unterdrückt.
 - Status: Umgehung
+
+## B-20: GCC meldet Warnungen, die clang nicht meldet
+- Erstmals: 22.10.2026 (M3), zuletzt: 22.10.2026 (M5), Häufigkeit: 2
+- Plattform: Linux, Preset `linux-gcc`
+- Symptom: `-Werror=range-loop-construct` („loop variable '<structured bindings>' creates a copy“), `-Werror=shadow` (Lambda-Parameter verdeckt eine lokale Variable, z. B. `n`), `-Werror=conversion` (`std::mt19937::result_type` → `double`).
+- Ursache: GCC prüft diese Fälle strenger als clang; unter clang-cl/clang baut derselbe Code ohne Warnung.
+- Abhilfe: In Range-Schleifen mit strukturierter Bindung immer `const auto&`; Lambda-Parameter nicht wie lokale Variablen nennen; Zufallswerte explizit umwandeln. GCC nach größeren Änderungen früh mitbauen (`scratchpad/gcc_only.sh` mit `-k 0`).
+- Status: wiederkehrend

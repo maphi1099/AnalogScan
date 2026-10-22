@@ -18,6 +18,7 @@ enum class ErrorCode
     Io,              ///< Lese- oder Schreibfehler im Dateisystem
     ReadOnly,        ///< Ziel nicht beschreibbar
     Cancelled,       ///< kooperativ abgebrochen (CancelToken)
+    Conflict,        ///< Daten passen nicht zusammen, Rückfrage nötig (z. B. ersetzter Scan)
     Internal         ///< Programmfehler
 };
 

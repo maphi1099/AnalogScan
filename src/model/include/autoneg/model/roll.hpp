@@ -3,6 +3,7 @@
 #include "autoneg/model/edit_list.hpp"
 #include "autoneg/model/film.hpp"
 #include "autoneg/model/ids.hpp"
+#include "autoneg/model/json_value.hpp"
 
 #include <filesystem>
 #include <string>
@@ -33,6 +34,9 @@ struct Roll
     FilmInfo film;
     EditList defaults; ///< Rollen-Standard (LF-BAT-01)
     std::vector<FrameId> frames;
+    /// Unbekannte Felder der Rollendatei (z. B. Kontaktabzug bis M7), unverändert erhalten
+    /// (NF-ARC-09). Ergänzung K-M6-02.
+    JsonValue extra;
 
     /// Position des Bildes in der Rolle, -1 wenn es nicht dazugehört.
     [[nodiscard]] int indexOf(const FrameId& f) const noexcept;

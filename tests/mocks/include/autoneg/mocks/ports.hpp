@@ -100,6 +100,8 @@ class MockRollRepository : public ports::IRollRepository
 public:
     MOCK_METHOD(Expected<std::optional<model::Roll>>, load, (const fs::path&), (override));
     MOCK_METHOD(Expected<void>, save, (const model::Roll&), (override));
+    MOCK_METHOD(Expected<bool>, lock, (const fs::path&), (override));
+    MOCK_METHOD(void, unlock, (const fs::path&), (override));
 };
 
 class MockEditRepository : public ports::IEditRepository
@@ -108,6 +110,7 @@ public:
     MOCK_METHOD(Expected<std::optional<ports::SidecarData>>, load, (const model::Frame&), (override));
     MOCK_METHOD(Expected<void>, save, (const model::Frame&, const ports::SidecarData&), (override));
     MOCK_METHOD(std::vector<ports::SidecarRef>, orphans, (const fs::path&), (override));
+    MOCK_METHOD(Expected<void>, relink, (const ports::SidecarRef&, const model::Frame&), (override));
 };
 
 class MockPresetRepository : public ports::IPresetRepository

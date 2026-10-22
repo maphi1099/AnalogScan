@@ -12,9 +12,36 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace autoneg::ports {
+
+/// Parametertyp eines Schritts für die Datenhaltung (entspricht pipeline::ParamType).
+enum class ParamKind
+{
+    Double,
+    Int,
+    Bool,
+    String,
+    Vec3,
+    Rect,
+    Curve,
+    Spots
+};
+
+/// Bekannter Schritt für die Datenhaltung: Kennung, Rang in der Stufenfolge, Version und
+/// Parametertypen. Ergänzung K-M6-01: Adapter kennen die StepRegistry nicht; die
+/// Kompositionswurzel erzeugt den Katalog daraus. Einträge anderer Schritte sind "unbekannt"
+/// und bleiben unverändert in SidecarData::extra (NF-ARC-09).
+struct StepSchema
+{
+    std::string id;
+    int rank = 0;
+    int version = 1;
+    std::vector<std::pair<std::string, ParamKind>> params;
+};
+using StepCatalog = std::vector<StepSchema>;
 
 /// Kennzeichen des Scans in der Begleitdatei (Kapitel 8.3/8.6).
 struct SourceStamp
@@ -60,6 +87,13 @@ public:
     [[nodiscard]] virtual base::Expected<std::optional<model::Roll>>
     load(const std::filesystem::path& folder) = 0;
     [[nodiscard]] virtual base::Expected<void> save(const model::Roll& r) = 0;
+
+    /// Sperre der Rolle für diese Programminstanz (Architektur 8.8, .autoneg.lock).
+    /// true: Sperre gehört dieser Instanz (auch übernommen von einem beendeten Prozess);
+    /// false: eine andere laufende Instanz hält sie, die Rolle ist nur lesend zu öffnen.
+    /// Ergänzung K-M6-03.
+    [[nodiscard]] virtual base::Expected<bool> lock(const std::filesystem::path& folder) = 0;
+    virtual void unlock(const std::filesystem::path& folder) = 0;
 };
 
 /// Begleitdateien je Bild. Adapter: JsonSidecarStore.
@@ -69,10 +103,15 @@ class IEditRepository
 public:
     virtual ~IEditRepository() = default;
 
-    /// Leer, wenn das Bild keine Begleitdatei hat.
+    /// Leer, wenn das Bild keine Begleitdatei hat. Fehler (die Oberfläche meldet sie, das Bild
+    /// startet mit den Standardwerten der Rolle): Corrupt bei defekter Datei (umbenannt nach
+    /// *.defekt), Conflict bei ersetztem Scan (andere Prüfsumme, LF-DAT-06).
     [[nodiscard]] virtual base::Expected<std::optional<SidecarData>> load(const model::Frame& f) = 0;
     [[nodiscard]] virtual base::Expected<void> save(const model::Frame& f, const SidecarData& d) = 0;
     [[nodiscard]] virtual std::vector<SidecarRef> orphans(const std::filesystem::path& folder) = 0;
+    /// Ordnet eine verwaiste Begleitdatei dem umbenannten Scan zu und benennt sie um
+    /// (LF-DAT-06). Fehler Conflict, wenn die Prüfsummen nicht passen. Ergänzung K-M6-03.
+    [[nodiscard]] virtual base::Expected<void> relink(const SidecarRef& orphan, const model::Frame& f) = 0;
 };
 
 /// Arten von Vorlagen im Benutzerverzeichnis (presets/<Art>/<Name>.json).

@@ -23,6 +23,8 @@ std::string_view toString(ErrorCode code) noexcept
         return "ReadOnly";
     case ErrorCode::Cancelled:
         return "Cancelled";
+    case ErrorCode::Conflict:
+        return "Conflict";
     case ErrorCode::Internal:
         return "Internal";
     }
