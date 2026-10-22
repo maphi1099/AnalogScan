@@ -88,3 +88,11 @@ Format je Eintrag:
 - Ursache: nicht abschließend geklärt. Tritt nur bei voller Parallelität (vcpkg/Ninja mit 32 Jobs) auf; mit 2 Jobs läuft derselbe Build stabil (Spitze 2,9 GB).
 - Abhilfe: In WSL `VCPKG_MAX_CONCURRENCY=4` setzen und Ninja mit `-j 8` aufrufen; danach `wsl --shutdown`, falls WSL hängt. Lange Läufe aus PowerShell starten und das Protokoll auf die persistente Platte (`/root/…`) schreiben, nicht nach `/tmp`.
 - Status: umgangen
+
+## B-10: Sicht (span) auf einen temporären ImageBuffer
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: beide (nur unter ASan/TSan sichtbar; ohne Sanitizer läuft der Test zufällig grün)
+- Symptom: ASan/TSan melden „heap-use-after-free“ in einem Test.
+- Ursache: `auto v = synthetic(64, 48).host();` – `host()`, `hostBytes()` und `ImageView::row()` liefern Sichten in den Speicher des Puffers; der temporäre Puffer wird am Ende der Anweisung freigegeben.
+- Abhilfe: Puffer immer zuerst in einer benannten Variable halten. Neue Tests stets auch mit `linux-clang-asan` laufen lassen.
+- Status: behoben (Test korrigiert), Regel bleibt
