@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 22.10.2026 – **M2 begonnen: Benchmark OE-01 abgeschlossen, wartet auf die Entscheidung des Nutzers (Halide oder Highway + oneTBB).** Ergebnis: `prototypes/oe01-benchmark/ERGEBNIS.md`.
+Stand: 22.10.2026 – **M2 fertig unter Windows und Linux, wartet auf OK des Nutzers.** Offen zur Entscheidung: T-07 (Toleranz exp10).
 
 ## Ablage
 
@@ -46,7 +46,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 |---|---|---|---|
 | M0 | Projektgerüst, Presets, vcpkg, Architekturprüfung | Fertig, OK am 19.10.2026 | – (kein Szenario) |
 | M1 | base, model, image, ports | Fertig, OK am 22.10.2026 | U-MOD-01…13, U-IMG-01…04 (alle grün) |
-| M2 | Pipeline, CPU-Backend (vorher OE-01-Benchmark) | **Benchmark fertig, wartet auf OE-01** | – |
+| M2 | Pipeline, CPU-Backend | **Fertig (Windows + Linux), wartet auf OK** | U-PIP-01…18, U-BCK-01…06 (alle grün; U-BCK-01 mit Toleranz nach T-07) |
 | M3 | Verarbeitungsschritte, Multigrade, Negativ-Generator | Offen | – |
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Offen | – |
 | M5 | Analyse, K-11 | Offen | – |
@@ -95,11 +95,24 @@ Offen aus M1:
 - Platzhalter-Implementierungen für `IInferenceRuntime` und `IFilmProfileSource` (NF-ARC-15 „vorhanden und getestet“) → M6.
 - `IDocumentRenderer` → M7.
 
-### M2 – Stand
+### M2 – Ergebnis
 
-- Benchmark-Prototyp `prototypes/oe01-benchmark/` (eigenständiges CMake-Projekt, nicht im Produkt-Build): skalar + oneTBB, Highway + oneTBB, Halide 21 (AOT) für Basiskorrektur, Gradation, verschmolzen, Schärfen; 8 und 100 MP, 1/8/32 Threads, Windows und Linux. Ergebnisse `results-windows.md`, `results-linux.md`, Auswertung `ERGEBNIS.md`.
-- Halide für die Messung aus dem offiziellen Python-Wheel (Windows: Scratchpad, Linux: `/root/tools/halide-21`), nicht über vcpkg (der Port baut LLVM).
-- Highway und oneTBB über vcpkg (Prototyp-Manifest); unter Windows zieht oneTBB `hwloc` mit (Build über MSYS2, langsam).
+- OE-01 entschieden: Highway + oneTBB (D-13). Benchmark-Prototyp: `prototypes/oe01-benchmark/` (ERGEBNIS.md, Rohdaten Windows/Linux).
+- `autoneg::pipeline`: `step.hpp` (StepDescriptor, ParamSpec, FilmTypeMask, IStep, ControlStep/PointwiseStep/GeometricStep/RegionStep, StepContext, ExecContext), `pixel_program_builder.hpp`, `warp_builder.hpp`, `step_registry.hpp`, `render.hpp` (RenderMode, RenderProfile, RenderRequest), `compiled_pipeline.hpp` (Stage, PixelPass, WarpPass, RegionPass, OutputPass, CompiledPipeline), `pipeline_compiler.hpp`, `tile_planner.hpp`, `stage_cache.hpp`, `source_provider.hpp`, `pipeline_executor.hpp`, `backend_selector.hpp`.
+- `autoneg::backend::cpu`: `CpuBackend` (Highway-Zeilenkernels in `src/kernels_hwy.cpp` für Punktprogramm, Multiplikation, Gauß, Schärfen, Lichter/Tiefen; Verzerrung, Skalierung, Rauschminderung, Retusche nur parallelisiert; Histogramm mit fester Blockeinteilung). Alle Highway-Ziele inkl. EMU128 mitkompiliert.
+- `image::ImageBuffer::copyRegion` für die Kachelausführung.
+- Tests: `tests/reference` (skalare Referenzkernels = Definition, `ReferenceBackend` mit Aufrufzähler und Abbruch-Haken), `tests/support/test_steps.hpp` (Test-Schritte nach Architektur 5.2/Tabelle 1), `tests/unit/pipeline`, `tests/unit/backend_cpu`.
+- TSan-Preset: eigenes vcpkg-Triplet `cmake/triplets/x64-linux-tsan.cmake` (Abhängigkeiten mit TSan und clang), Testprogramme auf 8 CPUs begrenzt (B-12).
+
+Szenarien (grün auf allen 6 Konfigurationen): U-PIP-01…18, U-BCK-01…06. Zusätzlich 11 Tests mit Präfix `M2_`.
+Nachweise (22.10.2026): windows-clang Debug + Release, linux-clang, linux-gcc, linux-clang-asan, linux-clang-tsan je 70/70, keine Warnungen; clang-format sauber.
+
+Gefundene und behobene Fehler: Cache-Markierung ohne useCache (Compiler), Sicht auf temporären Puffer (Test, B-10), Testmatrizen der 90°-Drehung (Test), Include-Reihenfolge Highway (B-11), Scheinrennen TSan/oneTBB (B-12).
+
+Offen aus M2:
+- **T-07**: U-BCK-01 fordert 1e-6; Ketten mit exp10 erreichen 1,6e-6 (Fehlerfortpflanzung). Test prüft linear/log10 mit 1e-6, exp10-Ketten mit 2e-6 – Entscheidung des Nutzers.
+- T-01 (U-PIP-05 nach Architektur geprüft), T-08 (monotone Kante weich), T-09 (Proxy im Cache): zur Einarbeitung.
+- Parallele Kacheln (Ebene 2) mit dem JobScheduler in M6; SIMD für Verzerrung/Skalierung/Rauschminderung/Retusche mit der Leistungsmessung in M9.
 
 ## Entscheidungen
 
@@ -118,15 +131,20 @@ Offen aus M1:
 | D-12 | 19.10.2026 | Neuer Adapter `autoneg_adapter_tbb` mit Port `ITaskExecutor` |
 | A-01…A-07 | 19.10.2026 | Architekturanpassungen genehmigt (Wertetypen nach image, TBB hinter Port, eigener JsonValue, Basismodul, steps→ports, ports→layout, Ergänzung fehlender Typen) |
 
+| D-13 | 22.10.2026 | OE-01 entschieden: Google Highway + oneTBB |
 | A-09…A-12 | 19.10.2026 | genehmigt: ui → Kernmodule, Adapterregeln (TBB in adapter_tbb und backend_cpu, OS-Header nur in Adaptern), Drittbibliotheken unter Windows mit vcpkg-Standard-Toolchain, statische Module |
 | K-M1-01…14 | 19.10.2026 | Abweichungen von den Klassendiagrammen in M1 (Details in `abweichungen_planung.txt`, Abschnitt G) |
 
 ## Offene Fragen an den Nutzer
 
 1. Einordnung der Testordner, Annotationen (L-06) – spätestens für M3/M5.
-2. **OE-01 entscheiden** (Empfehlung: Highway + oneTBB, siehe `prototypes/oe01-benchmark/ERGEBNIS.md`).
+2. T-07: Toleranz für Punktprogramme mit exp10 (Vorschlag 2e-6).
 
 ## Plattformabhängiger Code (auf dem anderen System prüfen)
+
+- `cmake/triplets/*` und `tests/CMakeLists.txt` (taskset): nur Linux/TSan.
+- `src/backends/cpu/src/kernels_hwy.cpp`: Highway-Zielauswahl zur Laufzeit; auf beiden Systemen AVX2 + EMU128 getestet (Rechner ohne AVX-512).
+- `src/pipeline/src/source_provider.cpp`: std::shared_future / Threads (U-PIP-16 auf beiden Systemen grün).
 
 - `cmake/AutoNegWarnings.cmake`: getrennte Warnungs-Zweige für clang-cl und clang/GCC – nach jeder Änderung beide Systeme bauen (beide am 19.10.2026 grün).
 - `cmake/AutoNegTest.cmake`: gtest wird unter Windows als DLL, unter Linux statisch gelinkt; unterschiedliches Verhalten siehe B-07.

@@ -96,3 +96,20 @@ Format je Eintrag:
 - Ursache: `auto v = synthetic(64, 48).host();` – `host()`, `hostBytes()` und `ImageView::row()` liefern Sichten in den Speicher des Puffers; der temporäre Puffer wird am Ende der Anweisung freigegeben.
 - Abhilfe: Puffer immer zuerst in einer benannten Variable halten. Neue Tests stets auch mit `linux-clang-asan` laufen lassen.
 - Status: behoben (Test korrigiert), Regel bleibt
+
+## B-11: clang-format sortiert Highway-Includes um
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: beide
+- Symptom: Nach `clang-format -i` scheitert `kernels_hwy.cpp` mit „redefinition of …“ in `N_EMU128` und „N_SSSE3 has not been declared“.
+- Ursache: `IncludeBlocks: Regroup` sortiert `<hwy/highway.h>` vor `<hwy/foreach_target.h>`; Highway verlangt die umgekehrte Reihenfolge (Mehrfachübersetzung je Befehlssatz).
+- Abhilfe: Block mit `// clang-format off` / `// clang-format on` einschließen. Gilt für jede neue Highway-Datei.
+- Status: behoben
+
+## B-12: ThreadSanitizer meldet Scheinrennen in oneTBB
+- Erstmals: 22.10.2026, zuletzt: 22.10.2026, Häufigkeit: 1
+- Plattform: Linux, Preset `linux-clang-tsan`
+- Symptom: „WARNING: ThreadSanitizer: data race“ in `tbb::detail::d1::start_for` / Partitionierer, Speicher aus `std_cache_aligned_allocate`; kein eigener Code beteiligt.
+- Ursache: vcpkg baut oneTBB ohne TSan; die Synchronisation im TBB-Scheduler (libtbb) ist für TSan unsichtbar, die inline instrumentierten Header-Teile sehen deshalb „Rennen“.
+- Folgeproblem: Mit instrumentiertem oneTBB und 32 Threads spinnen die wartenden Worker so langsam, dass einzelne Tests nicht fertig werden (auch ein 301x211-Bild > 45 min). Mit 4 oder 8 CPUs: 4 s. Deshalb startet `tests/CMakeLists.txt` im TSan-Preset alle Testprogramme mit `taskset -c 0-7` (CMAKE_TEST_LAUNCHER). Gesamtlauf TSan ca. 6,5 min.
+- Abhilfe: Eigenes Triplet `cmake/triplets/x64-linux-tsan.cmake` mit Toolchain `clang-linux-toolchain.cmake`: alle Abhängigkeiten mit clang und `-fsanitize=thread` bauen. oneTBB 2023.1 braucht mit clang zusätzlich `-mwaitpkg` (`_tpause`; das TBB-Build setzt es nur für GCC). Erster Bau der Abhängigkeiten ca. 5 min.
+- Status: behoben
