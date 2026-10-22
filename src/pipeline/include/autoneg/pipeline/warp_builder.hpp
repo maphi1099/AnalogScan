@@ -26,6 +26,8 @@ public:
     WarpBuilder& crop(const model::NormRect& r);
     WarpBuilder& filter(image::Filter f);
 
+    /// Größe der aktuellen Zeichenfläche in Pixeln (nach den bisherigen Operationen).
+    [[nodiscard]] base::Point2 canvas() const noexcept { return {width_, height_}; }
     /// Keine Veränderung gegenüber der Quelle (Abbildung und Größe gleich).
     [[nodiscard]] bool isIdentity() const noexcept;
     /// Abbildung Ausgabe -> Eingabe und Ausgabegröße.

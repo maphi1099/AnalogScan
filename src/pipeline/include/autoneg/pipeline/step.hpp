@@ -105,6 +105,9 @@ struct StepDescriptor
     std::vector<ParamSpec> params;
     FilmTypeMask films = FilmTypeMask::all();
     bool visible = true; ///< interne Stufen (z. B. Dichte) erscheinen nicht in der Bearbeitungsliste
+    /// Auch ohne Eintrag mit Standardparametern aktiv (z. B. Tonwertgrenzen, S/W-Mischung), sofern
+    /// der Filmtyp die Stufe vorsieht. Interne Stufen sind immer so. Ergänzung zu 9.3.
+    bool alwaysActive = false;
     /// Nach dieser Stufe liegt ein Cache-Punkt (C1…C4, Architektur 5.2). Ergänzung zu 9.3.
     bool cacheAfter = false;
     /// Backends mit eigener Implementierung (NF-ARC-04/-05, L-03). Ergänzung zu 9.3.
@@ -179,8 +182,9 @@ class RegionStep : public IStep
 {
 public:
     [[nodiscard]] StepNature nature() const noexcept final { return StepNature::Region; }
-    /// Benötigter Rand in Pixeln bei der Skalierung scale.
-    [[nodiscard]] virtual int halo(const model::ParamSet& p, double scale) const = 0;
+    /// Benötigter Rand in Pixeln bei der Skalierung scale für ein Stufenbild der Größe image
+    /// (Ergänzung zu 9.3: normierte Angaben wie Retuschestellen brauchen die Bildgröße).
+    [[nodiscard]] virtual int halo(const model::ParamSet& p, double scale, base::Size image) const = 0;
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     process(ExecContext& ctx, const image::ImageBuffer& in, const model::ParamSet& p) const = 0;
 };

@@ -66,7 +66,7 @@ CompiledPipeline PipelineCompiler::compile(const model::EditList& l, model::Film
     for (const IStep* step : registry_.ordered()) {
         const auto& d = step->descriptor();
         const model::EditEntry* e = l.get(d.id);
-        if (e == nullptr && d.visible) {
+        if (e == nullptr && d.visible && !d.alwaysActive) {
             continue; // ohne Eintrag keine Stufe
         }
         if (e != nullptr && !e->enabled) {
@@ -157,8 +157,9 @@ CompiledPipeline PipelineCompiler::compile(const model::EditList& l, model::Film
             groupSteps.push_back(d.id);
             break;
         case StepNature::Region: {
+            // newGroup hat flush() bereits ausgeführt: size ist die Größe nach vorangehender Verzerrung
             auto stage =
-                std::make_unique<RegionPass>(static_cast<const RegionStep*>(a.step), a.params, scale);
+                std::make_unique<RegionPass>(static_cast<const RegionStep*>(a.step), a.params, scale, size);
             stage->steps_ = {d.id};
             stages.push_back(std::move(stage));
             break;

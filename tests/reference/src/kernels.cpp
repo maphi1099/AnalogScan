@@ -1,6 +1,7 @@
 #include "autoneg/reference/kernels.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 #include <variant>
@@ -375,6 +376,7 @@ image::ImageBuffer unsharp(const image::ImageBuffer& in, float amount, float rad
 
 image::ImageBuffer localTone(const image::ImageBuffer& in, float shadows, float highlights, float radius)
 {
+    constexpr float logFloor = 1.0F / 65536.0F; // 2^-16
     Img img(in);
     Img lum(img.w, img.h, 1);
     for (int y = 0; y < img.h; ++y) {
@@ -384,7 +386,11 @@ image::ImageBuffer localTone(const image::ImageBuffer& in, float shadows, float 
                                                0.0593F * img.at(x, y, 2);
         }
     }
-    // Guided Filter (He et al.) der Luminanz mit sich selbst: kantenerhaltende Basis
+    // Guided Filter (He et al.) der log2-Luminanz mit sich selbst: kantenerhaltende Basis.
+    // Im log-Raum ist eps (Varianz in Blendenstufen²) über den ganzen Tonwertumfang gleich wirksam.
+    for (float& v : lum.v) {
+        v = std::log2(std::max(v, logFloor));
+    }
     const int r = std::max(1, static_cast<int>(std::lround(radius)));
     constexpr double eps = 0.01;
     const auto box = [r](const Img& src) {
@@ -420,7 +426,7 @@ image::ImageBuffer localTone(const image::ImageBuffer& in, float shadows, float 
     const Img meanB = box(bb);
     Img base(img.w, img.h, 1);
     for (std::size_t i = 0; i < lum.v.size(); ++i) {
-        base.v[i] = meanA.v[i] * lum.v[i] + meanB.v[i];
+        base.v[i] = std::exp2(meanA.v[i] * lum.v[i] + meanB.v[i]);
     }
     for (int y = 0; y < img.h; ++y) {
         for (int x = 0; x < img.w; ++x) {
@@ -474,6 +480,7 @@ image::ImageBuffer denoise(const image::ImageBuffer& in, float strength)
 
 image::ImageBuffer inpaint(const image::ImageBuffer& in, const model::SpotList& spots)
 {
+    constexpr float ringWidth = 2.0F; // Pixel
     Img img(in);
     for (const model::Spot& spot : spots) {
         const Img before = img;
@@ -485,16 +492,40 @@ image::ImageBuffer inpaint(const image::ImageBuffer& in, const model::SpotList& 
         if (r <= 0.0F) {
             continue;
         }
+        const auto dist = [cx, cy](int x, int y) {
+            return std::hypot(static_cast<float>(x) + 0.5F - cx, static_cast<float>(y) + 0.5F - cy);
+        };
+        // Heilen: Helligkeitsunterschied zwischen Ziel und Quelle auf dem Ring knapp außerhalb
+        // der Stelle (r ≤ d < r + ringWidth) je Kanal ausgleichen
+        std::array<double, 4> diff{};
+        int ring = 0;
         for (int y = 0; y < img.h; ++y) {
             for (int x = 0; x < img.w; ++x) {
-                const float d =
-                    std::hypot(static_cast<float>(x) + 0.5F - cx, static_cast<float>(y) + 0.5F - cy);
+                const float d = dist(x, y);
+                if (d < r || d >= r + ringWidth) {
+                    continue;
+                }
+                for (int c = 0; c < img.c; ++c) {
+                    diff[static_cast<std::size_t>(c)] +=
+                        before.at(x, y, c) - before.clamped(x + dx, y + dy, c);
+                }
+                ++ring;
+            }
+        }
+        for (double& v : diff) {
+            v = ring > 0 ? v / ring : 0.0;
+        }
+        for (int y = 0; y < img.h; ++y) {
+            for (int x = 0; x < img.w; ++x) {
+                const float d = dist(x, y);
                 if (d >= r) {
                     continue;
                 }
                 const float f = d <= 0.7F * r ? 1.0F : (r - d) / (0.3F * r);
                 for (int c = 0; c < img.c; ++c) {
-                    img.at(x, y, c) = (1.0F - f) * before.at(x, y, c) + f * before.clamped(x + dx, y + dy, c);
+                    const float healed = before.clamped(x + dx, y + dy, c) +
+                                         static_cast<float>(diff[static_cast<std::size_t>(c)]);
+                    img.at(x, y, c) = (1.0F - f) * before.at(x, y, c) + f * healed;
                 }
             }
         }

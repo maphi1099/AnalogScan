@@ -3,5 +3,5 @@ autoneg_add_test(pipeline
     SOURCES
         compiler_test.cpp
         executor_test.cpp
-    DEPS pipeline test_steps test_reference test_mocks
+    DEPS pipeline test_fakesteps test_reference test_mocks
 )

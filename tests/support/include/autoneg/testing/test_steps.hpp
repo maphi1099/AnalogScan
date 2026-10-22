@@ -108,7 +108,10 @@ public:
         , process_(std::move(process))
     {}
     [[nodiscard]] const StepDescriptor& descriptor() const noexcept override { return d_; }
-    [[nodiscard]] int halo(const model::ParamSet& p, double scale) const override { return halo_(p, scale); }
+    [[nodiscard]] int halo(const model::ParamSet& p, double scale, base::Size /*image*/) const override
+    {
+        return halo_(p, scale);
+    }
     [[nodiscard]] base::Expected<image::ImageBuffer>
     process(pipeline::ExecContext& ctx, const image::ImageBuffer& in, const model::ParamSet& p) const override
     {

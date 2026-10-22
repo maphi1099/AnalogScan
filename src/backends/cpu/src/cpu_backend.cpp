@@ -383,6 +383,7 @@ CpuBackend::Result CpuBackend::localTone(Ctx c, In in, float sh, float hl, float
     const std::size_t count = width * static_cast<std::size_t>(s.height);
     const int q = std::max(1, static_cast<int>(std::lround(r)));
     constexpr float eps = 0.01F;
+    constexpr float logFloor = 1.0F / 65536.0F; // 2^-16
     // Ebenen mit einem Kanal: Luminanz, Quadrat, Mittelwerte, Koeffizienten a/b
     std::vector<float> lum(count), sq(count), meanI(count), corrI(count), a(count), b(count);
     const auto rows = [width](std::vector<float>& plane) {
@@ -390,13 +391,14 @@ CpuBackend::Result CpuBackend::localTone(Ctx c, In in, float sh, float hl, float
     };
     Output out(s);
     const bool done = impl_->run([&] {
-        // Guided Filter der Luminanz mit sich selbst (Definition: tests/reference)
+        // Guided Filter der log2-Luminanz mit sich selbst (Definition: tests/reference)
         if (!forBlocks(s.height, c.cancel, [&](int y0, int y1) {
                 for (int y = y0; y < y1; ++y) {
                     float* l = rows(lum)(y);
                     detail::luminanceRow(rowOf(in, y), l, width, s.channels);
                     float* q2 = rows(sq)(y);
                     for (std::size_t x = 0; x < width; ++x) {
+                        l[x] = std::log2(std::max(l[x], logFloor));
                         q2[x] = l[x] * l[x];
                     }
                 }
@@ -434,7 +436,7 @@ CpuBackend::Result CpuBackend::localTone(Ctx c, In in, float sh, float hl, float
                 const float* mb = rows(corrI)(y);
                 const float* l = rows(lum)(y);
                 for (std::size_t x = 0; x < width; ++x) {
-                    base[x] = ma[x] * l[x] + mb[x];
+                    base[x] = std::exp2(ma[x] * l[x] + mb[x]);
                 }
                 detail::toneRow(rowOf(in, y), base.data(), out.row(y), width, s.channels, sh, hl);
             }
@@ -498,6 +500,7 @@ CpuBackend::Result CpuBackend::inpaint(Ctx c, In in, const model::SpotList& spot
     if (auto ok = requireHostF32(in); !ok) {
         return std::unexpected(ok.error());
     }
+    constexpr float ringWidth = 2.0F; // Pixel
     const image::ImageSpec& s = in.spec();
     const int ch = s.channels;
     Output out(s);
@@ -515,10 +518,12 @@ CpuBackend::Result CpuBackend::inpaint(Ctx c, In in, const model::SpotList& spot
         const float cy = static_cast<float>(spot.center.y) * static_cast<float>(s.height);
         const int dx = static_cast<int>(std::lround(spot.offset.x * s.width));
         const int dy = static_cast<int>(std::lround(spot.offset.y * s.height));
-        const int x0 = std::max(0, static_cast<int>(std::floor(cx - r)) - 1);
-        const int x1 = std::min(s.width, static_cast<int>(std::ceil(cx + r)) + 1);
-        const int y0 = std::max(0, static_cast<int>(std::floor(cy - r)) - 1);
-        const int y1 = std::min(s.height, static_cast<int>(std::ceil(cy + r)) + 1);
+        // Bereich der Stelle samt Ring für den Helligkeitsausgleich
+        const float outer = r + ringWidth;
+        const int x0 = std::max(0, static_cast<int>(std::floor(cx - outer)) - 1);
+        const int x1 = std::min(s.width, static_cast<int>(std::ceil(cx + outer)) + 1);
+        const int y0 = std::max(0, static_cast<int>(std::floor(cy - outer)) - 1);
+        const int y1 = std::min(s.height, static_cast<int>(std::ceil(cy + outer)) + 1);
         if (x0 >= x1 || y0 >= y1) {
             continue;
         }
@@ -544,16 +549,39 @@ CpuBackend::Result CpuBackend::inpaint(Ctx c, In in, const model::SpotList& spot
                 }
             }
         }
+        const auto dist = [cx, cy](int x, int y) {
+            return std::hypot(static_cast<float>(x) + 0.5F - cx, static_cast<float>(y) + 0.5F - cy);
+        };
+        // Heilen: Helligkeitsunterschied zwischen Ziel und Quelle auf dem Ring je Kanal
+        // (Definition und Summationsreihenfolge wie tests/reference)
+        std::array<double, 4> diff{};
+        int ring = 0;
         for (int y = y0; y < y1; ++y) {
             for (int x = x0; x < x1; ++x) {
-                const float d =
-                    std::hypot(static_cast<float>(x) + 0.5F - cx, static_cast<float>(y) + 0.5F - cy);
+                const float d = dist(x, y);
+                if (d < r || d >= outer) {
+                    continue;
+                }
+                for (int k = 0; k < ch; ++k) {
+                    diff[static_cast<std::size_t>(k)] += before[idx(x, y, k)] - source[idx(x, y, k)];
+                }
+                ++ring;
+            }
+        }
+        std::array<float, 4> offset{};
+        for (std::size_t k = 0; k < offset.size(); ++k) {
+            offset[k] = ring > 0 ? static_cast<float>(diff[k] / ring) : 0.0F;
+        }
+        for (int y = y0; y < y1; ++y) {
+            for (int x = x0; x < x1; ++x) {
+                const float d = dist(x, y);
                 if (d >= r) {
                     continue;
                 }
                 const float f = d <= 0.7F * r ? 1.0F : (r - d) / (0.3F * r);
                 for (int k = 0; k < ch; ++k) {
-                    out.row(y)[x * ch + k] = (1.0F - f) * before[idx(x, y, k)] + f * source[idx(x, y, k)];
+                    const float healed = source[idx(x, y, k)] + offset[static_cast<std::size_t>(k)];
+                    out.row(y)[x * ch + k] = (1.0F - f) * before[idx(x, y, k)] + f * healed;
                 }
             }
         }

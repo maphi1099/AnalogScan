@@ -106,14 +106,15 @@ private:
 class RegionPass final : public Stage
 {
 public:
-    RegionPass(const RegionStep* step, model::ParamSet params, double scale)
+    RegionPass(const RegionStep* step, model::ParamSet params, double scale, base::Size size)
         : step_(step)
         , params_(std::move(params))
         , scale_(scale)
+        , size_(size)
     {}
     [[nodiscard]] StageKind kind() const noexcept override { return StageKind::Region; }
     [[nodiscard]] std::uint64_t contentHash() const override;
-    [[nodiscard]] int halo() const noexcept override { return step_->halo(params_, scale_); }
+    [[nodiscard]] int halo() const noexcept override { return step_->halo(params_, scale_, size_); }
     [[nodiscard]] base::Expected<image::ImageBuffer> run(ExecContext& x,
                                                          const image::ImageBuffer& in) const override;
     [[nodiscard]] image::Roi requiredInput(const image::Roi& out, base::Size inSize) const override;
@@ -122,6 +123,7 @@ private:
     const RegionStep* step_;
     model::ParamSet params_;
     double scale_;
+    base::Size size_;
 };
 
 /// Farbtransformation in den Ausgabefarbraum.
