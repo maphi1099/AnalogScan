@@ -73,7 +73,7 @@
 
   "tests": {
     "dirs": ["tests"],
-    "includeRoots": ["autoneg/mocks/", "autoneg/testing/"],
+    "includeRoots": ["autoneg/mocks/", "autoneg/testing/", "autoneg/reference/"],
     "foreign": ["gtest", "platform"],
     "componentDir": "tests/component",
     "componentForeign": "*"

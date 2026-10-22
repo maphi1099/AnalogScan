@@ -5,44 +5,66 @@
   "description": "Konvertierung kameradigitalisierter Filmnegative und Dias",
   "builtin-baseline": "664933b8d385dfc01f4e0cdff4c7c74e71f6a740",
   "dependencies": [
-    "gtest"
+    "gtest",
+    "tbb",
+    {
+      "name": "highway",
+      "features": [
+        "contrib"
+      ]
+    }
   ],
   "features": {
     "raw": {
       "description": "RAW-Dekodierung (Adapter libraw)",
-      "dependencies": [ "libraw" ]
+      "dependencies": [
+        "libraw"
+      ]
     },
     "imageio": {
       "description": "Bilddateien lesen und schreiben (Adapter oiio)",
-      "dependencies": [ "openimageio" ]
+      "dependencies": [
+        "openimageio"
+      ]
     },
     "color": {
       "description": "Farbmanagement (Adapter lcms)",
-      "dependencies": [ "lcms" ]
+      "dependencies": [
+        "lcms"
+      ]
     },
     "vision": {
       "description": "Bildanalyse (Adapter opencv)",
-      "dependencies": [ { "name": "opencv4", "default-features": false } ]
-    },
-    "threading": {
-      "description": "Aufgaben- und Datenparallelität (Adapter tbb, backend cpu)",
-      "dependencies": [ "tbb" ]
+      "dependencies": [
+        {
+          "name": "opencv4",
+          "default-features": false
+        }
+      ]
     },
     "persistence": {
       "description": "JSON-Dateien (Adapter json)",
-      "dependencies": [ "nlohmann-json" ]
+      "dependencies": [
+        "nlohmann-json"
+      ]
     },
     "hashing": {
       "description": "Inhaltsprüfsumme (Adapter xxhash)",
-      "dependencies": [ "xxhash" ]
+      "dependencies": [
+        "xxhash"
+      ]
     },
     "logging": {
       "description": "Protokoll (Adapter spdlog)",
-      "dependencies": [ "spdlog" ]
+      "dependencies": [
+        "spdlog"
+      ]
     },
     "gui": {
       "description": "Oberfläche und Druck (autoneg_ui, Adapter qtprint)",
-      "dependencies": [ "qtbase" ]
+      "dependencies": [
+        "qtbase"
+      ]
     }
   }
 }

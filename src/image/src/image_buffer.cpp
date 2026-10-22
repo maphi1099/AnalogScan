@@ -92,6 +92,31 @@ base::Expected<ImageView> ImageBuffer::view(const Roi& roi) const
     return ImageView(*this, roi);
 }
 
+base::Expected<ImageBuffer> ImageBuffer::copyRegion(const Roi& roi) const
+{
+    if (!roi.inside(spec_.width, spec_.height)) {
+        return base::makeError(base::ErrorCode::OutOfRange,
+                               "Ausschnitt liegt nicht im Bild " + describe(spec_));
+    }
+    const auto src = hostBytes();
+    if (src.empty()) {
+        return base::makeError(base::ErrorCode::Unsupported, "copyRegion braucht einen Host-Puffer");
+    }
+    ImageSpec spec = spec_;
+    spec.width = roi.w;
+    spec.height = roi.h;
+    const std::size_t pixelBytes = static_cast<std::size_t>(spec_.channels) * bytesPerSample(spec_.format);
+    return allocateHost(spec, [&](std::span<std::byte> dst) {
+        const std::size_t rowBytes = spec.rowBytes();
+        for (int y = 0; y < roi.h; ++y) {
+            const std::size_t from = static_cast<std::size_t>(roi.y + y) * spec_.rowBytes() +
+                                     static_cast<std::size_t>(roi.x) * pixelBytes;
+            std::ranges::copy(src.subspan(from, rowBytes),
+                              dst.subspan(static_cast<std::size_t>(y) * rowBytes).begin());
+        }
+    });
+}
+
 ImageView ImageBuffer::view() const
 {
     return ImageView(*this, Roi{0, 0, spec_.width, spec_.height});

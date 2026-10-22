@@ -104,6 +104,26 @@ TEST(ImageBuffer, U_IMG_04_ViewAndInvalidRegion)
     EXPECT_EQ(invalid.error().code, base::ErrorCode::OutOfRange);
 }
 
+TEST(ImageBuffer, M2_CopyRegionCopiesExactPixels)
+{
+    std::vector<float> values(10 * 6 * 3);
+    std::iota(values.begin(), values.end(), 0.0F);
+    const auto buf = ImageBuffer::fromFloats(rgb(10, 6), values);
+    ASSERT_TRUE(buf.has_value());
+
+    const auto part = buf->copyRegion(Roi{3, 2, 4, 3});
+    ASSERT_TRUE(part.has_value());
+    EXPECT_EQ(part->spec().width, 4);
+    EXPECT_EQ(part->spec().height, 3);
+    const auto expectedView = buf->view(Roi{3, 2, 4, 3});
+    for (int y = 0; y < 3; ++y) {
+        const auto want = expectedView->row(y);
+        const auto got = part->view().row(y);
+        EXPECT_TRUE(std::ranges::equal(want, got)) << "Zeile " << y;
+    }
+    EXPECT_FALSE(buf->copyRegion(Roi{8, 0, 4, 1}).has_value());
+}
+
 TEST(ImageBuffer, M1_InvalidSpecAndSizeMismatchAreErrors)
 {
     EXPECT_FALSE(ImageBuffer::allocateHost(rgb(0, 10)).has_value());

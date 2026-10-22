@@ -3,5 +3,6 @@ include(AutoNegTest)
 
 add_subdirectory(support)
 add_subdirectory(mocks)
+add_subdirectory(reference)
 add_subdirectory(unit)
 add_subdirectory(architecture)

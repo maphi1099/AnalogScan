@@ -50,6 +50,8 @@ public:
     [[nodiscard]] base::Expected<ImageView> view(const Roi& roi) const;
     /// Ganzes Bild.
     [[nodiscard]] ImageView view() const;
+    /// Kopie eines Ausschnitts als neuer Host-Puffer (Kachelausführung); Fehler wie view().
+    [[nodiscard]] base::Expected<ImageBuffer> copyRegion(const Roi& roi) const;
 
 private:
     ImageBuffer(ImageSpec spec, std::shared_ptr<const IStorage> storage)
