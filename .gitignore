@@ -84,3 +84,6 @@ __pycache__/
 *.autoneg.json.defekt
 .autoneg.lock
 *.log
+
+# Ausnahme: 1-KB-Textdatei mit RAW-Endung für K-03 (keine echte RAW-Datei)
+!tests/component/data/not_a_raw.ARW
