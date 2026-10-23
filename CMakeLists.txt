@@ -28,6 +28,7 @@ find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
 
 add_subdirectory(src)
 add_subdirectory(apps)
+include(AutoNegInstall) # Auslieferung unter Windows (Installer)
 
 if(AUTONEG_BUILD_TESTS)
     enable_testing()

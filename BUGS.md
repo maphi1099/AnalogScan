@@ -332,3 +332,11 @@ Format je Eintrag:
 - Beobachtung: Nach komplettem Neubau des Release-Baus nicht mehr aufgetreten (E2E einzeln 3×, K-17 8-fach parallel 3×, volle Suite 4× grün). Der erste Fehlerlauf lief parallel zu den Linux-Tests in WSL; vor dem letzten grünen Lauf blockierte eine Datei den Linker („wird von einem anderen Prozess verwendet“).
 - Abhilfe: Release-Läufe mit `--timeout 600`, damit ein Hänger nicht unbegrenzt blockiert. Bei erneutem Auftreten: Release mit `/Z7` bauen und den Prozess mit lldb anhängen.
 - Status: beobachten
+
+## B-40: TBB-Assertion „Object with intrusive list node …“ in allen TBB-Vertragstests (Linux, Debug)
+- Erstmals: 23.10.2026 (nach M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux, `linux-clang` Debug (unter Windows unauffällig)
+- Symptom: Alle Tests mit `TbbTaskExecutor` in `autoneg_test_contracts` brechen sofort ab: „Assertion node(val).my_prev_node == &node(val) … failed (push_front)“.
+- Ursache: Ein Test bindet `<tbb/parallel_for.h>` ein, ohne gegen `TBB::tbb` zu linken. Dadurch fehlen die Definitionen der Bibliothek (`TBB_USE_DEBUG`); der Linker mischt Inline-Funktionen mit unterschiedlicher Konfiguration aus Test und Adapter.
+- Abhilfe: Jedes Ziel, das TBB-Header einbindet, linkt `TBB::tbb` (hier `tests/component/contracts/CMakeLists.txt`).
+- Status: behoben (Nachweis siehe PROGRESS)

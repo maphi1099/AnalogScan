@@ -1,0 +1,8 @@
+# Zwischendateien von LaTeX
+*.aux
+*.log
+*.toc
+*.out
+*.synctex.gz
+*.fdb_latexmk
+*.fls

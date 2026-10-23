@@ -1,0 +1,448 @@
+% AutoNeg 1.0 – Kurzhandbuch
+% Setzen: pdflatex handbuch.tex (zweimal, für Inhaltsverzeichnis und Verweise)
+% Pakete: KOMA-Script, babel, lmodern, booktabs, tabularx, enumitem, csquotes, listings,
+% xcolor, hyperref, amssymb, pifont (in jeder üblichen TeX-Distribution enthalten).
+
+\documentclass[a4paper,11pt,parskip=half,DIV=12]{scrartcl}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[ngerman]{babel}
+\usepackage{lmodern}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{pifont}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[shortlabels]{enumitem}
+\usepackage[autostyle]{csquotes}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+
+\setlist{itemsep=0.2em,topsep=0.3em}
+\definecolor{hinweis}{RGB}{235,242,250}
+\lstset{basicstyle=\ttfamily\small,columns=fullflexible,keepspaces=true,
+        backgroundcolor=\color{hinweis},frame=none,xleftmargin=0.5em,
+        literate={ä}{{\"a}}1 {ö}{{\"o}}1 {ü}{{\"u}}1 {ß}{{\ss}}1 {–}{{--}}1 {×}{{$\times$}}1}
+
+% Bedienelemente und Tasten
+\newcommand{\menu}[1]{\textsf{#1}}                    % Menü, Schaltfläche, Feld
+\newcommand{\taste}[1]{\fbox{\footnotesize\textsf{#1}}} % Taste
+\newcommand{\datei}[1]{\texttt{#1}}                   % Datei, Ordner, Befehl
+\newcommand{\ok}{\ding{51}}
+\newcommand{\nein}{\ding{55}}
+
+\title{AutoNeg 1.0}
+\subtitle{Kurzhandbuch}
+\date{Oktober 2026}
+
+\begin{document}
+\maketitle
+
+\noindent AutoNeg wandelt kameradigitalisierte Filme (Farbnegativ C-41, Schwarzweißnegativ und
+Dia E-6) aus RAW-Dateien in fertige Positive um. Das Programm erkennt Bildfeld und Filmbasis
+automatisch, bietet für Schwarzweiß eine Gradation nach Ilford-Multigrade-Filterstufen,
+bearbeitet ganze Rollen und erzeugt einen klassischen Kontaktabzug zum Drucken und Abheften.
+
+Deine Originalscans werden \emph{niemals} verändert, verschoben oder gelöscht. Jede Bearbeitung
+liegt in einer kleinen Begleitdatei neben dem Scan und wird sofort gespeichert.
+
+\tableofcontents
+
+% ---------------------------------------------------------------------------------------------
+\section{Installation unter Windows}
+
+\paragraph{Voraussetzungen} Windows 10 ab Version 1903 oder Windows 11, 64 Bit. Für RAW-Dateien
+mit 60--100 Megapixeln sind 16\,GB Arbeitsspeicher empfehlenswert; mehr Prozessorkerne
+beschleunigen Export und Kontaktabzug. Eine Grafikkarte wird in Version 1.0 nicht genutzt.
+
+\paragraph{Installieren}
+\begin{enumerate}
+  \item \datei{AutoNeg-1.0.0-Setup-x64.exe} starten.
+  \item Wählen, ob AutoNeg \menu{für alle Benutzer} (erfordert Administratorrechte) oder
+        \menu{nur für mich} installiert wird.
+  \item Optional: \menu{Desktop-Symbol erstellen} und \menu{Kommandozeile autoneg-cli zum
+        Suchpfad (PATH) hinzufügen}. Die zweite Option braucht man nur, wenn man
+        \datei{autoneg-cli} in der Eingabeaufforderung ohne vollständigen Pfad aufrufen möchte
+        (Abschnitt~\ref{sec:cli}).
+  \item Nach der Installation lässt sich AutoNeg direkt starten. Im Startmenü stehen außerdem
+        das Handbuch und die Lizenzen der mitgelieferten Bibliotheken.
+\end{enumerate}
+
+\paragraph{Aktualisieren} Eine neue Version einfach über die vorhandene installieren; Einstellungen
+und Vorlagen bleiben erhalten.
+
+\paragraph{Deinstallieren} Über \menu{Einstellungen \textrightarrow{} Apps} bzw. die
+Systemsteuerung. Einstellungen, Vorlagen (\datei{\%APPDATA\%\textbackslash AutoNeg}) und die
+Begleitdateien neben den Scans bleiben dabei bewusst erhalten.
+
+\paragraph{Linux} Ein Installationspaket für Linux folgt mit einer späteren Ausgabe.
+
+% ---------------------------------------------------------------------------------------------
+\section{Schnellstart}
+
+\begin{enumerate}
+  \item \menu{Datei \textrightarrow{} Ordner öffnen …} (\taste{Strg+O}) und den Ordner mit den
+        Scans einer Rolle wählen. Alternativ einen Ordner oder eine Datei auf das Fenster ziehen.
+  \item Im Dock \menu{Werkzeuge}, Reiter \menu{Konvertierung}, den \menu{Filmtyp} wählen
+        (\menu{Farbnegativ}, \menu{S/W-Negativ} oder \menu{Dia}).
+  \item Im Filmstreifen alle Bilder markieren (in den Filmstreifen klicken, dann \taste{Strg+A}) und \menu{Auto-Bildfeld} klicken:
+        AutoNeg erkennt Bildfeld, Schräglage und Filmbasis jedes Bilds.
+  \item Ein Bild anklicken und im Reiter \menu{Anpassen} Belichtung, Farbe und Kontrast
+        einstellen. Bei Schwarzweiß im Reiter \menu{Gradation} die Filterstufe wählen.
+  \item Gelungene Einstellungen mit \menu{Bearbeiten \textrightarrow{} Bearbeitung kopieren}
+        (\taste{Strg+C}) und \menu{Einfügen …} (\taste{Strg+V}) auf weitere Bilder übertragen.
+  \item Bilder markieren und \menu{Datei \textrightarrow{} Exportieren …} (\taste{Strg+E}).
+  \item Optional: \menu{Datei \textrightarrow{} Kontaktabzug …} (\taste{Strg+K}) für einen
+        druckfertigen Kontaktabzug der ganzen Rolle.
+\end{enumerate}
+
+% ---------------------------------------------------------------------------------------------
+\section{Das Hauptfenster}
+
+\begin{description}
+  \item[Bildfläche] In der Mitte: das aktuelle Bild als Positiv. Bei 100\,\% oder 200\,\%
+        verschiebt man den Ausschnitt mit gedrückter linker Maustaste.
+  \item[Filmstreifen] Unten: alle Bilder der Rolle mit Bildnummer. \ok{} bedeutet
+        \enquote{behalten}, \nein{} \enquote{verworfen}. Mit \taste{Strg} und \taste{Umschalt}
+        markiert man mehrere Bilder. Das Auswahlfeld darüber filtert nach Bewertung
+        (\menu{Alle Bilder}, \menu{Behalten}, \menu{Verworfen}, \menu{Unbewertet}). Nicht lesbare
+        Dateien erscheinen rot.
+  \item[Werkzeuge] Rechts, mit den Reitern \menu{Konvertierung}, \menu{Gradation} und
+        \menu{Anpassen}.
+  \item[Histogramm] Rot, Grün, Blau und Helligkeit. Ein blaues Dreieck oben links zeigt
+        beschnittene Tiefen, ein rotes oben rechts beschnittene Lichter.
+  \item[Bearbeitungsliste] Alle Änderungen des aktuellen Bilds (Abschnitt~\ref{sec:liste}).
+  \item[Statusleiste] Meldungen, bei laufenden Aufträgen ein Fortschrittsbalken und die
+        Schaltfläche \menu{Abbrechen}.
+\end{description}
+
+Die Werkzeugleiste enthält die häufigsten Befehle: Ordner öffnen, Rückgängig, Wiederholen,
+Zuschneiden und Drehen, Staubretusche, Vorher/Nachher, Beschnittwarnung, Exportieren und
+Kontaktabzug. Alle Docks lassen sich verschieben, abdocken und über ihr Kontextmenü ein- und
+ausblenden.
+
+% ---------------------------------------------------------------------------------------------
+\section{Eine Rolle öffnen}
+
+AutoNeg arbeitet mit einem Ordner je Rolle. Gelesen wird nur dieser Ordner, nicht seine
+Unterordner; die Bilder erscheinen nach Dateinamen sortiert.
+
+\paragraph{Unterstützte Dateien} RAW-Formate gängiger Kameras (\datei{.arw .srf .sr2 .cr2 .cr3
+.nef .nrw .raf .rw2 .orf .pef .dng .rwl .3fr .fff .iiq .x3f}) sowie TIFF und JPEG.
+
+\paragraph{Begleitdateien} Zu jedem Scan legt AutoNeg eine Datei mit der vollen Endung des
+Scans plus \datei{.autoneg.json} an, zum Beispiel \datei{DSC01234.ARW.autoneg.json}; Angaben zur
+ganzen Rolle stehen in \datei{roll.autoneg.json}. Wer einen Scan umbenennt, verliert nichts:
+AutoNeg findet die Bearbeitung über eine Prüfsumme wieder.
+
+\paragraph{Schreibgeschützte Ordner} Kann AutoNeg im Scan-Ordner nicht schreiben (etwa auf einer
+DVD oder einem Netzlaufwerk ohne Schreibrecht), legt es die Begleitdateien in seinem
+Einstellungsordner ab (Abschnitt~\ref{sec:daten}).
+
+\paragraph{Gleichzeitig geöffnet} Ist eine Rolle bereits in einem anderen AutoNeg-Fenster
+geöffnet, wird sie nur lesend angezeigt.
+
+% ---------------------------------------------------------------------------------------------
+\section{Konvertierung}
+
+\subsection{Filmtyp}
+Im Reiter \menu{Konvertierung} legt \menu{Filmtyp} fest, wie das Negativ bzw. Dia umgerechnet
+wird: \menu{Farbnegativ} (C-41), \menu{S/W-Negativ} oder \menu{Dia} (E-6).
+
+\subsection{Bildfeld und Filmbasis}
+\begin{description}
+  \item[Auto-Bildfeld] erkennt für alle markierten Bilder das Bildfeld (Zuschnitt), die
+        Schräglage und die Filmbasis. Ein vorhandener eigener Zuschnitt bleibt erhalten.
+  \item[Auto-Basis] misst die Filmbasis (den unbelichteten Filmrand) automatisch.
+  \item[Basis messen] für schwierige Fälle: Schaltfläche klicken und auf dem Bild ein Rechteck
+        in den unbelichteten Filmrand ziehen (gelb gestrichelt). Nach dem Loslassen misst
+        AutoNeg die Basis in diesem Bereich.
+\end{description}
+Automatisch ermittelte Werte erscheinen in der Bearbeitungsliste mit der Herkunft
+\enquote{automatisch} und lassen sich wie jede andere Änderung entfernen.
+
+\subsection{Zuschneiden und Drehen}
+\menu{Ansicht \textrightarrow{} Zuschneiden und Drehen} (\taste{C}) zeigt das ganze,
+ungeschnittene Bild mit dem Zuschnittrahmen:
+\begin{itemize}
+  \item Ecke oder Kante ziehen: Größe ändern.
+  \item Innerhalb des Rahmens ziehen: Rahmen verschieben.
+  \item Außerhalb des Rahmens ziehen: fein drehen (bis $\pm 45$\textdegree).
+\end{itemize}
+Beim Loslassen werden Zuschnitt und Feindrehung als ein Schritt übernommen.
+Vierteldrehungen und Spiegeln: \menu{90\textdegree{} nach links drehen} (\taste{Strg+[}),
+\menu{90\textdegree{} nach rechts drehen} (\taste{Strg+]}), \menu{Waagerecht spiegeln}
+(\taste{Strg+H}).
+
+% ---------------------------------------------------------------------------------------------
+\section{Gradation für Schwarzweiß}
+
+Der Reiter \menu{Gradation} bildet die Filterstufen von Ilford Multigrade nach:
+\begin{itemize}
+  \item Die Schaltflächen \menu{00}, \menu{0}, \menu{\textonehalf}, \menu{1} … \menu{5} wählen
+        eine Stufe; \menu{ohne Filter} entspricht Stufe~2.
+  \item \menu{Fein} stellt die Stufe in Zehntelschritten ein ($-1{,}0$ entspricht 00, bis $5{,}0$).
+  \item \menu{Split-Grade}: wie in der Dunkelkammer zwei Belichtungen mit Stufe 00 (weich) und
+        Stufe 5 (hart); die beiden Regler geben die Anteile in Prozent an.
+\end{itemize}
+
+% ---------------------------------------------------------------------------------------------
+\section{Anpassen}
+
+Jede Zeile im Reiter \menu{Anpassen} hat einen Regler und ein Zahlenfeld. Beim Ziehen zeigt die
+Bildfläche sofort eine Vorschau; übernommen wird der Wert beim Loslassen, mit dem Mausrad, den
+Pfeiltasten oder nach Eingabe im Zahlenfeld. \textbf{Doppelklick auf einen Regler} setzt ihn auf
+den neutralen Wert zurück.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+  \toprule
+  Regler & Wirkung & Bereich (neutral) \\
+  \midrule
+  Belichtung      & Helligkeit in Blendenstufen                 & $-5$ … $+5$\,EV (0) \\
+  Farbtemperatur  & Weißabgleich warm/kalt                      & $-300$ … $300$ (0) \\
+  Tönung          & Weißabgleich grün/magenta                   & $-300$ … $300$ (0) \\
+  Kontrast        & Kontrast um den Mittelton                   & $-1$ … $1$ (0) \\
+  Tiefen          & dunkle Bereiche aufhellen                   & $0$ … $1$ (0) \\
+  Lichter         & helle Bereiche abdunkeln                    & $0$ … $1$ (0) \\
+  Sättigung       & Farbsättigung                               & $-1$ … $1$ (0) \\
+  Dynamik         & Sättigung schwacher Farben                  & $-1$ … $1$ (0) \\
+  Schärfen        & Unscharfmaskierung, Stärke                  & $0$ … $3$ (0) \\
+  Rauschminderung & Stärke der Rauschminderung                  & $0$ … $1$ (0) \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Staubretusche}
+\menu{Ansicht \textrightarrow{} Staubretusche} (\taste{R}): Jeder Klick auf ein Staubkorn setzt
+eine Retuschestelle (cyanfarbener Kreis). AutoNeg füllt sie mit Bildinhalt aus der Nähe. Alle
+Stellen eines Bilds bilden einen Eintrag \enquote{Staubretusche} in der Bearbeitungsliste.
+
+\subsection{Ansicht}
+\begin{itemize}
+  \item \menu{Einpassen} (\taste{Strg+0}), \menu{100\,\%} (\taste{Strg+1}),
+        \menu{200\,\%} (\taste{Strg+2}).
+  \item \menu{Vorher/Nachher} (\taste{\textbackslash}) zeigt den unkonvertierten Scan.
+  \item \menu{Beschnittwarnung} (\taste{J}) markiert Bereiche, in denen Tiefen oder Lichter
+        beschnitten werden.
+\end{itemize}
+
+% ---------------------------------------------------------------------------------------------
+\section{Bearbeitungsliste und Rückgängig}\label{sec:liste}
+
+Die Bearbeitungsliste zeigt jede Änderung des aktuellen Bilds genau einmal, in der Reihenfolge,
+in der AutoNeg sie anwendet:
+\begin{description}
+  \item[Änderung] zum Beispiel Belichtung, Zuschnitt, Gradation.
+  \item[Wert] die eingestellten Werte.
+  \item[Herkunft] \enquote{manuell}, \enquote{automatisch}, \enquote{kopiert} (mit Angabe des
+        Quellbilds) oder \enquote{Rollen-Standard}.
+  \item[Aktiv] Häkchen entfernen schaltet die Änderung aus, ohne sie zu löschen (Vergleich).
+\end{description}
+\menu{Eintrag entfernen} löscht die markierte Änderung mit einem Klick.
+\menu{Bearbeiten \textrightarrow{} Bild zurücksetzen} (\taste{Strg+Umschalt+R}) entfernt alle
+Änderungen auf einmal. Alles lässt sich mit \menu{Rückgängig} (\taste{Strg+Z}) und
+\menu{Wiederholen} (\taste{Strg+Y}) zurücknehmen; der Verlauf gilt bis zum Schließen des
+Programms. Gespeichert ist jede Änderung sofort.
+
+% ---------------------------------------------------------------------------------------------
+\section{Mehrere Bilder bearbeiten}
+
+Befehle wie Auto-Bildfeld, Einfügen, Bewerten, Vorlagen und Export wirken auf die im
+Filmstreifen markierten Bilder, ohne Markierung auf das aktuelle Bild.
+
+\paragraph{Kopieren und Einfügen} \menu{Bearbeitung kopieren} (\taste{Strg+C}) übernimmt die
+Liste des aktuellen Bilds. \menu{Einfügen …} (\taste{Strg+V}) öffnet einen Dialog: Dort wählt
+man die zu übertragenden Änderungen. Bildbezogene Werte (Zuschnitt, Filmbasis, Retusche) sind
+anfangs abgewählt. Mit \menu{Bildfeld und Basis neu erkennen} erkennt AutoNeg diese für jedes
+Zielbild neu, statt sie zu übernehmen.
+
+\paragraph{Synchronisieren} Ist \menu{Bearbeiten \textrightarrow{} Synchronisieren}
+(\taste{Strg+L}) eingeschaltet, wirkt jede Regler- und Werkzeugänderung auf alle markierten
+Bilder gleichzeitig.
+
+\paragraph{Vorlagen} \menu{Als Vorlage speichern …} sichert die aktuelle Bearbeitung ohne
+bildbezogene Werte unter einem Namen; \menu{Vorlage anwenden} überträgt sie auf die markierten
+Bilder.
+
+\paragraph{Bewerten} \menu{Behalten} (\taste{P}), \menu{Verwerfen} (\taste{X}),
+\menu{Bewertung entfernen} (\taste{U}). Der Filmstreifen lässt sich danach filtern; der Export
+über die Kommandozeile kann sich auf behaltene Bilder beschränken.
+
+% ---------------------------------------------------------------------------------------------
+\section{Exportieren}
+
+Bilder markieren und \menu{Datei \textrightarrow{} Exportieren …} (\taste{Strg+E}) wählen.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+  \toprule
+  Feld & Bedeutung \\
+  \midrule
+  Vorlage     & gespeicherte Exporteinstellungen laden; \menu{Als Vorlage speichern …} sichert
+                die aktuellen \\
+  Format      & TIFF, JPEG, PNG oder JPEG XL \\
+  Bittiefe    & 8 oder 16 Bit (JPEG immer 8 Bit) \\
+  Qualität    & 1--100 für JPEG und JPEG XL (Standard 90) \\
+  Farbraum    & sRGB, Adobe RGB oder ProPhoto RGB; das Profil wird eingebettet \\
+  Lange Kante & Größe der längeren Seite in Pixeln; 0 = Originalgröße \\
+  als Graustufen & einkanalige Datei mit Graustufenprofil (für S/W) \\
+  Zielordner  & Standard: Unterordner \datei{export} im Rollenordner \\
+  Dateiname   & Muster mit Platzhaltern (siehe unten) \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{Platzhalter im Dateinamen} \datei{\{roll\}} Rollenname (sonst Ordnername),
+\datei{\{frame\}} Bildnummer dreistellig, \datei{\{name\}} Name des Scans ohne Endung,
+\datei{\{film\}} Filmtyp. Standard ist \datei{\{roll\}\_\{frame\}\_\{name\}}, also etwa
+\datei{Toskana\_007\_DSC01234.tif}.
+
+\paragraph{Im Hintergrund} Der Export läuft im Hintergrund und rechnet mehrere Bilder
+gleichzeitig; man kann währenddessen weiterarbeiten. Der Fortschritt steht in der Statusleiste,
+\menu{Abbrechen} beendet den Auftrag. Halbe Dateien entstehen dabei nicht.
+
+\paragraph{Vorhandene Dateien} werden nicht überschrieben: Existiert eine Zieldatei bereits,
+bricht der Export vor dem ersten geschriebenen Bild mit einer Meldung ab. Dann einen anderen
+Zielordner oder ein anderes Namensmuster wählen.
+
+% ---------------------------------------------------------------------------------------------
+\section{Kontaktabzug}
+
+\menu{Datei \textrightarrow{} Kontaktabzug …} (\taste{Strg+K}) setzt alle Bilder der Rolle
+wie auf einem klassischen Kontaktbogen in Streifen auf eine Seite.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+  \toprule
+  Feld & Bedeutung \\
+  \midrule
+  Vorlage            & gespeicherte Layouts laden; \menu{Als Vorlage speichern} sichert das aktuelle \\
+  Filmformat         & Kleinbild 24\texttimes 36, Halbformat 18\texttimes 24, Panorama 24\texttimes 65,
+                       Mittelformat 6\texttimes 4,5 / 6\texttimes 6 / 6\texttimes 7 / 6\texttimes 9 \\
+  Bilder je Streifen & wie beim Zerschneiden des Films (aus dem Filmformat vorbelegt) \\
+  mit Filmrand       & zeigt den Filmrand um jedes Bild \\
+  Bildinhalt         & \menu{wie bearbeitet} oder \menu{einheitlich}: gleiche Tonwerte für alle,
+                       damit Belichtungsunterschiede sichtbar bleiben \\
+  Hintergrund        & schwarz oder weiß \\
+  Maßstab            & einpassen oder 1:1 \\
+  Papier, quer       & A4, A3 oder Letter, hoch oder quer \\
+  Heftrand, Lochmarkierung & Rand zum Abheften (Standard 25\,mm) und Markierungen für den Locher \\
+  Rollennummer, Notiz & Text im Kopf des Bogens \\
+  \bottomrule
+\end{tabularx}
+\end{center}
+
+\menu{Als PDF …} speichert ein druckfertiges PDF (Standard \datei{kontaktabzug.pdf} im
+Rollenordner), \menu{Drucken …} öffnet den Druckdialog.
+
+% ---------------------------------------------------------------------------------------------
+\section{Einstellungen}
+
+\menu{Datei \textrightarrow{} Einstellungen …}:
+\begin{description}
+  \item[Sprache] Deutsch oder Englisch; wirkt nach einem Neustart.
+  \item[Threads] Anzahl der Rechen-Threads; 0 = alle Prozessorkerne (Standard). Wirkt sofort.
+  \item[Speicherbudget] Arbeitsspeicher für Zwischenbilder bei Export, Kontaktabzug und
+        Miniaturen; Standard 40\,\% des Arbeitsspeichers. Ein kleineres Budget lässt weniger
+        Bilder gleichzeitig rechnen, entlastet aber den Rechner.
+\end{description}
+
+% ---------------------------------------------------------------------------------------------
+\section{Kommandozeile}\label{sec:cli}
+
+\datei{autoneg-cli} verarbeitet eine Rolle ohne Oberfläche, mit denselben Ergebnissen wie das
+Programm. Die Bearbeitung kommt aus den Begleitdateien. Aufruf in der Eingabeaufforderung oder
+PowerShell. Ohne PATH-Eintrag ruft man es mit vollem Pfad auf, bei einer Installation für alle
+Benutzer \datei{\textquotedbl C:\textbackslash Program Files\textbackslash AutoNeg\textbackslash
+autoneg-cli.exe\textquotedbl}, nur für den eigenen Benutzer
+\datei{\%LOCALAPPDATA\%\textbackslash Programs\textbackslash AutoNeg\textbackslash autoneg-cli.exe}:
+
+\begin{lstlisting}
+autoneg-cli info <ordner>
+autoneg-cli detect <ordner>
+autoneg-cli export <ordner> -o <ziel> [--format tiff|jpeg|png|jxl] [--bits 8|16]
+            [--quality 1-100] [--profile srgb|adobergb|prophoto] [--long-edge <px>]
+            [--gray] [--pattern <muster>] [--preset <exportvorlage>] [--only-kept]
+            [--overwrite]
+autoneg-cli contact-sheet <ordner> -o <datei.pdf> [--preset <layoutvorlage>]
+            [--film-format <name>] [--uniform] [--no-rebate] [--white]
+            [--paper a4|a3|letter] [--landscape] [--note <text>]
+\end{lstlisting}
+
+\begin{description}
+  \item[info] listet die Bilder der Rolle mit Zahl der Änderungen und Bewertung.
+  \item[detect] erkennt Bildfeld und Basis für alle Bilder, die noch keinen Zuschnitt haben,
+        und speichert das Ergebnis.
+  \item[export] wie der Exportdialog. \datei{--preset} lädt eine im Programm gespeicherte
+        Exportvorlage, weitere Optionen überschreiben sie. \datei{--only-kept} exportiert nur
+        behaltene Bilder, \datei{--overwrite} ersetzt vorhandene Dateien.
+  \item[contact-sheet] schreibt den Kontaktabzug als PDF; \datei{--film-format} erwartet den
+        Namen wie im Dialog, etwa \datei{\textquotedbl Kleinbild 24×36\textquotedbl}.
+\end{description}
+Für alle Befehle: \datei{--config <ordner>} und \datei{--cache <ordner>} wählen andere
+Einstellungs- bzw. Zwischenspeicherordner. \datei{--help} zeigt die Hilfe, \datei{--version}
+die Version. Rückgabewert 0 bei Erfolg, 1 bei einem Fehler, 2 bei falschem Aufruf.
+
+\paragraph{Beispiel} Alle behaltenen Bilder einer Rolle als JPEG mit 3000\,Pixeln langer Kante:
+\begin{lstlisting}
+autoneg-cli export D:\Scans\Toskana -o D:\Export\Toskana --format jpeg --long-edge 3000 --only-kept
+\end{lstlisting}
+
+% ---------------------------------------------------------------------------------------------
+\section{Wo AutoNeg Daten ablegt}\label{sec:daten}
+
+\begin{description}
+  \item[Neben den Scans] \datei{<Scan>.autoneg.json} je Bild und \datei{roll.autoneg.json} je
+        Rolle. Diese Dateien gehören zur Rolle: beim Kopieren oder Sichern mitnehmen.
+  \item[Einstellungen und Vorlagen] \datei{\%APPDATA\%\textbackslash AutoNeg}: \datei{settings.json},
+        Unterordner \datei{presets} (Bearbeitungs-, Export- und Layoutvorlagen) und
+        \datei{sidecars} (Begleitdateien schreibgeschützter Ordner).
+  \item[Zwischenspeicher] \datei{\%LOCALAPPDATA\%\textbackslash AutoNeg}: Miniaturen und das
+        Protokoll \datei{autoneg.log}. Der Ordner darf jederzeit gelöscht werden.
+\end{description}
+Beschädigte Dateien benennt AutoNeg in \datei{….defekt} um und arbeitet mit Standardwerten
+weiter; nichts wird stillschweigend überschrieben.
+
+% ---------------------------------------------------------------------------------------------
+\section{Tastenkürzel}
+
+\begin{center}
+\begin{tabular}{@{}ll@{\qquad}ll@{}}
+  \toprule
+  \taste{Strg+O} & Ordner öffnen          & \taste{C}              & Zuschneiden und Drehen \\
+  \taste{Strg+E} & Exportieren            & \taste{R}              & Staubretusche \\
+  \taste{Strg+K} & Kontaktabzug           & \taste{\textbackslash} & Vorher/Nachher \\
+  \taste{Strg+Z} & Rückgängig             & \taste{J}              & Beschnittwarnung \\
+  \taste{Strg+Y} & Wiederholen            & \taste{Strg+0}         & Einpassen \\
+  \taste{Strg+C} & Bearbeitung kopieren   & \taste{Strg+1}         & 100\,\% \\
+  \taste{Strg+V} & Einfügen               & \taste{Strg+2}         & 200\,\% \\
+  \taste{Strg+L} & Synchronisieren        & \taste{Strg+[}         & 90\textdegree{} nach links \\
+  \taste{Strg+Umschalt+R} & Bild zurücksetzen & \taste{Strg+]}      & 90\textdegree{} nach rechts \\
+  \taste{P} & Behalten                    & \taste{Strg+H}         & waagerecht spiegeln \\
+  \taste{X} & Verwerfen                   & \taste{U}              & Bewertung entfernen \\
+  \bottomrule
+\end{tabular}
+\end{center}
+Auf deutschen Tastaturen erreicht man \textbackslash, [ und ] mit \taste{AltGr}; die Kürzel
+folgen dem Tastaturlayout.
+
+% ---------------------------------------------------------------------------------------------
+\section{Einschränkungen von Version 1.0}
+
+Folgende Bedienelemente sind vorhanden, haben in dieser Ausgabe aber noch keine Funktion:
+\begin{itemize}
+  \item \menu{Weißabgleich-Pipette} (Reiter \menu{Anpassen}): den Weißabgleich über
+        \menu{Farbtemperatur} und \menu{Tönung} einstellen.
+  \item \menu{Messbereich anzeigen} (Reiter \menu{Konvertierung}).
+  \item \menu{Auto-Tonwerte}: die Tonwertgrenzen setzt die Konvertierung bereits selbst.
+\end{itemize}
+Außerdem: Der Export der Oberfläche überschreibt keine vorhandenen Dateien (die Kommandozeile
+mit \datei{--overwrite} schon); eine Kompression für TIFF und PNG ist nicht wählbar (JPEG XL wird
+verlustfrei geschrieben); Filmprofile, automatische Staubentfernung und die Rechnung auf der
+Grafikkarte folgen mit Version~1.1.
+
+\end{document}

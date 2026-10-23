@@ -248,6 +248,13 @@ Leistungsmessung (Release, Entwicklerrechner 32 Hardware-Threads, 32 GB; Budget 
 
 Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil ist so klein geworden, dass das RAW-Dekodieren und das Schreiben überwiegen; im Stapel überlappen sie über mehrere Bilder. Offen: RAW-Dekodierung (2,5 s je 61-MP-Bild), Farbumrechnung und Quantisierung direkt in den Kacheln (weniger Speicher je Bild), Messung auf dem Referenzrechner.
 
+### Auslieferung Windows und Handbuch
+
+- Installer: `installer/windows/build_installer.ps1` baut Release, installiert mit `cmake --install` nach `build/install-windows` und erzeugt mit Inno Setup `build/installer/AutoNeg-<Version>-Setup-x64.exe` (K-M10-06). Inno Setup: `winget install JRSoftware.InnoSetup`.
+- Installationsregeln: `cmake/AutoNegInstall.cmake` (nur Windows).
+- Geprüft (23.10.2026): stille Installation für den eigenen Benutzer, `autoneg-cli` export und contact-sheet ohne Entwicklungsumgebung im PATH, Start der Oberfläche mit Rolle, stille Deinstallation ohne Rückstände.
+- Handbuch: `docs/handbuch/handbuch.tex` (K-M10-07); setzen mit `pdflatex handbuch.tex` (zweimal). Abschnitt „Einschränkungen“ nennt die Bedienelemente ohne Funktion (Weißabgleich-Pipette, Messbereich anzeigen, Auto-Tonwerte).
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -314,3 +321,4 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - `vcpkg.json` Feature `raw-parallel`: OpenMP-Laufzeit vcomp (Windows) bzw. libgomp/libomp (Linux).
 - `src/adapters/tbb/src/system_memory.cpp`: Arbeitsspeicher über `GlobalMemoryStatusEx` bzw. `sysconf(_SC_PHYS_PAGES)` (Standard-Speicherbudget).
 - `tests/tools/bench/bench.cpp`: aktueller Speicher über `WorkingSetSize` bzw. `/proc/self/statm`.
+- `cmake/AutoNegInstall.cmake`, `installer/windows/*`: nur Windows (Linux-Pakete folgen).
