@@ -15,7 +15,7 @@
       "cacheVariables": {
         "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "VCPKG_MANIFEST_FEATURES": "raw;imageio;color;vision;persistence;hashing",
+        "VCPKG_MANIFEST_FEATURES": "raw;imageio;color;vision;persistence;hashing;gui",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports"
       }
     },
@@ -77,7 +77,9 @@
       "cacheVariables": {
         "AUTONEG_SANITIZER": "thread",
         "VCPKG_TARGET_TRIPLET": "x64-linux-tsan",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets"
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_MANIFEST_FEATURES": "raw;imageio;color;vision;persistence;hashing",
+        "AUTONEG_WITH_GUI": "OFF"
       }
     }
   ],

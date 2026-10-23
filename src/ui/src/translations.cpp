@@ -1,0 +1,238 @@
+#include "autoneg/ui/translations.hpp"
+
+#include <QtCore/QCoreApplication>
+#include <QtCore/QHash>
+
+namespace autoneg::ui {
+
+namespace {
+
+// Deutsch → Englisch (LF-UI-03). Vollständigkeit prüft tools/check_translations.py (CTest).
+// Format je Zeile: {"Deutsch", "English"},
+const QHash<QString, QString>& english()
+{
+    static const QHash<QString, QString> table = [] {
+        const std::initializer_list<std::pair<const char*, const char*>> rows{
+            // clang-format off
+            {" px", " px"},
+            {"%1: %2", "%1: %2"},
+            {"%1: Datei kann nicht gelesen werden", "%1: file cannot be read"},
+            {"%n Bild(er) geöffnet", "%n image(s) opened"},
+            {"&Ansicht", "&View"},
+            {"&Bearbeiten", "&Edit"},
+            {"&Datei", "&File"},
+            {"00 (weich)", "00 (soft)"},
+            {"100 %", "100 %"},
+            {"16 bit", "16 bit"},
+            {"1:1", "1:1"},
+            {"200 %", "200 %"},
+            {"5 (hart)", "5 (hard)"},
+            {"8 bit", "8 bit"},
+            {"90° nach links drehen", "Rotate 90° left"},
+            {"90° nach rechts drehen", "Rotate 90° right"},
+            {": abgebrochen", ": cancelled"},
+            {"Abbrechen", "Cancel"},
+            {"Aktiv", "Active"},
+            {"Aktuelle Exporteinstellungen als Vorlage speichern", "Save current export settings as a template"},
+            {"Alle Bilder", "All images"},
+            {"Als PDF …", "As PDF …"},
+            {"Als Vorlage speichern", "Save as template"},
+            {"Als Vorlage speichern …", "Save as template …"},
+            {"Anpassen", "Adjust"},
+            {"Anteil der Belichtung mit Stufe 00 (weich)", "Share of exposure with grade 00 (soft)"},
+            {"Anteil der Belichtung mit Stufe 5 (hart)", "Share of exposure with grade 5 (hard)"},
+            {"Arbeitsspeicher für Zwischenbilder bei Export und Stapelverarbeitung", "Memory for intermediate images during export and batch processing"},
+            {"Anzahl der Rechen-Threads (NF-PERF-12)", "Number of worker threads (NF-PERF-12)"},
+            {"Ausgewählte Änderung mit einem Klick entfernen (LF-LST-03)", "Remove the selected change with one click (LF-LST-03)"},
+            {"Auto-Basis", "Auto base"},
+            {"Auto-Bildfeld", "Auto frame"},
+            {"Auto-Tonwerte", "Auto levels"},
+            {"Auto-Tonwerte: die Tonwertgrenzen setzt die Konvertierung selbst.", "Auto levels: the conversion sets the tonal limits itself."},
+            {"Basis messen", "Measure base"},
+            {"Bearbeitung kopieren", "Copy edits"},
+            {"Bearbeitung kopiert", "Edits copied"},
+            {"Bearbeitungsliste", "Edit list"},
+            {"Beenden", "Quit"},
+            {"Begleitdatei ohne Scan: %1", "Sidecar without scan: %1"},
+            {"Behalten", "Keep"},
+            {"Belichtung", "Exposure"},
+            {"Belichtung in Blendenstufen (EV)", "Exposure in stops (EV)"},
+            {"Beschnittwarnung", "Clipping warning"},
+            {"Bewertung entfernen", "Clear rating"},
+            {"Bild zurücksetzen", "Reset image"},
+            {"Bilder je Streifen", "Frames per strip"},
+            {"Bildfeld automatisch erkennen", "Detect the image frame automatically"},
+            {"Bildfeld erkennen", "Detect frame"},
+            {"Bildfeld und Basis neu erkennen", "Detect frame and base again"},
+            {"Bildinhalt", "Image content"},
+            {"Bittiefe", "Bit depth"},
+            {"Dateiname", "File name"},
+            {"Dia", "Slide"},
+            {"Die Rolle ist in einem anderen AutoNeg geöffnet und wird nur lesend angezeigt.", "The roll is open in another AutoNeg and is shown read-only."},
+            {"Die Sprache wird nach einem Neustart umgestellt.", "The language changes after a restart."},
+            {"Drucken", "Print"},
+            {"Drucken …", "Print …"},
+            {"Dynamik", "Vibrance"},
+            {"Einfügen", "Paste"},
+            {"Einfügen …", "Paste …"},
+            {"Einpassen", "Fit"},
+            {"Einstellungen", "Settings"},
+            {"Einstellungen …", "Settings …"},
+            {"Eintrag entfernen", "Remove entry"},
+            {"Erkennung", "Detection"},
+            {"Export", "Export"},
+            {"Exportieren", "Export"},
+            {"Exportieren …", "Export …"},
+            {"Farbnegativ", "Colour negative"},
+            {"Farbraum", "Colour space"},
+            {"Farbsättigung", "Colour saturation"},
+            {"Farbtemperatur", "Temperature"},
+            {"Fein", "Fine"},
+            {"Filmbasis im Filmrand messen", "Measure the film base in the rebate"},
+            {"Filmformat", "Film format"},
+            {"Filmstreifen", "Filmstrip"},
+            {"Filmstreifen nach Bewertung filtern (LF-BAT-10)", "Filter the filmstrip by rating (LF-BAT-10)"},
+            {"Filmtyp", "Film type"},
+            {"Filmtyp (LF-KON-01)", "Film type (LF-KON-01)"},
+            {"Filterstufe %1", "Filter grade %1"},
+            {"Format", "Format"},
+            {"Gespeicherte Exportvorlage laden", "Load a saved export template"},
+            {"Gespeicherte Layoutvorlage laden", "Load a saved layout template"},
+            {"Gradation", "Grade"},
+            {"Gradation (Multigrade)", "Grade (Multigrade)"},
+            {"Heftrand", "Binding margin"},
+            {"Herkunft", "Origin"},
+            {"Hintergrund", "Background"},
+            {"Histogramm", "Histogram"},
+            {"Histogramm R, G, B und Luminanz; Ecken: Beschnitt der Tiefen bzw. Lichter", "Histogram R, G, B and luminance; corners: clipped shadows or highlights"},
+            {"Kontaktabzug", "Contact sheet"},
+            {"Kontaktabzug speichern", "Save contact sheet"},
+            {"Kontaktabzug …", "Contact sheet …"},
+            {"Kontrast", "Contrast"},
+            {"Kontrast um den Mittelton", "Contrast around the midtone"},
+            {"Konvertierung", "Conversion"},
+            {"Lange Kante", "Long edge"},
+            {"Laufende Stapelaufträge abbrechen (Export, Erkennung, Kontaktabzug)", "Cancel running batch jobs (export, detection, contact sheet)"},
+            {"Lichter", "Highlights"},
+            {"Lichter abdunkeln", "Darken highlights"},
+            {"Lochmarkierung", "Punch marks"},
+            {"Maßstab", "Scale"},
+            {"Messbereich anzeigen", "Show measuring area"},
+            {"Messrechteck in den Filmrand ziehen", "Drag a measuring rectangle into the rebate"},
+            {"Name der Vorlage", "Template name"},
+            {"Neutrale Stelle im Bild anklicken", "Click a neutral spot in the image"},
+            {"Notiz", "Note"},
+            {"Ohne Filter (entspricht Stufe 2)", "No filter (equals grade 2)"},
+            {"Ordner kann nicht geöffnet werden: %1", "Folder cannot be opened: %1"},
+            {"Ordner öffnen …", "Open folder …"},
+            {"Originalgröße", "Original size"},
+            {"PDF (*.pdf)", "PDF (*.pdf)"},
+            {"Papier", "Paper"},
+            {"Platzhalter: {roll}, {frame}, {name}, {film}", "Placeholders: {roll}, {frame}, {name}, {film}"},
+            {"Qualität", "Quality"},
+            {"Rauschminderung", "Noise reduction"},
+            {"Rolle öffnen", "Open roll"},
+            {"Rollennummer", "Roll number"},
+            {"Rückgängig", "Undo"},
+            {"S/W-Negativ", "B/W negative"},
+            {"Scan-Ordner öffnen", "Open scan folder"},
+            {"Schließen", "Close"},
+            {"Schärfen", "Sharpen"},
+            {"Speicherbudget", "Memory budget"},
+            {"Split-Grade", "Split grade"},
+            {"Sprache", "Language"},
+            {"Sprache der Oberfläche; wirkt nach einem Neustart", "User interface language; takes effect after a restart"},
+            {"Staubretusche", "Dust retouching"},
+            {"Stufe in Zehntelschritten (LF-KON-11)", "Grade in tenths (LF-KON-11)"},
+            {"Stärke der Rauschminderung", "Noise reduction strength"},
+            {"Synchronisieren", "Synchronize"},
+            {"Sättigung", "Saturation"},
+            {"Sättigung schwacher Farben", "Saturation of weak colours"},
+            {"Threads", "Threads"},
+            {"Tiefen", "Shadows"},
+            {"Tiefen aufhellen", "Lift shadows"},
+            {"Tonwertgrenzen automatisch setzen", "Set tonal limits automatically"},
+            {"Tönung", "Tint"},
+            {"Unbewertet", "Unrated"},
+            {"Unscharf maskieren: Stärke", "Unsharp mask: amount"},
+            {"Verwerfen", "Reject"},
+            {"Verworfen", "Rejected"},
+            {"Vorher/Nachher", "Before/after"},
+            {"Vorlage", "Template"},
+            {"Vorlage anwenden", "Apply template"},
+            {"Vorlage speichern", "Save template"},
+            {"Waagerecht spiegeln", "Flip horizontally"},
+            {"Weißabgleich-Pipette", "White balance picker"},
+            {"Weißabgleich: grün/magenta", "White balance: green/magenta"},
+            {"Weißabgleich: warm/kalt", "White balance: warm/cool"},
+            {"Werkzeuge", "Tools"},
+            {"Wert", "Value"},
+            {"Werte übernehmen", "Copy values"},
+            {"Wiederholen", "Redo"},
+            {"Zeigt den Bereich, in dem die Filmbasis gemessen wurde", "Shows the area where the film base was measured"},
+            {"Zielordner", "Target folder"},
+            {"Zuschneiden und Drehen", "Crop and rotate"},
+            {"alle Kerne", "all cores"},
+            {"als Graustufen (S/W)", "as greyscale (B/W)"},
+            {"einheitlich", "uniform"},
+            {"einpassen", "fit"},
+            {"kopiert von Bild %1", "copied from image %1"},
+            {"mit Filmrand", "with rebate"},
+            {"ohne Filter", "no filter"},
+            {"quer", "landscape"},
+            {"schwarz", "black"},
+            {"weiß", "white"},
+            {"wie bearbeitet", "as edited"},
+            {"Änderung", "Change"},
+            {"Öffne %1 …", "Opening %1 …"},
+            {"– keine –", "– none –"},
+            {"…", "…"},
+            // Schrittnamen (StepRegistry) und Herkunft der Einträge
+            {"Filmtyp", "Film type"},
+            {"Orientierung", "Orientation"},
+            {"Feindrehung", "Fine rotation"},
+            {"Zuschnitt", "Crop"},
+            {"Leuchtflächenkorrektur", "Flat-field correction"},
+            {"Lichter und Tiefen", "Highlights and shadows"},
+            {"S/W-Kanalmischung", "B/W channel mix"},
+            {"Basiskorrektur", "Base correction"},
+            {"Dichte", "Density"},
+            {"Tonwertgrenzen", "Tonal limits"},
+            {"Gradation Farbe", "Colour grade"},
+            {"Tonwerte und Kurven", "Levels and curves"},
+            {"Weißabgleich", "White balance"},
+            {"manuell", "manual"},
+            {"automatisch", "automatic"},
+            {"kopiert", "copied"},
+            {"Rollen-Standard", "roll default"},
+            // clang-format on
+        };
+        QHash<QString, QString> t;
+        for (const auto& [de, en] : rows) {
+            t.insert(QString::fromUtf8(de), QString::fromUtf8(en));
+        }
+        return t;
+    }();
+    return table;
+}
+
+} // namespace
+
+bool TableTranslator::isEmpty() const
+{
+    return false;
+}
+
+QString TableTranslator::translate(const char* /*context*/, const char* source,
+                                   const char* /*disambiguation*/, int /*n*/) const
+{
+    const auto it = english().constFind(QString::fromUtf8(source));
+    return it != english().constEnd() ? *it : QString();
+}
+
+QString translated(const std::string& text)
+{
+    return QCoreApplication::translate("autoneg", text.c_str());
+}
+
+} // namespace autoneg::ui

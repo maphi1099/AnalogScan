@@ -34,15 +34,64 @@ const char* folderOf(ports::PresetKind k)
 }
 
 /// Vorlagennamen werden Dateinamen: Trennzeichen und reservierte Zeichen sind nicht erlaubt.
+/// Vorlagennamen sind Anwendereingaben (UTF-8). Verboten sind nur Pfadtrenner, Steuerzeichen und
+/// "."/".."; Zeichen, die ein Dateisystem nicht erlaubt, kodiert fileStem().
 bool validName(const std::string& name)
 {
     if (name.empty() || name == "." || name == ".." || name.size() > 120) {
         return false;
     }
-    return std::ranges::none_of(name, [](char c) {
-        return c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' ||
-               c == '>' || c == '|' || static_cast<unsigned char>(c) < 0x20;
-    });
+    return std::ranges::none_of(
+        name, [](char c) { return c == '/' || c == '\\' || static_cast<unsigned char>(c) < 0x20; });
+}
+
+/// Dateiname zum Vorlagennamen: : * ? " < > | % und ein Punkt bzw. Leerzeichen am Ende als %XX
+/// (unter Windows unzulässig); alles Übrige bleibt, Umlaute als UTF-8.
+std::string fileStem(const std::string& name)
+{
+    static constexpr char hex[] = "0123456789ABCDEF";
+    std::string out;
+    for (std::size_t i = 0; i < name.size(); ++i) {
+        const char c = name[i];
+        const bool last = i + 1 == name.size();
+        if (std::string_view(":*?\"<>|%").find(c) != std::string_view::npos ||
+            (last && (c == '.' || c == ' '))) {
+            const auto u = static_cast<unsigned char>(c);
+            out += '%';
+            out += hex[u >> 4U];
+            out += hex[u & 0xFU];
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
+std::string nameOf(const std::string& stem)
+{
+    std::string out;
+    for (std::size_t i = 0; i < stem.size(); ++i) {
+        if (stem[i] == '%' && i + 2 < stem.size()) {
+            const auto digit = [](char h) { return h <= '9' ? h - '0' : h - 'A' + 10; };
+            out += static_cast<char>(digit(stem[i + 1]) * 16 + digit(stem[i + 2]));
+            i += 2;
+        } else {
+            out += stem[i];
+        }
+    }
+    return out;
+}
+
+/// UTF-8 ↔ Pfad (unter Windows sonst ANSI-Codepage; plattformabhängig, PROGRESS.md)
+fs::path u8path(const std::string& s)
+{
+    return fs::path(std::u8string(s.begin(), s.end()));
+}
+
+std::string u8string(const fs::path& p)
+{
+    const std::u8string u = p.u8string();
+    return std::string(u.begin(), u.end());
 }
 
 std::int64_t mtimeOf(const fs::path& p)
@@ -143,7 +192,7 @@ void JsonConfigStore::persist()
 
 fs::path JsonConfigStore::presetPath(ports::PresetKind k, const std::string& name) const
 {
-    return root_ / "presets" / folderOf(k) / (name + ".json");
+    return root_ / "presets" / folderOf(k) / u8path(fileStem(name) + ".json");
 }
 
 std::vector<ports::PresetInfo> JsonConfigStore::list(ports::PresetKind k)
@@ -152,7 +201,7 @@ std::vector<ports::PresetInfo> JsonConfigStore::list(ports::PresetKind k)
     std::error_code ec;
     for (const auto& e : fs::directory_iterator(root_ / "presets" / folderOf(k), ec)) {
         if (e.is_regular_file() && e.path().extension() == ".json") {
-            out.push_back({{k, e.path().stem().string()}, mtimeOf(e.path())});
+            out.push_back({{k, nameOf(u8string(e.path().stem()))}, mtimeOf(e.path())});
         }
     }
     std::ranges::sort(out, {}, [](const ports::PresetInfo& p) { return p.id.name; });

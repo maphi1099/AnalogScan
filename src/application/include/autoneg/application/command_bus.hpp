@@ -89,6 +89,10 @@ public:
                                const model::Roll& roll);
     bool undo();
     bool redo();
+    /// Bewertung behalten/verwerfen (LF-BAT-10); wird sofort gespeichert, nicht im Verlauf.
+    /// false, wenn das Bild nicht offen ist.
+    bool setRating(const model::FrameId& f, model::Rating r);
+    [[nodiscard]] bool isOpen(const model::FrameId& f) const { return open_.contains(f); }
 
     [[nodiscard]] const model::EditHistory& history(const model::FrameId& f) const;
     [[nodiscard]] const UndoStack& undoStack() const noexcept { return undo_; }

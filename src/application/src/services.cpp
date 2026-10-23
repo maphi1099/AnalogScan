@@ -81,6 +81,9 @@ AnalysisFunctions::standard(ports::IVision& vision,
     f.measureBase = [](const image::ImageBuffer& img, const analysis::RegionMap& m) {
         return analysis::BaseMeter{}.measure(img, m);
     };
+    f.measureRect = [](const image::ImageBuffer& img, const model::NormRect& r) {
+        return analysis::BaseMeter{}.measureRect(img, r);
+    };
     return f;
 }
 
@@ -162,6 +165,58 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                         ports::Priority::Background);
 }
 
+JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                       model::NormRect rect)
+{
+    class MeasureJob final : public Job
+    {
+    public:
+        MeasureJob(model::Frame f, std::shared_ptr<const model::Roll> roll, model::NormRect rect,
+                   AnalysisFunctions fns, CommandBus& bus, UiDispatcher ui)
+            : f_(std::move(f))
+            , roll_(std::move(roll))
+            , rect_(rect)
+            , fns_(std::move(fns))
+            , bus_(bus)
+            , ui_(std::move(ui))
+        {}
+        std::string name() const override { return "Basis messen"; }
+        base::Expected<void> run(JobContext& c) override
+        {
+            if (!fns_.measureRect) {
+                return base::makeError(base::ErrorCode::Unsupported, "Basismessung nicht verfügbar");
+            }
+            auto img = fns_.image(f_);
+            if (!img) {
+                return std::unexpected(img.error());
+            }
+            auto b = fns_.measureRect(*img, rect_);
+            if (!b) {
+                return std::unexpected(b.error());
+            }
+            c.progress(1, 1);
+            model::EditEntry e;
+            e.step = model::StepId("autoneg.filmbase");
+            e.params = model::ParamSet{}.with("base", b->transmission).with("source", std::string("manual"));
+            ui_([&bus = bus_, id = f_.id, roll = roll_, e = std::move(e)] {
+                const std::vector<model::FrameId> target{id};
+                bus.execute(SetEntryCommand(e), target, roll ? *roll : model::Roll{});
+            });
+            return {};
+        }
+
+    private:
+        model::Frame f_;
+        std::shared_ptr<const model::Roll> roll_;
+        model::NormRect rect_;
+        AnalysisFunctions fns_;
+        CommandBus& bus_;
+        UiDispatcher ui_;
+    };
+    return jobs_.submit(std::make_unique<MeasureJob>(f, std::move(roll), rect, fns_, bus_, ui_),
+                        ports::Priority::Interactive);
+}
+
 std::string exportName(const std::string& pattern, const model::Roll& roll, const model::Frame& frame)
 {
     std::string out;
@@ -234,7 +289,7 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
         {
             const model::Roll roll = roll_ ? *roll_ : model::Roll{};
             auto working = color_.profile(ports::ProfileId::WorkingRec2020Linear);
-            auto dst = color_.profile(s_.profile);
+            auto dst = color_.profile(s_.grayscale ? ports::ProfileId::GrayGamma22 : s_.profile);
             if (!working || !dst) {
                 return base::makeError(base::ErrorCode::Internal, "Farbprofile nicht verfügbar");
             }
@@ -257,12 +312,15 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
                 r.list = std::make_shared<const model::EditList>(item.edits);
                 r.film = roll.filmType;
                 r.profile.mode = pipeline::RenderMode::Export;
+                if (s_.longEdge > 0) {
+                    r.profile.target = {s_.longEdge, s_.longEdge}; // lange Kante, Seitenverhältnis bleibt
+                }
                 r.cancel = c.cancel;
                 auto img = renderer_.render(r);
                 if (!img) {
                     return std::unexpected(img.error());
                 }
-                auto out = (*xf)->apply(*img);
+                auto out = (*xf)->apply(*img); // mit Graustufenprofil einkanalig (LF-EXP-09)
                 if (!out) {
                     return std::unexpected(out.error());
                 }

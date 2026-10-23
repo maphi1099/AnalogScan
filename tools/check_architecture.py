@@ -206,11 +206,20 @@ def check_includes(root: Path, rules: dict, targets: list[dict], report: Report)
 
     tests = rules.get("tests", {})
     component_dir = (root / tests["componentDir"]) if "componentDir" in tests else None
+    # Testordner mit zusätzlich erlaubten Fremdbibliotheken (z. B. Qt für tests/unit/ui und
+    # tests/e2e); es gilt der längste passende Ordner.
+    foreign_dirs = sorted(((root / d, set(extra)) for d, extra in tests.get("foreignDirs", {}).items()),
+                          key=lambda x: len(x[0].parts), reverse=True)
     for directory in tests.get("dirs", []):
         for path in iter_sources(root / directory):
             in_component = component_dir is not None and component_dir in path.parents
             groups_allowed: set[str] | str = (tests.get("componentForeign", "*") if in_component
                                               else set(tests.get("foreign", [])))
+            if not in_component:
+                for d, extra in foreign_dirs:
+                    if d in path.parents:
+                        groups_allowed = set(tests.get("foreign", [])) | extra
+                        break
             check_file(path, "tests", None, groups_allowed)
 
 

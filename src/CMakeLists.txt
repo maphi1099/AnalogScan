@@ -10,7 +10,9 @@ add_subdirectory(analysis)
 
 # Anwendung und Oberfläche
 add_subdirectory(application)
-add_subdirectory(ui)
+if(AUTONEG_WITH_GUI)
+    add_subdirectory(ui)
+endif()
 
 # Adapter (je eine Fremdbibliothek) und Rechen-Backend
 add_subdirectory(adapters/libraw)
@@ -19,7 +21,9 @@ add_subdirectory(adapters/lcms)
 add_subdirectory(adapters/opencv)
 add_subdirectory(adapters/json)
 add_subdirectory(adapters/xxhash)
-add_subdirectory(adapters/qtprint)
+if(AUTONEG_WITH_GUI)
+    add_subdirectory(adapters/qtprint)
+endif()
 add_subdirectory(adapters/spdlog)
 add_subdirectory(adapters/tbb)
 add_subdirectory(backends/cpu)

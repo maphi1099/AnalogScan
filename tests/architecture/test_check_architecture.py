@@ -142,6 +142,13 @@ class ArchitectureCheckTest(unittest.TestCase):
         self.write("src/model/bad.cpp", '#include "autoneg/mocks/ports.hpp"\n')
         self.assertViolation(self.run_check(), "[Include]", "src/model/bad.cpp:1")
 
+    def test_qt_only_in_ui_and_e2e_tests(self) -> None:
+        self.write("tests/unit/ui/model_test.cpp", "#include <QtCore/QAbstractItemModel>\n")
+        self.write("tests/e2e/main_test.cpp", "#include <QtTest/QTest>\n")
+        self.assertEqual(self.run_check(), [])
+        self.write("tests/unit/model/bad_test.cpp", "#include <QtCore/QString>\n")
+        self.assertViolation(self.run_check(), "[Fremd-Header]", "tests/unit/model/bad_test.cpp:1")
+
     def test_local_quoted_include_is_allowed(self) -> None:
         self.write("src/model/detail.hpp", "#pragma once\n")
         self.write("src/model/a.cpp", '#include "detail.hpp"\n')

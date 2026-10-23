@@ -66,6 +66,20 @@ void CommandBus::subscribe(ISessionObserver* o)
     observers_.push_back(o);
 }
 
+bool CommandBus::setRating(const model::FrameId& f, model::Rating r)
+{
+    const auto it = open_.find(f);
+    if (it == open_.end()) {
+        return false;
+    }
+    if (it->second.data.rating != r) {
+        it->second.data.rating = r;
+        it->second.frame.rating = r;
+        persist(it->second);
+    }
+    return true;
+}
+
 void CommandBus::persist(Open& o)
 {
     o.data.edits = o.history.current();

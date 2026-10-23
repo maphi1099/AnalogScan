@@ -32,6 +32,10 @@ struct AnalysisFunctions
     std::function<base::Expected<analysis::BaseMeasurement>(const image::ImageBuffer&,
                                                             const analysis::RegionMap&)>
         measureBase;
+    /// Basis im Rechteck (normiert auf das Analysebild, LF-BAS-04).
+    std::function<base::Expected<analysis::BaseMeasurement>(const image::ImageBuffer&,
+                                                            const model::NormRect&)>
+        measureRect;
 
     /// Echte Analyse: Bildfeld über IVision, Basis im Filmrand.
     [[nodiscard]] static AnalysisFunctions
@@ -55,6 +59,10 @@ public:
 
     /// Bildfeld, Schräglage und (bei Negativen) Basis eines Bildes.
     JobHandle detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll);
+    /// Basis im vom Anwender gezogenen Rechteck messen (LF-BAS-04); Eintrag mit Herkunft
+    /// manuell und source = "manual".
+    JobHandle measureBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                          model::NormRect rect);
 
 private:
     JobScheduler& jobs_;
@@ -95,6 +103,8 @@ struct ExportSettings
     ports::WriteOptions write;
     ports::ProfileId profile = ports::ProfileId::Srgb;
     OverwritePolicy overwrite = OverwritePolicy::Never;
+    int longEdge = 0;       ///< Pixel der langen Kante; 0 = Originalgröße (LF-EXP-06)
+    bool grayscale = false; ///< einkanalig mit Graustufenprofil (LF-EXP-09)
 };
 
 /// Export als Stapel-Job (Architektur 9.13, LF-EXP-01…08): Rendern in voller Auflösung,

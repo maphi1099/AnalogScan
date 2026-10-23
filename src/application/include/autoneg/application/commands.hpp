@@ -109,6 +109,8 @@ class EditClipboard
 public:
     void copy(model::EditList l, std::optional<model::FrameId> from = std::nullopt);
     [[nodiscard]] bool empty() const noexcept { return !source_.has_value(); }
+    /// Kopierte Liste (leer, wenn nichts kopiert ist), z. B. für die Auswahl im Einfügen-Dialog.
+    [[nodiscard]] model::EditList source() const { return source_.value_or(model::EditList{}); }
     /// Standardauswahl: alle Schritte der Quelle außer den bildbezogenen (U-APP-04).
     [[nodiscard]] std::set<model::StepId> defaultSelection() const;
     [[nodiscard]] PasteCommand paste(std::set<model::StepId> selection, PasteMode mode) const;

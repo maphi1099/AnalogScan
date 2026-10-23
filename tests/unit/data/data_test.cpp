@@ -11,6 +11,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <fstream>
@@ -470,6 +471,27 @@ TEST_F(DataStore, U_DAT_15_PresetsPerKind)
     EXPECT_EQ(config.list(ports::PresetKind::Edit).size(), 1U);
     EXPECT_FALSE(config.load({ports::PresetKind::Edit, "HP5 hart"}).has_value());
     EXPECT_FALSE(config.save(ports::PresetKind::Edit, "../ausbruch", edit).has_value());
+}
+
+// LF-KTA-10, LF-BAT-07: Vorlagennamen sind Anwendereingaben ("KB 1:1", Umlaute); sie müssen auf
+// beiden Systemen speicherbar sein und unverändert zurückkommen
+TEST_F(DataStore, M8_PresetNamesWithSpecialCharacters)
+{
+    JsonConfigStore config(dir.path() / "benutzer", writer, {});
+    const JsonValue sheet = parse(R"({ "framesPerStrip": 6 })").value();
+    const std::vector<std::string> names{"KB 1:1", "Größe ½ – warm", "Was? *Neu* <A|B> \"x\" 100%"};
+    for (const std::string& n : names) {
+        ASSERT_TRUE(config.save(ports::PresetKind::ContactSheet, n, sheet).has_value()) << n;
+    }
+    const auto listed = config.list(ports::PresetKind::ContactSheet);
+    ASSERT_EQ(listed.size(), names.size());
+    for (const std::string& n : names) {
+        EXPECT_TRUE(std::ranges::any_of(listed, [&n](const ports::PresetInfo& p) { return p.id.name == n; }))
+            << n;
+        EXPECT_EQ(config.load({ports::PresetKind::ContactSheet, n}).value(), sheet) << n;
+    }
+    ASSERT_TRUE(config.remove({ports::PresetKind::ContactSheet, "KB 1:1"}).has_value());
+    EXPECT_EQ(config.list(ports::PresetKind::ContactSheet).size(), names.size() - 1);
 }
 
 } // namespace

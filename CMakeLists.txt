@@ -15,6 +15,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(AUTONEG_BUILD_TESTS "Tests bauen" ON)
 option(AUTONEG_CHECK_ARCHITECTURE "Architekturprüfung bei jedem Build ausführen" ON)
+option(AUTONEG_WITH_GUI "Oberfläche, Druck-Adapter und E2E-Tests (Qt 6) bauen" ON)
 option(AUTONEG_ARCH_VIOLATION_DEMO "Absichtlicher Regelverstoß (model -> ports) zum Nachweis der Architekturprüfung" OFF)
 set(AUTONEG_SANITIZER "" CACHE STRING "Sanitizer: leer, address oder thread")
 set(AUTONEG_TESTDATA_DIR "${PROJECT_SOURCE_DIR}/../Testing/Data" CACHE PATH "Testdaten (nur lesen)")

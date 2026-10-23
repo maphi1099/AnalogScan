@@ -68,7 +68,43 @@
     "gui": {
       "description": "Oberfläche und Druck (autoneg_ui, Adapter qtprint)",
       "dependencies": [
-        "qtbase"
+        {
+          "name": "qtbase",
+          "default-features": false,
+          "features": [
+            "gui",
+            "widgets",
+            "testlib",
+            "png",
+            "jpeg",
+            "freetype",
+            "harfbuzz",
+            "opengl",
+            "doubleconversion",
+            "pcre2",
+            "thread",
+            {
+              "name": "fontconfig",
+              "platform": "linux"
+            },
+            {
+              "name": "xcb",
+              "platform": "linux"
+            },
+            {
+              "name": "xcb-xlib",
+              "platform": "linux"
+            },
+            {
+              "name": "xkb",
+              "platform": "linux"
+            },
+            {
+              "name": "cups",
+              "platform": "linux"
+            }
+          ]
+        }
       ]
     }
   }

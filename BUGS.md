@@ -179,3 +179,67 @@ Format je Eintrag:
 - Weitere Fälle: fehlende Includes, die die MSVC-Standardbibliothek indirekt mitbringt (`<algorithm>` für `std::ranges::sort`/`is_sorted`, `<utility>` für `std::exchange`, `<cmath>`, `<numbers>`); Linkfehler „undefined reference to `tbb::detail::d1::task_arena_base::automatic`“, wenn eine statische Konstante ohne Definition per Referenz übergeben wird (ODR-Nutzung, nur im Debug-Bau).
 - Abhilfe: In Range-Schleifen mit strukturierter Bindung immer `const auto&`; Lambda-Parameter nicht wie lokale Variablen nennen; Zufallswerte explizit umwandeln; jeden benutzten Standard-Header selbst einbinden; statische Konstanten fremder Bibliotheken als Wert übergeben (`static_cast<int>(…)`). Nach jedem Teilschritt früh unter Linux bauen (`scratchpad/linux_quick.sh` mit `-k 0`).
 - Status: wiederkehrend
+
+## B-21: vcpkg baut Qt-Abhängigkeiten unter Linux nicht (gperf braucht Autotools)
+- Erstmals: 23.10.2026 (M7), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux (WSL Arch), Preset `linux-clang` mit Feature `gui`
+- Symptom: „building gperf:x64-linux failed with: BUILD_FAILED“, im Log „gperf currently requires the following programs from the system package manager: autoconf autoconf-archive automake libtoolize“.
+- Ursache: gperf (für fontconfig, über qtbase) wird mit Autotools gebaut; vcpkg bringt sie nicht mit.
+- Abhilfe: In WSL einmalig `pacman -S --needed autoconf autoconf-archive automake libtool pkgconf bison flex`, danach neu konfigurieren.
+- Status: behoben
+
+## B-22: Qt-Plattform offscreen hat unter Windows keine Schriften
+- Erstmals: 23.10.2026 (M7), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Windows, Komponententest K-15 (`QtDocumentRenderer`)
+- Symptom: PDF ohne jeden Text (keine Schriften, kein `Tj`); mit `QT_FORCE_STDERR_LOGGING=1` und `QT_LOGGING_RULES=qt.text.font*=true`: „QFontDatabase: Cannot find font directory …/lib/fonts. Note that Qt no longer ships fonts.“
+- Ursache: Das offscreen-Plugin nutzt unter Windows eine eigene Schriftdatenbank (FreeType mit `lib/fonts`) statt der Systemschriften.
+- Abhilfe: Unter Windows die native Plattform `windows` verwenden; sie braucht kein sichtbares Fenster und findet die Systemschriften. `QtGuiSession` setzt offscreen nur unter Linux ohne `DISPLAY`/`WAYLAND_DISPLAY` (dort mit fontconfig). Qt-Meldungen gehen unter Windows sonst an den Debugger: zum Sehen `QT_FORCE_STDERR_LOGGING=1` setzen.
+- Status: behoben
+
+## B-23: Qt-Makro `emit` zerstört `IStep::emit` (Kompilierfehler in step.hpp)
+- Erstmals: 23.10.2026 (M8), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: alle, Modul `ui`
+- Symptom: in `pipeline/step.hpp` „field has incomplete type 'void'“, „'virtual' can only appear on non-static member functions“ an `virtual void emit(...)`, sobald ein Qt-Header davor eingebunden ist.
+- Ursache: Qt definiert `emit` (und `signals`, `slots`) als Makros; `emit` wird leer ersetzt.
+- Abhilfe: `QT_NO_KEYWORDS` für `autoneg_ui` (PUBLIC, gilt auch für Tests); in der Oberfläche `Q_EMIT`, `Q_SIGNALS`, `Q_SLOTS` schreiben.
+- Status: behoben
+
+## B-24: Simuliertes Ablegen (QDropEvent) kommt im Test nicht an
+- Erstmals: 23.10.2026 (M8), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: alle, E2E-Test E-02
+- Symptom: `QCoreApplication::sendEvent(window, &drop)` ruft `dropEvent` nicht auf.
+- Ursache: Qt stellt `Drop` nur nach einem angenommenen `DragEnter` zu (wie bei echtem Ziehen).
+- Abhilfe: im Test erst `QDragEnterEvent` senden (und `isAccepted()` prüfen), dann `QDropEvent`.
+- Status: behoben
+
+## B-25: Tastaturkürzel wirken nach einem modalen Dialog nicht (offscreen)
+- Erstmals: 23.10.2026 (M8), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: alle, E2E-Test E-25 (Plattform offscreen)
+- Symptom: Strg+Z über `QTest::keyClick(window, …)` löst nach dem Einfügen-Dialog nichts aus.
+- Ursache: Nach dem Schließen des modalen Dialogs ist unter offscreen kein Fenster aktiv; Kürzel brauchen ein aktives Fenster.
+- Abhilfe: im Test `window->activateWindow()` und `QTest::qWaitForWindowActive(window)` vor dem Kürzel.
+- Status: Umgehung (nur Test)
+
+## B-26: Gleiche künstliche Testbilder haben dieselbe FrameId
+- Erstmals: 23.10.2026 (M8), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: alle, E2E-Tests (Bewertung, Einfügen)
+- Symptom: Bewertung oder Einfügen wirkt auf mehrere Bilder zugleich.
+- Ursache: Die FrameId ist die Prüfsumme des Dateiinhalts; der Generator lieferte bei gleichen Einstellungen identische Dateien.
+- Abhilfe: Testbilder je Nummer unterscheiden (Staub, Lage des Bildfelds). In der Anwendung offen (K-M8-11): echte Doppelscans mit identischem Inhalt teilen sich die FrameId.
+- Status: Umgehung (Test), Anwendung offen
+
+## B-27: PDF ohne Text unter Linux (WSL ohne Schriften); pypdf trennt Wörter mit Tabulatoren
+- Erstmals: 23.10.2026 (M8), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux (WSL Arch), K-15
+- Symptom: K-15 meldet fehlende Kopfzeile; `fc-list` liefert 0 Schriften. Nach der Installation fehlen die Texte weiterhin im Vergleich, obwohl sie im PDF stehen: pypdf liefert „Rolle\tK-15\t\t·…“.
+- Ursache: Die minimale WSL hat keine Schriftpakete; Qt (offscreen, fontconfig) kann dann keinen Text setzen. Unter Linux setzt die FreeType-Engine Wörter einzeln, pypdf trennt sie mit Tabulatoren.
+- Abhilfe: In WSL `pacman -S --needed ttf-dejavu`. `verify_pdf.py` vergleicht Text mit vereinheitlichtem Leerraum. Für ein Linux-Paket (AppImage) eine Schrift mitliefern oder als Abhängigkeit nennen (M9).
+- Hinweis: Fontconfig aus vcpkg ist älter als die Arch-Konfiguration (Warnungen zu `48-guessfamily.conf`); harmlos.
+- Status: behoben
+
+## B-28: Speichern-Dialog im E2E-Test liefert keinen Dateinamen (Linux)
+- Erstmals: 23.10.2026 (M8), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux, E2E-Test E-34 (offscreen)
+- Symptom: `QFileDialog::selectFile()` + `accept()` schließt den Dialog, `getSaveFileName` liefert aber einen leeren Namen; kein PDF.
+- Abhilfe: Im Test wie ein Anwender bedienen: Text in `fileNameEdit` schreiben und den Knopf „Speichern“ drücken.
+- Status: behoben (Test)

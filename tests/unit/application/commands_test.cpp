@@ -284,5 +284,18 @@ TEST_F(Commands, U_APP_15_PastedEntriesRememberSource)
     EXPECT_EQ(*e->copiedFrom, frameId(3));
 }
 
+// LF-BAT-10: Bewertung wird sofort gespeichert, ohne Eintrag im Verlauf
+TEST_F(Commands, M8_RatingIsPersistedWithoutUndo)
+{
+    openAll(EditList{}.with(entry("autoneg.exposure", ParamSet{}.with("ev", 0.4))));
+    EXPECT_TRUE(bus.setRating(frameId(2), model::Rating::Keep));
+    EXPECT_FALSE(bus.setRating(frameId(99), model::Rating::Keep));
+    queue.flush();
+    ASSERT_TRUE(repo.saved.contains(frameId(2)));
+    EXPECT_EQ(repo.saved[frameId(2)].rating, model::Rating::Keep);
+    EXPECT_EQ(repo.saved[frameId(2)].edits, current(2)); // Bearbeitung bleibt
+    EXPECT_FALSE(bus.undo());
+}
+
 } // namespace
 } // namespace autoneg::application

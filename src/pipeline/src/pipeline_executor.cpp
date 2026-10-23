@@ -89,7 +89,19 @@ base::Expected<image::ImageBuffer> PipelineExecutor::execute(const RenderRequest
     CompileOptions options;
     options.stopAfter = r.stopAfter;
     const CompiledPipeline cp = compiler_.compile(*r.list, r.film, p, src->spec(), scale, options);
-    return run(cp, *src, r, Execution::Auto, scale);
+    auto out = run(cp, *src, r, Execution::Auto, scale);
+    // Export mit Zielgröße (LF-EXP-06): volle Auflösung rechnen, dann auf die lange Kante
+    // verkleinern (nie vergrößern)
+    if (out && p.mode == RenderMode::Export && p.target.width > 0 && p.target.height > 0) {
+        const double factor = std::min(static_cast<double>(p.target.width) / out->spec().width,
+                                       static_cast<double>(p.target.height) / out->spec().height);
+        if (factor < 1.0) {
+            const base::Size size{std::max(1, static_cast<int>(std::lround(out->spec().width * factor))),
+                                  std::max(1, static_cast<int>(std::lround(out->spec().height * factor)))};
+            return backend_.resample(ports::KernelContext{r.cancel}, *out, size);
+        }
+    }
+    return out;
 }
 
 base::Expected<image::ImageBuffer> PipelineExecutor::run(const CompiledPipeline& cp,

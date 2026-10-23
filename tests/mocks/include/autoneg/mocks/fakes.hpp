@@ -41,7 +41,8 @@ public:
                                                      const ports::WriteOptions& o) override;
 
 private:
-    std::vector<ports::FileFormat> formats_{ports::FileFormat::Tiff, ports::FileFormat::Png};
+    std::vector<ports::FileFormat> formats_{ports::FileFormat::Tiff, ports::FileFormat::Png,
+                                            ports::FileFormat::Jpeg};
 };
 
 /// Farbmanagement mit eigener Matrix- und Kurvenrechnung (Bradford, D50 als Verbindungsraum).

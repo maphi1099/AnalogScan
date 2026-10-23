@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 23.10.2026 – **M6 fertig, alle 6 Konfigurationen grün; M7 in Arbeit (autonom bis M9, D-15).** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`). M3–M6 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
+Stand: 23.10.2026 – **M7 und M8 fertig (Windows Debug/Release grün, Linux siehe M8 – Ergebnis); M9 als Nächstes (autonom bis M9, D-15).** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`). M3–M6 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
 
 ## Ablage
 
@@ -51,8 +51,8 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M4 | LibRaw, OIIO, LCMS, Vertragstests | Fertig (Weiterarbeit auf Anweisung, OK formal offen) | K-01…K-05, K-07, K-14 (Teil Dateien/Farbe) |
 | M5 | Analyse, K-11 | **Technik fertig, K-11 wartet auf Annotationen (L-06/L-07)** | U-ANA-01…12, K-14 (IVision) |
 | M6 | Datenhaltung und Anwendung | Fertig (autonom, D-15) | U-DAT-01…15, U-APP-01…16, K-14 (ITaskExecutor) |
-| M7 | Kontaktabzug | Offen | – |
-| M8 | Oberfläche, E2E | Offen | – |
+| M7 | Kontaktabzug | Fertig (autonom, D-15) | U-LAY-01…09, K-15 |
+| M8 | Oberfläche, E2E | Fertig (autonom, D-15); Lücken siehe K-M8-11 | U-UI-01…05, K-14 (Repositories, Cache), E-01…03, E-05, E-09, E-10, E-12, E-13 (Teil), E-15, E-17…E-19, E-21…E-29, E-30, E-31…E-34, E-36, E-38, E-39, E-41…E-46, E-48 |
 | M9 | CLI, Leistung, Abschluss | Offen | – |
 
 ### M0 – Ergebnis
@@ -173,6 +173,27 @@ Offen aus M6:
 - `FileThumbnailCache`, `ThumbnailService`, `RollService` (Ordner öffnen, Frames, Prüfsummen) mit der Oberfläche (M8); K-14 für die Repositories (IEditRepository, IRollRepository) folgt mit `RollService`.
 - Unit-Laufzeit: U-PIP-13 (18 s) und die Analyse-Tests verkürzen, bevor neue Unit-Tests dazukommen.
 
+### M7 – Ergebnis
+
+- `autoneg::layout`: Seiten- und Filmformate (`PaperSize`, `FilmFormat::catalog()` mit 7 Formaten), `ContactSheetSpec`, `ContactSheetLayouter` (Streifen in Aufnahmereihenfolge, Filmrand, Heftrand mit Lochmarken, Kopfzeile, Seitenzähler, 1:1 mit Hinweis, mehrseitig), Elemente `ImageSlot`, `TextBox` (mit Ausrichtung), `PunchMark`.
+- Port `IDocumentRenderer` (`RenderedPage`, `PrintSettings`), Adapter `QtDocumentRenderer` (QPdfWriter, ICC als Output Intent PDF/X-4, QPrinter mit Druckdialog im UI-Thread) und `QtGuiSession`.
+- `ContactSheetService` (application): Layout, Rendern je Slot in Slotauflösung, einheitlich/wie bearbeitet, Filmrand durch erweiterten Zuschnitt, PDF- und Druck-Job.
+- Qt 6.11.2 über vcpkg (Feature `gui`, D-16), Option `AUTONEG_WITH_GUI`; TSan-Preset ohne GUI.
+- Tests: U-LAY-01…09, K-15 (pypdf: Seitengröße, Lage/Größe ±0,2 mm, ≥ 300 dpi, ICC, Text), `M7_*` für Dienst und Adapter.
+- Gefundene Probleme: offscreen ohne Schriften unter Windows (B-22), Autotools für gperf in WSL (B-21).
+
+### M8 – Ergebnis
+
+- `autoneg::ui`: `MainWindow` (Filmstreifen, Arbeitsfläche, Werkzeuge, Bearbeitungsliste, Histogramm, Menüs, Kürzel, Drag & Drop, Bewertung und Filter, Vorlagen, Einstellungen), `ImageCanvas` (QRhiWidget, Textur-Kopie, Zoom Einpassen/100 %/200 %), Werkzeuge `CropRotateTool`, `RectPickerTool`, `RetouchTool`, Felder `ConversionPanel`, `GradationPanel`, `AdjustPanel` (`ParamSlider`), `EditListModel`, `FilmstripModel`/`FilmstripView`, `HistogramWidget`, Dialoge (Export, Kontaktabzug, Einfügen, Einstellungen), `QtSessionBridge`, `UiController`, `GuiApplication`, englische Oberfläche über `TableTranslator` (Tabelle, Prüfung `tools/check_translations.py`).
+- application: `RollService` (Ordner öffnen, Prüfsummen, Begleitdateien, Umbenennungen), `ThumbnailService` (JPEG, Cache, Bündelung), `AnalysisService::measureBase` (Rechteck), `CommandBus::setRating`, `ExportSettings::longEdge/grayscale` (Pipeline verkleinert beim Export).
+- adapter_json: `FileThumbnailCache` (LRU, 2 GB); Vorlagennamen mit Sonderzeichen und Umlauten (Fehler zuerst per Test `M8_PresetNamesWithSpecialCharacters` reproduziert, dann behoben).
+- Programm `autoneg` mit Kompositionswurzel `apps/autoneg/composition.cpp` (auch von den E2E-Tests genutzt), Optionen `--config`/`--cache`, `qt.conf` im Entwicklungsbau (Windows).
+- Tests: U-UI-01…05, K-14 für IEditRepository/IRollRepository/ICacheStore (Fakes und JSON-Adapter), E2E mit Qt Test (offscreen, künstliche Negative als TIFF), `M8_*` für Dienste.
+- Probezug mit echten Scans (Windows, eigene Fenster): Rolle öffnet, Vorschau und Miniaturen erscheinen.
+- Unit-Laufzeit Debug nacheinander 59,4 s (Vorgabe < 1 min, knapp; U-PIP-13 18,5 s, Bildgrößen vom Szenario vorgegeben).
+
+Offen nach M8 (K-M8-11): Weißabgleich-Pipette, Kurven-Werkzeug (Tonwerte und Kurven), Basis übernehmen/sperren (E-06/E-07), Flat-Field-Kalibrierung (E-08), Messbereich anzeigen (E-04), einheitlicher Kontaktabzug in E2E (E-35), Drucken (E-37, braucht Drucker), schreibgeschützter Ordner (E-40), hohe Pixeldichte (E-47), Leistung (E-49, M9), Detailansicht mit ROI. Gleiche Scans mit identischem Inhalt teilen sich die FrameId.
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -196,6 +217,8 @@ Offen aus M6:
 | L-05 | 22.10.2026 | Multigrade-Kennwerte aus Ilford MULTIGRADE IV RC DeLuxe |
 | A-09…A-12 | 19.10.2026 | genehmigt: ui → Kernmodule, Adapterregeln (TBB in adapter_tbb und backend_cpu, OS-Header nur in Adaptern), Drittbibliotheken unter Windows mit vcpkg-Standard-Toolchain, statische Module |
 | K-M1-01…14 | 19.10.2026 | Abweichungen von den Klassendiagrammen in M1 (Details in `abweichungen_planung.txt`, Abschnitt G) |
+| D-15 | 23.10.2026 | Weiterarbeit bis M9 ohne Meilenstein-OK; eigene Entscheidungen als ENTWICKLER |
+| D-16 | 23.10.2026 | Qt 6.11.2 (vcpkg, reduzierte Features), Option `AUTONEG_WITH_GUI`, TSan ohne GUI (ENTWICKLER) |
 
 ## Offene Fragen an den Nutzer
 
@@ -221,3 +244,9 @@ Offen aus M6:
 - `src/adapters/tbb/src/tbb_task_executor.cpp`: Arena-Prioritäten und global_control; Verhalten unter TSan geprüft.
 - `tools/visual_check/visual_check.py`: ruft das Linux-Programm aus Windows über `wsl` auf (WSL-Pfade); unter Linux direkt mit dem Programmpfad.
 - `src/model/include/autoneg/model/roll.hpp`: `Frame::path`/`Roll::folder` sind `std::filesystem::path` – Pfadtrennzeichen und Kodierung (Umlaute, z. B. „Marius Götz“) ab M4/M6 auf beiden Systemen prüfen.
+- `src/adapters/qtprint/src/qt_document_renderer.cpp`: `QtGuiSession` setzt nur unter Linux ohne Anzeige `QT_QPA_PLATFORM=offscreen`; Pfade über `fromStdU16String` (B-22).
+- `tests/component/adapters/qtprint_test.cpp`, `tests/unit/ui/ui_test.cpp`, `tests/e2e/e2e_test.cpp`: Umgebungsvariablen über `_putenv_s`/`setenv`; Qt-Plugins unter Windows über `QT_PLUGIN_PATH` (Qt als DLL), unter Linux statisch eingebunden (`qt_import_plugins`).
+- `apps/autoneg/CMakeLists.txt`: `qt.conf` nur bei Qt als DLL (Windows); `WIN32_EXECUTABLE`.
+- `src/ui/src/gui_application.cpp`: Benutzerverzeichnisse über `QStandardPaths` (%APPDATA% bzw. ~/.config).
+- `src/adapters/json/src/json_config_store.cpp`: Vorlagennamen als UTF-8-Pfad (`u8path`), Windows-unzulässige Zeichen kodiert.
+- `src/application/src/roll_service.cpp`: Änderungszeit über `clock_cast`, Dateiendungen ohne Beachtung der Groß-/Kleinschreibung.

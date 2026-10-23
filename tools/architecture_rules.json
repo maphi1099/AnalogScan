@@ -68,7 +68,8 @@
     "adapter_qtprint": "autoneg/adapter/qtprint/",
     "adapter_spdlog": "autoneg/adapter/spdlog/",
     "adapter_tbb": "autoneg/adapter/tbb/",
-    "backend_cpu": "autoneg/backend/cpu/"
+    "backend_cpu": "autoneg/backend/cpu/",
+    "autoneg": "autoneg/app/"
   },
 
   "tests": {
@@ -76,6 +77,7 @@
     "includeRoots": ["autoneg/mocks/", "autoneg/testing/", "autoneg/reference/"],
     "foreign": ["gtest", "platform"],
     "componentDir": "tests/component",
-    "componentForeign": "*"
+    "componentForeign": "*",
+    "foreignDirs": { "tests/unit/ui": ["qt"], "tests/e2e": ["qt"] }
   }
 }

@@ -34,7 +34,9 @@ struct OutputSpec
 struct RenderProfile
 {
     RenderMode mode = RenderMode::Preview;
-    base::Size target;             ///< Zielgröße der Vorschau; 0 = volle Auflösung der Quelle
+    /// Zielgröße: Vorschau/Miniatur (Proxy der Quelle) bzw. beim Export Verkleinern des
+    /// Ergebnisses auf diese Box (LF-EXP-06); 0 = volle Auflösung
+    base::Size target;
     std::optional<image::Roi> roi; ///< Detail: sichtbarer Ausschnitt
     OutputSpec output;
     bool useCache = false;

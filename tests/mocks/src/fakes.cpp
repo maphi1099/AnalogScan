@@ -154,7 +154,8 @@ base::Expected<void> validate(const image::ImageBuffer& img, const ports::WriteO
     }
     const int b = o.bitDepth;
     const bool ok = (o.format == ports::FileFormat::Tiff && (b == 8 || b == 16 || b == 32)) ||
-                    (o.format == ports::FileFormat::Png && (b == 8 || b == 16));
+                    (o.format == ports::FileFormat::Png && (b == 8 || b == 16)) ||
+                    (o.format == ports::FileFormat::Jpeg && b == 8);
     if (!ok) {
         return base::makeError(base::ErrorCode::InvalidArgument, "Bittiefe wird nicht unterstützt");
     }

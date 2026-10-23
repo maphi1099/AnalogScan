@@ -5,6 +5,7 @@
 
 #include "autoneg/ports/color.hpp"
 #include "autoneg/ports/compute_backend.hpp"
+#include "autoneg/ports/document_renderer.hpp"
 #include "autoneg/ports/film_profile_source.hpp"
 #include "autoneg/ports/image_io.hpp"
 #include "autoneg/ports/inference.hpp"
@@ -180,6 +181,15 @@ class MockFilmProfileSource : public ports::IFilmProfileSource
 public:
     MOCK_METHOD(std::vector<ports::FilmProfileInfo>, list, (), (override));
     MOCK_METHOD(Expected<model::JsonValue>, load, (const std::string&), (override));
+};
+
+class MockDocumentRenderer : public ports::IDocumentRenderer
+{
+public:
+    MOCK_METHOD(Expected<void>, writePdf, (std::span<const ports::RenderedPage>, const fs::path&),
+                (override));
+    MOCK_METHOD(Expected<void>, print, (std::span<const ports::RenderedPage>, const ports::PrintSettings&),
+                (override));
 };
 
 } // namespace autoneg::mocks
