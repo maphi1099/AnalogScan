@@ -9,3 +9,8 @@ race:OpenImageIO::*::spin_mutex::lock
 # glibc mktime/tzset: Zeitzonenpuffer wird unter glibc-internen Sperren (Futex, für TSan
 # unsichtbar) freigegeben und neu angelegt. Aufrufer ist LibRaw beim Lesen der Aufnahmezeit.
 race:LibRaw::get_timestamp
+
+# libstdc++ ctype<char>::narrow füllt einen Zeichen-Cache ohne Sperre; alle Threads schreiben
+# denselben Wert (GCC-Fehler 77704). Aufrufer ist std::regex in OpenImageIO (erase_attribute
+# beim Öffnen von TIFF-Dateien in mehreren Threads, K-16).
+race:std::ctype<char>::narrow

@@ -3,6 +3,7 @@
 #include <lcms2.h>
 
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,16 @@ namespace {
 
 using ports::IccProfile;
 using ports::ProfileId;
+
+/// Little CMS beschreibt in cmsD50_xyY einen statischen Puffer (Schwarzpunktkompensation beim
+/// Anlegen von Transformationen, Graustufenprofil). Der Puffer ist prozessweit, unabhängig vom
+/// Kontext; deshalb serialisiert diese Sperre alle Aufrufe, die ihn berühren (B-35). Angelegt
+/// wird selten, angewendet wird ohne Sperre.
+std::mutex& lcmsGlobalsMutex()
+{
+    static std::mutex m;
+    return m;
+}
 
 /// Besitz eines Little-CMS-Profils.
 struct ProfileHandle
@@ -237,6 +248,7 @@ LcmsColorEngine::LcmsColorEngine()
     : impl_(std::make_unique<Impl>())
 {
     impl_->ctx = cmsCreateContext(nullptr, nullptr);
+    const std::scoped_lock lock(lcmsGlobalsMutex());
     for (const ProfileId id : {ProfileId::WorkingRec2020Linear, ProfileId::Srgb, ProfileId::AdobeRgb,
                                ProfileId::ProPhoto, ProfileId::GrayGamma22}) {
         const ProfileHandle p(build(impl_->ctx, id));
@@ -292,8 +304,11 @@ LcmsColorEngine::transform(const IccProfile& src, const IccProfile& dst, ports::
     }
     const cmsUInt32Number fin = ci == 1 ? TYPE_GRAY_FLT : TYPE_RGB_FLT;
     const cmsUInt32Number fout = co == 1 ? TYPE_GRAY_FLT : TYPE_RGB_FLT;
-    cmsHTRANSFORM h =
-        cmsCreateTransformTHR(impl_->ctx, in.h, fin, out.h, fout, intentOf(intent), cmsFLAGS_NOCACHE);
+    cmsHTRANSFORM h = nullptr;
+    {
+        const std::scoped_lock lock(lcmsGlobalsMutex());
+        h = cmsCreateTransformTHR(impl_->ctx, in.h, fin, out.h, fout, intentOf(intent), cmsFLAGS_NOCACHE);
+    }
     if (h == nullptr) {
         return base::makeError(base::ErrorCode::Unsupported,
                                "Transformation " + src.name + " -> " + dst.name + " nicht möglich");

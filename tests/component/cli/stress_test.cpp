@@ -129,6 +129,9 @@ TEST(StressComponent, K_16_ConcurrencyUnderLoad)
     });
 
     const auto end = Clock::now() + std::chrono::seconds(seconds());
+    // Offene Jobs begrenzen wie bei echter Bedienung; sonst staut sich bei langen Läufen ein
+    // unbegrenzter Rückstand an Stapelexporten (B-37).
+    constexpr std::size_t maxJobs = 16;
     std::vector<application::JobHandle> jobs;
     std::uint64_t commands = 0;
     const fs::path exportDir = tmp.path() / "export";
@@ -165,9 +168,14 @@ TEST(StressComponent, K_16_ConcurrencyUnderLoad)
                                    [&thumbs](const application::ThumbnailService::Result&) { ++thumbs; });
             break;
         case 6:
-            jobs.push_back(c.analysis().detectFrame(f, shared));
+            if (jobs.size() < maxJobs) {
+                jobs.push_back(c.analysis().detectFrame(f, shared));
+            }
             break;
         case 7: { // Stapelexport aller Bilder
+            if (jobs.size() >= maxJobs) {
+                break;
+            }
             std::vector<application::ExportService::Item> items;
             for (const model::Frame& fr : frames) {
                 items.push_back({fr, c.bus().history(fr.id).current()});
@@ -194,13 +202,13 @@ TEST(StressComponent, K_16_ConcurrencyUnderLoad)
         std::erase_if(jobs, [](const application::JobHandle& h) { return h.done(); });
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    // Rest abarbeiten
+    // Rest abarbeiten; Herzschlag nur, wenn ein Job fertig wird (Fortschritt, nicht Warten)
     for (const application::JobHandle& h : jobs) {
         while (!h.done()) {
-            heartbeat = Clock::now().time_since_epoch().count();
             queue.drain();
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
+        heartbeat = Clock::now().time_since_epoch().count();
     }
     c.render().idle();
     queue.drain();

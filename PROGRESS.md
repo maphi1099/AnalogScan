@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 23.10.2026 – **M7 und M8 fertig (Windows Debug/Release grün, Linux siehe M8 – Ergebnis); M9 als Nächstes (autonom bis M9, D-15).** Wartet auf Nutzer: Annotationen für K-11 (L-06/L-07), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`). M3–M6 auf Anweisung des Nutzers ohne formales OK fortgesetzt.
+Stand: 23.10.2026 – **M7, M8 und M9 fertig (autonom, D-15); Version 1.0 bis auf die offenen Punkte unten umgesetzt.** Wartet auf Nutzer: Bestätigung von D-15, D-16, D-17 und der K-M7…K-M9/T-16/T-17-Einträge, Annotationen für K-11 (L-06/L-07), OE-03 (Lizenz), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`).
 
 ## Ablage
 
@@ -200,7 +200,9 @@ Offen nach M8 (K-M8-11): Weißabgleich-Pipette, Kurven-Werkzeug (Tonwerte und Ku
 - `autoneg-cli`: `info`, `detect`, `export` (Optionen wie im Exportdialog, `--preset`), `contact-sheet` (PDF, nur mit Qt); UTF-8-Manifest unter Windows.
 - `SpdLogger` (adapter_spdlog) mit eigener rotierender Senke (Unicode-Pfade unter Windows); Protokoll `autoneg.log` im Cache-Verzeichnis.
 - Leistung (D-17): `IComputeBackend::colorTransform` (Farbumrechnung datenparallel, bitgleich), LibRaw mit OpenMP (Feature `raw-parallel`, nicht unter TSan), Freigabe der Quellen nach jedem Exportbild.
-- Behoben (je zuerst per Test reproduziert): Ersetzen unter Windows bei kurz geöffneter Zieldatei (B-29); Lecks der Qt-Instanz in Tests (B-30).
+- Behoben (je zuerst per Test reproduziert): Ersetzen unter Windows bei kurz geöffneter Zieldatei (B-29); Lecks der Qt-Instanz in Tests (B-30); Datenrennen in Little CMS beim gleichzeitigen Anlegen von Transformationen (B-35, Sperre im Adapter).
+- Sanitizer: Unterdrückungen nur für Fremdcode – TSan `std::ctype<char>::narrow` (B-32), LSan `libomp`/Qt-Schriftcache im Worker (`tests/lsan.supp`, B-34). K-16-Treiber begrenzt offene Jobs, Watchdog zählt nur Fortschritt (B-37).
+- Nachweise (23.10.2026): windows-clang Debug + Release, linux-clang, linux-gcc, linux-clang-asan je 307/307; linux-clang-tsan 263/263 (ohne GUI). K-16 über 600 s unter TSan bestanden (627 s, 74 253 Befehle, 24 789 Miniaturen, keine Meldung).
 - Tests: K-17 (CLI = Anwendung, Pixel bitgleich), K-16 (Stress, Watchdog, Konsistenz), K-20 (Protokoll, Rotation, Umlaute), `M9_*` (Backend, Datenhaltung, CLI-Aufruffehler).
 
 Leistungsmessung (K-18/E-49, `tests/tools/bench`, Release, Entwicklerrechner mit 32 Hardware-Threads – nicht der Referenzrechner mit 8 Kernen):

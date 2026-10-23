@@ -9,6 +9,11 @@ if(AUTONEG_SANITIZER STREQUAL "thread" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(CMAKE_TEST_LAUNCHER ${CMAKE_COMMAND} -E env
         "TSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/tsan.supp" ${AUTONEG_TASKSET} -c 0-7)
 endif()
+# Speicherlecks in Fremdcode unterdrücken (tests/lsan.supp, B-34)
+if(AUTONEG_SANITIZER STREQUAL "address")
+    set(CMAKE_TEST_LAUNCHER ${CMAKE_COMMAND} -E env
+        "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp:print_suppressions=0")
+endif()
 
 add_subdirectory(support)
 add_subdirectory(mocks)

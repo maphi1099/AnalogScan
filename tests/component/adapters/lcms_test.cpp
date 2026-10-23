@@ -245,5 +245,36 @@ TEST(LcmsComponent, K_07_ConcurrentTransformsAreIdentical)
     }
 }
 
+// NF-ARC-16 (B-35): Transformationen in mehreren Threads gleichzeitig anlegen. Little CMS
+// beschreibt dabei für die Schwarzpunktkompensation einen statischen D50-Puffer
+// (cmsD50_xyY); ohne Serialisierung meldet ThreadSanitizer ein Datenrennen.
+TEST(LcmsComponent, M9_ConcurrentTransformCreationIsRaceFree)
+{
+    LcmsColorEngine first;
+    LcmsColorEngine second; // eigener Kontext: der Puffer ist prozessweit
+    const ports::IccProfile working = first.profile(ports::ProfileId::WorkingRec2020Linear).value();
+    const ports::IccProfile srgb = first.profile(ports::ProfileId::Srgb).value();
+    const ports::IccProfile gray = first.profile(ports::ProfileId::GrayGamma22).value();
+    std::vector<std::thread> threads;
+    std::vector<int> ok(8, 0);
+    for (std::size_t i = 0; i < ok.size(); ++i) {
+        threads.emplace_back([&, i] {
+            LcmsColorEngine& engine = i % 2 == 0 ? first : second;
+            for (std::size_t n = 0; n < 20; ++n) {
+                const ports::IccProfile& dst = (i + n) % 2 == 0 ? srgb : gray;
+                if (engine.transform(working, dst, ports::Intent::Perceptual).has_value()) {
+                    ++ok[i];
+                }
+            }
+        });
+    }
+    for (auto& th : threads) {
+        th.join();
+    }
+    for (const int n : ok) {
+        EXPECT_EQ(n, 20);
+    }
+}
+
 } // namespace
 } // namespace autoneg::adapter::lcms

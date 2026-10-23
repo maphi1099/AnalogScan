@@ -16,8 +16,10 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <psapi.h>
 #include <windows.h> // plattformabhängig: Spitzenspeicher (PROGRESS.md)
+
+// nach windows.h (eigene Gruppe, damit clang-format nicht umsortiert)
+#include <psapi.h>
 #else
 #include <sys/resource.h>
 #endif

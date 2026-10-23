@@ -1,0 +1,15 @@
+# LeakSanitizer-Unterdrückungen (BUGS.md B-34). Nur Fremdcode, eng gefasst; eigener Code wird
+# nie unterdrückt. Jeder Eintrag mit Begründung.
+
+# libomp (Feature raw-parallel): dlsym legt beim ersten GOMP_critical_start einen Fehlerpuffer
+# von glibc an, der nie freigegeben wird (24 Byte je Prozess).
+leak:libomp.so
+
+# Qt: Schriftcache (QFontEngineFT, FreeType, HarfBuzz) eines oneTBB-Workers, der den
+# Kontaktabzug als PDF gesetzt hat. Qt hält ihn im Thread-Speicher des übernommenen Threads;
+# der Worker endet erst mit dem Prozess, der Cache wird nicht abgebaut (begrenzt, einmal je Thread).
+leak:QFontEngineFT::
+leak:QFontDatabasePrivate::load
+leak:QFontPrivate::engineForScript
+leak:QTextEngine::shape
+leak:QThreadData::createCurrentThreadData

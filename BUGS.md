@@ -267,3 +267,51 @@ Format je Eintrag:
 - Ursache: `IColorTransform::apply` (Little CMS) und `LibRaw::dcraw_process` laufen auf einem Kern; der SourceProvider behielt jede Quelle in voller Auflösung.
 - Abhilfe: `IComputeBackend::colorTransform` (Zeilenblöcke, oneTBB), LibRaw mit OpenMP, Freigabe der Quellen nach jedem Bild (D-17, K-M9-05). Danach: Export 61-MP-RAW 7,3 s, 100 MP (TIFF) 9,9 s, 5,3 GB.
 - Status: behoben; Skalierung 1 → 8 Threads 2,5 statt ≥ 5 bleibt offen (serielles TIFF-Schreiben, Little-CMS-Gleitkommapfad)
+
+## B-32: TSan meldet Rennen in `std::ctype<char>::narrow` (K-16)
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux, Preset `linux-clang-tsan`
+- Symptom: K-16 scheitert mit „data race“ in `std::ctype<char>::narrow`, aufgerufen aus `std::regex` in `OpenImageIO::ImageSpec::erase_attribute` (TIFF öffnen in Render-Thread und Job-Thread gleichzeitig).
+- Ursache: libstdc++ füllt einen Zeichen-Cache ohne Sperre; alle Threads schreiben denselben Wert (GCC-Fehler 77704, gutartig).
+- Abhilfe: Eintrag `race:std::ctype<char>::narrow` in `tests/tsan.supp`.
+- Status: behoben
+
+## B-33: linux-clang findet OpenMP nicht (Feature `raw-parallel`)
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux (Arch), Presets `linux-clang`, `linux-clang-asan`
+- Symptom: Konfigurieren bricht ab: „Could NOT find OpenMP_CXX“ aus `librawConfig.cmake`; linux-gcc läuft (libgomp gehört zu GCC).
+- Ursache: clang bringt seine OpenMP-Laufzeit nicht mit; unter Arch liegt `libomp` im Paket `openmp`.
+- Abhilfe: `pacman -S openmp` (Ubuntu/Debian: `libomp-dev`), dann Build-Verzeichnis neu konfigurieren.
+- Status: behoben
+
+## B-34: LeakSanitizer meldet libomp und Qts Schriftcache im Job-Thread
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux, Preset `linux-clang-asan`
+- Symptom: K-16, K-17, E-17, E-24 scheitern mit 24 Byte „Direct leak“ aus `dlsym` in `libomp.so`; E-34 mit etwa 180 kB „Indirect leak“ in FreeType/HarfBuzz unter `QFontEngineFT` (Kontaktabzug-PDF in einem oneTBB-Worker).
+- Ursache: Fremdcode. glibc legt in `dlsym` einen Fehlerpuffer an, den libomp nie freigibt. Qt hält den Schriftcache im Thread-Speicher des übernommenen Worker-Threads; der Worker endet erst mit dem Prozess.
+- Abhilfe: `tests/lsan.supp` (eng gefasst, nur Fremdcode), unter ASan per `LSAN_OPTIONS` im Test-Launcher. Achtung: Bei `DISCOVERY_MODE PRE_TEST` übernimmt CTest einen geänderten Launcher erst, wenn das Testprogramm neu gebaut wird; sonst `build/<preset>/tests/**/*_tests.cmake` löschen.
+- Status: behoben
+
+## B-35: Datenrennen in Little CMS beim gleichzeitigen Anlegen von Transformationen
+- Erstmals: 23.10.2026 (M9, K-16 über 10 min unter TSan), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: alle (gefunden unter `linux-clang-tsan`)
+- Symptom: „data race“ in `cmsXYZ2xyY` aus `cmsD50_xyY` (Schwarzpunktkompensation in `cmsCreateTransformTHR`), zwei Miniaturen-Jobs gleichzeitig.
+- Ursache: Little CMS 2.19 schreibt in `cmsD50_xyY` einen statischen, prozessweiten Puffer, auch bei getrennten Kontexten.
+- Abhilfe: `LcmsColorEngine` serialisiert das Anlegen von Profilen und Transformationen mit einer prozessweiten Sperre; das Anwenden bleibt ohne Sperre. Reproduziert durch `LcmsComponent.M9_ConcurrentTransformCreationIsRaceFree`.
+- Status: behoben
+
+## B-36: clang-format sortiert `psapi.h` vor `windows.h`
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Windows (`tests/tools/bench/bench.cpp`)
+- Symptom: „unknown type name 'BOOL'“ in `psapi.h`, nachdem clang-format nach dem letzten Bau gelaufen war.
+- Ursache: clang-format sortiert Includes innerhalb einer Gruppe alphabetisch; `psapi.h` braucht die Typen aus `windows.h`.
+- Abhilfe: Header, die `windows.h` voraussetzen, in eine eigene Gruppe (Leerzeile, Kommentar) nach `windows.h`. Nach dem Formatieren immer noch einmal bauen.
+- Status: behoben
+
+## B-37: K-16 über 10 min überschreitet das CTest-Zeitlimit (Rückstau im Test)
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux, `linux-clang-tsan`, `AUTONEG_STRESS_SECONDS=600`
+- Symptom: Timeout nach 1500 s, kein Watchdog-Alarm.
+- Ursache: Der Stress-Treiber startete unbegrenzt Stapelexporte und Erkennungen (alle paar Millisekunden); nach 600 s stand ein Rückstau von Tausenden Jobs an. Der Watchdog setzte den Herzschlag beim Abarbeiten auch ohne Fortschritt.
+- Abhilfe: Höchstens 16 offene Jobs (wie bei echter Bedienung); in der Abarbeitungsphase zählt nur ein fertiger Job als Fortschritt.
+- Status: behoben (Nachweis siehe PROGRESS)
