@@ -188,12 +188,12 @@ TEST(JobSchedulerTest, M10_ParallelForWithOneWorkerFinishes)
     one.workers = 1;
     scheduler.configure(one);
     std::atomic<int> sum{0};
-    const auto h = scheduler.submit(job([&](JobContext& c) -> base::Expected<void> {
-                                        scheduler.parallelFor(c.priority, 10, 4,
-                                                              [&](std::size_t i) { sum += static_cast<int>(i); });
-                                        return {};
-                                    }),
-                                    ports::Priority::Batch);
+    const auto h = scheduler.submit(
+        job([&](JobContext& c) -> base::Expected<void> {
+            scheduler.parallelFor(c.priority, 10, 4, [&](std::size_t i) { sum += static_cast<int>(i); });
+            return {};
+        }),
+        ports::Priority::Batch);
     ASSERT_TRUE(h.wait().has_value());
     EXPECT_EQ(sum.load(), 45);
 }

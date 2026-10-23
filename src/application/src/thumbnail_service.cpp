@@ -134,6 +134,14 @@ ThumbnailService::Result ThumbnailService::make(const model::Frame& f, const mod
     r.profile.priority = ports::Priority::Background;
     r.profile.output.transform = *xf;
     r.cancel = cancel;
+    // Speicherbudget wie beim Stapel (NF-PERF-11): sonst rendert jeder Worker eine Miniatur
+    // aus einer dekodierten Quelle, bei 36 RAW-Scans rund 16 GB gleichzeitig
+    std::size_t bytes = 0;
+    if (const auto info = renderer_.info(f.id, f.path); info) {
+        bytes = static_cast<std::size_t>(info->width) * static_cast<std::size_t>(info->height) *
+                proxyRenderBytesPerPixel;
+    }
+    const MemoryBudget::Lease lease = jobs_.budget().acquireUpTo(bytes);
     auto display = renderer_.render(r);
     if (release_) {
         release_(f.id);

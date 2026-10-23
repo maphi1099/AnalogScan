@@ -913,7 +913,8 @@ void MainWindow::doSettings()
         before.language = *v->asString();
     }
     before.threads = num("threads", 0);
-    before.memoryMb = num("memoryBudgetMb", static_cast<int>(s_.jobs.budget().total() >> 20U)); // Standard: 40 %
+    before.memoryMb =
+        num("memoryBudgetMb", static_cast<int>(s_.jobs.budget().total() >> 20U)); // Standard: 40 %
     SettingsDialog d(this);
     d.setValues(before);
     if (d.exec() != QDialog::Accepted) {

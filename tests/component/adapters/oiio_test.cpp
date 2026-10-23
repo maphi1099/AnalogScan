@@ -13,14 +13,14 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
-#include <tuple>
-#include <memory>
-#include <cstring>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <tuple>
 
 namespace autoneg::adapter::oiio {
 namespace {
@@ -222,7 +222,8 @@ TEST(OiioComponent, M10_IntegerImagesWriteLikeFloat)
         const image::ImageBuffer f = exportImage(channels);
         for (const auto& [format, bits, ext] :
              {std::tuple{ports::FileFormat::Tiff, 16, ".tif"}, std::tuple{ports::FileFormat::Png, 16, ".png"},
-              std::tuple{ports::FileFormat::Jpeg, 8, ".jpg"}, std::tuple{ports::FileFormat::Tiff, 8, ".tif"}}) {
+              std::tuple{ports::FileFormat::Jpeg, 8, ".jpg"},
+              std::tuple{ports::FileFormat::Tiff, 8, ".tif"}}) {
             SCOPED_TRACE(std::string(ext) + " " + std::to_string(bits) + " ch=" + std::to_string(channels));
             ports::WriteOptions o;
             o.format = format;

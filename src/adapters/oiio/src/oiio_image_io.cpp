@@ -176,7 +176,7 @@ base::Expected<void> writeWith(OIIO::ImageOutput& out, const std::string& name, 
         return base::makeError(base::ErrorCode::Io, "Datei nicht anlegbar (" + out.geterror() + ")");
     }
     // Ganzzahlige Bilder (K-M10-03) gehen ohne Umwandlung durch, sofern die Bittiefe passt
-    const OIIO::TypeDesc given = img.spec().format == image::PixelFormat::U16 ? OIIO::TypeDesc::UINT16
+    const OIIO::TypeDesc given = img.spec().format == image::PixelFormat::U16  ? OIIO::TypeDesc::UINT16
                                  : img.spec().format == image::PixelFormat::U8 ? OIIO::TypeDesc::UINT8
                                                                                : OIIO::TypeDesc::FLOAT;
     const bool written = out.write_image(given, img.hostBytes().data());

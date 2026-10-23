@@ -6,8 +6,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <optional>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -171,9 +171,10 @@ std::optional<Mat3> inverse(const Mat3& m)
         return std::nullopt;
     }
     const double k = 1.0 / det;
-    return Mat3{(m[4] * m[8] - m[5] * m[7]) * k, (m[2] * m[7] - m[1] * m[8]) * k, (m[1] * m[5] - m[2] * m[4]) * k,
-                (m[5] * m[6] - m[3] * m[8]) * k, (m[0] * m[8] - m[2] * m[6]) * k, (m[2] * m[3] - m[0] * m[5]) * k,
-                (m[3] * m[7] - m[4] * m[6]) * k, (m[1] * m[6] - m[0] * m[7]) * k, (m[0] * m[4] - m[1] * m[3]) * k};
+    return Mat3{
+        (m[4] * m[8] - m[5] * m[7]) * k, (m[2] * m[7] - m[1] * m[8]) * k, (m[1] * m[5] - m[2] * m[4]) * k,
+        (m[5] * m[6] - m[3] * m[8]) * k, (m[0] * m[8] - m[2] * m[6]) * k, (m[2] * m[3] - m[0] * m[5]) * k,
+        (m[3] * m[7] - m[4] * m[6]) * k, (m[1] * m[6] - m[0] * m[7]) * k, (m[0] * m[4] - m[1] * m[3]) * k};
 }
 
 Mat3 multiply(const Mat3& a, const Mat3& b)
@@ -283,7 +284,8 @@ bool encoding(const std::optional<Parametric>& c, ports::MatrixShaper& ms)
 /// Profile nicht passt.
 std::optional<ports::MatrixShaper> matrixShaperOf(cmsHPROFILE src, cmsHPROFILE dst)
 {
-    if (cmsIsMatrixShaper(src) == 0 || cmsIsMatrixShaper(dst) == 0 || cmsGetColorSpace(src) != cmsSigRgbData) {
+    if (cmsIsMatrixShaper(src) == 0 || cmsIsMatrixShaper(dst) == 0 ||
+        cmsGetColorSpace(src) != cmsSigRgbData) {
         return std::nullopt;
     }
     for (const cmsTagSignature t : {cmsSigRedTRCTag, cmsSigGreenTRCTag, cmsSigBlueTRCTag}) {
@@ -302,8 +304,15 @@ std::optional<ports::MatrixShaper> matrixShaperOf(cmsHPROFILE src, cmsHPROFILE d
             return std::nullopt;
         }
         out.outChannels = 1;
-        out.matrix = {static_cast<float>((*ms)[3]), static_cast<float>((*ms)[4]), static_cast<float>((*ms)[5]),
-                      0, 0, 0, 0, 0, 0}; // Helligkeit Y
+        out.matrix = {static_cast<float>((*ms)[3]),
+                      static_cast<float>((*ms)[4]),
+                      static_cast<float>((*ms)[5]),
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0}; // Helligkeit Y
         return out;
     }
     const auto md = colorants(dst);
@@ -342,7 +351,8 @@ bool agrees(cmsHTRANSFORM h, const ports::MatrixShaper& ms)
             const auto row = static_cast<std::size_t>(c) * 3;
             const float lin = ms.matrix[row] * in[i * 3] + ms.matrix[row + 1] * in[i * 3 + 1] +
                               ms.matrix[row + 2] * in[i * 3 + 2];
-            const float want = out[i * static_cast<std::size_t>(ms.outChannels) + static_cast<std::size_t>(c)];
+            const float want =
+                out[i * static_cast<std::size_t>(ms.outChannels) + static_cast<std::size_t>(c)];
             if (!(std::abs(ms.encode(lin) - want) <= 1e-5F)) {
                 return false;
             }

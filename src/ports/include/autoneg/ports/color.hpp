@@ -48,10 +48,7 @@ struct MatrixShaper
     float s = 0.0F;
 
     /// Skalare Auswertung eines Werts der Kodierkurve (Referenz für Tests und Restschleifen).
-    [[nodiscard]] float encode(float lin) const
-    {
-        return lin >= t ? k1 * std::pow(lin, p) + k0 : s * lin;
-    }
+    [[nodiscard]] float encode(float lin) const { return lin >= t ? k1 * std::pow(lin, p) + k0 : s * lin; }
 };
 
 /// Fertige Farbtransformation. Nach der Erzeugung unveränderlich und threadsicher.

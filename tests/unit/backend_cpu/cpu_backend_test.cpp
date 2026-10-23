@@ -418,11 +418,12 @@ TEST(CpuBackend, M10_MatrixShaperMatchesReferenceOnEverySimdTarget)
     const TargetGuard guard;
     CpuBackend one(CpuBackend::Options{1});
     CpuBackend many(CpuBackend::Options{16});
-    for (const auto& [ms, inChannels] : {std::pair{srgb, 3}, std::pair{gamma, 3}, std::pair{gray, 3},
-                                         std::pair{srgb, 1}}) {
+    for (const auto& [ms, inChannels] :
+         {std::pair{srgb, 3}, std::pair{gamma, 3}, std::pair{gray, 3}, std::pair{srgb, 1}}) {
         const ShaperOnly xf(ms);
         for (const int w : {1, 7, 257}) { // Rest kürzer als ein Vektor, ungerade Breiten
-            const ImageBuffer in = randomImage(w, 131, inChannels, static_cast<std::uint64_t>(w + inChannels));
+            const ImageBuffer in =
+                randomImage(w, 131, inChannels, static_cast<std::uint64_t>(w + inChannels));
             const ImageBuffer ref = reference::matrixShaper(in, ms);
             for (const SimdTarget& t : CpuBackend::targets()) {
                 SCOPED_TRACE(t.name + " w=" + std::to_string(w) + " ch=" + std::to_string(inChannels));

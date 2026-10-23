@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 23.10.2026 – **M7, M8 und M9 fertig (autonom, D-15); Version 1.0 bis auf die offenen Punkte unten umgesetzt.** Wartet auf Nutzer: Bestätigung von D-15, D-16, D-17 und der K-M7…K-M9/T-16/T-17-Einträge, Annotationen für K-11 (L-06/L-07), OE-03 (Lizenz), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`).
+Stand: 23.10.2026 – **M7, M8 und M9 fertig; danach Leistung nach Auftrag des Nutzers (paralleler Stapelexport und Kontaktabzug, SIMD-Farbumrechnung, Quantisierung im Backend, Speicherbudget für Miniaturen).** Wartet auf Nutzer: Bestätigung von D-15…D-18 und der K-M7…K-M10/T-16…T-18-Einträge, Annotationen für K-11 (L-06/L-07), OE-03 (Lizenz), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`).
 
 ## Ablage
 
@@ -221,6 +221,33 @@ Leistungsmessung (K-18/E-49, `tests/tools/bench`, Release, Entwicklerrechner mit
 
 Offen nach M9: Skalierung (serielles TIFF-Schreiben, Gleitkommapfad von Little CMS), Stapelexport rechnet Bilder nacheinander, Werte auf dem Referenzrechner prüfen; Lücken aus K-M8-11; K-11 (Annotationen).
 
+### Leistung nach M9 – Ergebnis
+
+Auftrag des Nutzers (23.10.2026): Stapelexport und Kontaktabzug parallel, Leistung deutlich verbessern (auch über SIMD), GPU erst später.
+
+- Stapelexport und Kontaktabzug rechnen mehrere Bilder/Felder gleichzeitig (`JobScheduler::parallelFor`, `MemoryBudget`, `IRenderer::info`); Budget standardmäßig 40 % des Arbeitsspeichers (K-M10-01, -02, -04).
+- Farbumrechnung für Matrix-Kurven-Profile in geschlossener Form mit Highway statt Little CMS, beim Anlegen gegen Little CMS geprüft (D-18).
+- `IComputeBackend::quantize`: F32 → U8/U16 parallel mit SIMD; der Schreiber übernimmt Ganzzahlen ohne Umwandlung (K-M10-03).
+- Miniaturen halten das Speicherbudget ein (B-38, K-M10-05).
+- Tests: `M10_*` (Export, Kontaktabzug, Miniaturen, `parallelFor`, Budget, Matrix-Kurven- und Quantisierungs-Kernel gegen die Referenz auf jeder SIMD-Stufe, Schreiber, Little CMS); E-30 mit 36 Bildern (T-18).
+- Nachweise (23.10.2026): windows-clang Debug 322/322; Linux siehe unten.
+
+Leistungsmessung (Release, Entwicklerrechner 32 Hardware-Threads, 32 GB; Budget 12,8 GB):
+
+| Messung | nach M9 | jetzt | Ziel |
+|---|---|---|---|
+| Export 61-MP-RAW inkl. Dekodieren | 7,3 s | 3,5 s | – |
+| Export 1 Bild, Quelle dekodiert | 4,8 s | 0,98 s | – |
+| Export 1 Bild, 1 Thread | 15,3 s | 1,5 s | – |
+| Export 100 MP (TIFF 16 bit) | 9,9 s | 2,2 s | ≤ 10 s |
+| Stapelexport 36 Bilder (JPEG) | 308 s | 43 s | – |
+| Kontaktabzug 36 Felder | 29,5 s | 5,3 s | ≤ 30 s |
+| Miniaturen 36 Scans | 8,9 s | 5,3 s | ≤ 15 s |
+| Vorschau P95 (61 / 100 MP) | 9,3 / 9,2 ms | 10,4 / 11,8 ms | ≤ 100 ms |
+| Spitzenspeicher des Prozesses | 5,3 GB (seriell) | 9,5 GB (parallel, im Budget) | Budget |
+
+Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil ist so klein geworden, dass das RAW-Dekodieren und das Schreiben überwiegen; im Stapel überlappen sie über mehrere Bilder. Offen: RAW-Dekodierung (2,5 s je 61-MP-Bild), Farbumrechnung und Quantisierung direkt in den Kacheln (weniger Speicher je Bild), Messung auf dem Referenzrechner.
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -247,6 +274,7 @@ Offen nach M9: Skalierung (serielles TIFF-Schreiben, Gleitkommapfad von Little C
 | D-15 | 23.10.2026 | Weiterarbeit bis M9 ohne Meilenstein-OK; eigene Entscheidungen als ENTWICKLER |
 | D-16 | 23.10.2026 | Qt 6.11.2 (vcpkg, reduzierte Features), Option `AUTONEG_WITH_GUI`, TSan ohne GUI (ENTWICKLER) |
 | D-17 | 23.10.2026 | Farbumrechnung datenparallel im Backend, LibRaw mit OpenMP (ENTWICKLER) |
+| D-18 | 23.10.2026 | Matrix-Kurven-Farbumrechnung in geschlossener Form mit SIMD (ENTWICKLER) |
 
 ## Offene Fragen an den Nutzer
 
@@ -284,3 +312,5 @@ Offen nach M9: Skalierung (serielles TIFF-Schreiben, Gleitkommapfad von Little C
 - `src/adapters/json/src/atomic_file_writer.cpp`: Wiederholversuch nur unter Windows (B-29).
 - `tests/tools/bench/bench.cpp`: Spitzenspeicher über `GetProcessMemoryInfo` bzw. `getrusage`.
 - `vcpkg.json` Feature `raw-parallel`: OpenMP-Laufzeit vcomp (Windows) bzw. libgomp/libomp (Linux).
+- `src/adapters/tbb/src/system_memory.cpp`: Arbeitsspeicher über `GlobalMemoryStatusEx` bzw. `sysconf(_SC_PHYS_PAGES)` (Standard-Speicherbudget).
+- `tests/tools/bench/bench.cpp`: aktueller Speicher über `WorkingSetSize` bzw. `/proc/self/statm`.

@@ -36,6 +36,8 @@ public:
 
     /// Nach jedem Feld: dekodierte Quelle freigeben (wie beim Export, NF-PERF-07).
     using Release = std::function<void(const model::FrameId&)>;
+    /// Geschätzter Spitzenbedarf je Quellpixel für ein Feld (Rendern aus halber Auflösung).
+    static constexpr std::size_t contactBytesPerPixel = proxyRenderBytesPerPixel;
 
     ContactSheetService(JobScheduler& jobs, IRenderer& renderer, ports::IColorEngine& color,
                         ports::IDocumentRenderer& document, Release release = {})
@@ -65,6 +67,12 @@ public:
                                                    const layout::FilmFormat& fmt, const model::Roll& roll);
 
 private:
+    [[nodiscard]] base::Expected<image::ImageBuffer>
+    renderSlot(const Item& item, const layout::ImageSlot& slot, const layout::ContactSheetSpec& s,
+               const layout::FilmFormat& fmt, const model::Roll& roll,
+               const std::shared_ptr<const ports::IColorTransform>& xf,
+               const image::CancelToken& cancel) const;
+
     JobScheduler& jobs_;
     IRenderer& renderer_;
     ports::IColorEngine& color_;

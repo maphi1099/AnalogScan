@@ -4,7 +4,10 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
+#include <mutex>
+#include <optional>
 
 namespace autoneg::application {
 
@@ -86,61 +89,116 @@ ContactSheetService::render(const layout::ContactSheetSpec& s, std::span<const I
         return std::unexpected(xf.error());
     }
     const auto pages = build(s, items, fmt);
-    std::vector<ports::RenderedPage> out;
+    // Alle Felder aller Seiten; sie werden parallel gerendert (Ebene 3, wie der Stapelexport)
+    // und danach in fester Reihenfolge den Seiten zugeordnet
+    struct Task
+    {
+        std::size_t page = 0;
+        const layout::ImageSlot* slot = nullptr;
+        const Item* item = nullptr;
+    };
+    std::vector<Task> tasks;
+    for (std::size_t pi = 0; pi < pages.size(); ++pi) {
+        for (const layout::LayoutElement& e : pages[pi].elements) {
+            const auto* slot = std::get_if<layout::ImageSlot>(&e);
+            if (slot == nullptr) {
+                continue;
+            }
+            const auto item = std::ranges::find(items, slot->frame, [](const Item& i) { return i.frame.id; });
+            if (item != items.end()) {
+                tasks.push_back({pi, slot, &*item});
+            }
+        }
+    }
+    std::vector<std::size_t> bytes(tasks.size(), 0);
+    std::size_t largest = 0;
+    for (std::size_t i = 0; i < tasks.size(); ++i) {
+        if (auto info = renderer_.info(tasks[i].item->source.id, tasks[i].item->source.path); info) {
+            bytes[i] = static_cast<std::size_t>(info->width) * static_cast<std::size_t>(info->height) *
+                       contactBytesPerPixel;
+            largest = std::max(largest, bytes[i]);
+        }
+    }
+    const std::size_t threads = static_cast<std::size_t>(std::max(1, jobs_.concurrency()));
+    const std::size_t byBudget =
+        largest > 0 ? std::max<std::size_t>(1, jobs_.budget().total() / largest) : threads;
+    const std::size_t lanes = std::min({tasks.size(), threads, byBudget});
+
+    std::vector<std::optional<image::ImageBuffer>> images(tasks.size());
+    std::vector<std::optional<base::Error>> errors(tasks.size());
+    std::atomic<bool> failed{false};
+    std::mutex progressMutex;
     int done = 0;
+    jobs_.parallelFor(ports::Priority::Batch, tasks.size(), lanes, [&](std::size_t i) {
+        if (failed || cancel.cancelled()) {
+            return;
+        }
+        const MemoryBudget::Lease lease = jobs_.budget().acquireUpTo(bytes[i]);
+        auto r = renderSlot(*tasks[i].item, *tasks[i].slot, s, fmt, roll, *xf, cancel);
+        if (!r) {
+            errors[i] = r.error();
+            failed = true;
+            return;
+        }
+        images[i] = std::move(*r);
+        if (progress) {
+            const std::scoped_lock lock(progressMutex);
+            progress(++done, static_cast<int>(items.size()));
+        }
+    });
+    if (cancel.cancelled()) {
+        return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
+    }
+    for (const auto& e : errors) { // erster Fehler in Feldreihenfolge
+        if (e) {
+            return std::unexpected(*e);
+        }
+    }
+    std::vector<ports::RenderedPage> out;
     for (const layout::PageLayout& page : pages) {
         ports::RenderedPage rp;
         rp.layout = page;
         rp.outputProfile = *srgb;
         rp.dpi = s.dpi;
-        for (const layout::LayoutElement& e : page.elements) {
-            const auto* slot = std::get_if<layout::ImageSlot>(&e);
-            if (slot == nullptr) {
-                continue;
-            }
-            if (cancel.cancelled()) {
-                return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
-            }
-            const auto item = std::ranges::find(items, slot->frame, [](const Item& i) { return i.frame.id; });
-            if (item == items.end()) {
-                continue;
-            }
-            // Pixel nach Slotgröße und Auflösung. Die Zielgröße gilt für das Quellbild vor Zuschnitt
-            // und Drehung: lange Slotseite durch den kleineren Zuschnittanteil, auf beiden Achsen.
-            const model::EditList edits = slotEdits(*item, s, fmt, roll);
-            double cropFraction = 1.0;
-            if (const model::EditEntry* crop = edits.get(model::StepId(std::string(steps::id::crop)))) {
-                if (const auto rect = crop->params.get<model::NormRect>("rect")) {
-                    cropFraction = std::clamp(std::min(rect->w, rect->h), 0.05, 1.0);
-                }
-            }
-            const double longMm = std::max(slot->rectMm.w, slot->rectMm.h);
-            const int px = static_cast<int>(std::ceil(longMm / 25.4 * s.dpi / cropFraction));
-            pipeline::RenderRequest r;
-            r.frame = item->source.id;
-            r.path = item->source.path;
-            r.list = std::make_shared<const model::EditList>(edits);
-            r.film = roll.filmType;
-            r.profile.mode = pipeline::RenderMode::Thumbnail;
-            r.profile.target = {px, px};
-            r.profile.priority = ports::Priority::Batch;
-            r.profile.output.transform = *xf; // im Backend datenparallel (D-17)
-            r.cancel = cancel;
-            auto converted = renderer_.render(r);
-            if (release_) {
-                release_(item->source.id);
-            }
-            if (!converted) {
-                return std::unexpected(converted.error());
-            }
-            rp.images.insert_or_assign(slot->frame, std::move(*converted));
-            if (progress) {
-                progress(++done, static_cast<int>(items.size()));
-            }
-        }
         out.push_back(std::move(rp));
     }
+    for (std::size_t i = 0; i < tasks.size(); ++i) {
+        out[tasks[i].page].images.insert_or_assign(tasks[i].slot->frame, std::move(*images[i]));
+    }
     return out;
+}
+
+base::Expected<image::ImageBuffer> ContactSheetService::renderSlot(
+    const Item& item, const layout::ImageSlot& slot, const layout::ContactSheetSpec& s,
+    const layout::FilmFormat& fmt, const model::Roll& roll,
+    const std::shared_ptr<const ports::IColorTransform>& xf, const image::CancelToken& cancel) const
+{
+    // Pixel nach Slotgröße und Auflösung. Die Zielgröße gilt für das Quellbild vor Zuschnitt
+    // und Drehung: lange Slotseite durch den kleineren Zuschnittanteil, auf beiden Achsen.
+    const model::EditList edits = slotEdits(item, s, fmt, roll);
+    double cropFraction = 1.0;
+    if (const model::EditEntry* crop = edits.get(model::StepId(std::string(steps::id::crop)))) {
+        if (const auto rect = crop->params.get<model::NormRect>("rect")) {
+            cropFraction = std::clamp(std::min(rect->w, rect->h), 0.05, 1.0);
+        }
+    }
+    const double longMm = std::max(slot.rectMm.w, slot.rectMm.h);
+    const int px = static_cast<int>(std::ceil(longMm / 25.4 * s.dpi / cropFraction));
+    pipeline::RenderRequest r;
+    r.frame = item.source.id;
+    r.path = item.source.path;
+    r.list = std::make_shared<const model::EditList>(edits);
+    r.film = roll.filmType;
+    r.profile.mode = pipeline::RenderMode::Thumbnail;
+    r.profile.target = {px, px};
+    r.profile.priority = ports::Priority::Batch;
+    r.profile.output.transform = xf; // im Backend datenparallel (D-17)
+    r.cancel = cancel;
+    auto converted = renderer_.render(r);
+    if (release_) {
+        release_(item.source.id);
+    }
+    return converted;
 }
 
 JobHandle ContactSheetService::exportPdf(std::vector<Item> items, std::shared_ptr<const model::Roll> roll,

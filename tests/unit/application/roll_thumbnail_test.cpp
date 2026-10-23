@@ -13,9 +13,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <fstream>
 #include <future>
 #include <sstream>
+#include <thread>
 
 namespace autoneg::application {
 namespace {
@@ -252,6 +254,65 @@ TEST_F(ThumbnailServiceTest, M8_ConcurrentRequestsShareOneRender)
         ASSERT_TRUE(f.get().has_value());
     }
     EXPECT_EQ(renderer.calls.load(), 1);
+}
+
+/// Renderer mit Quellengröße (1 MP), Rechenzeit und Zählung gleichzeitiger Aufrufe.
+class BusyRenderer final : public IRenderer
+{
+public:
+    base::Expected<image::ImageBuffer> render(const pipeline::RenderRequest&) override
+    {
+        const int now = ++running;
+        int p = peak.load();
+        while (now > p && !peak.compare_exchange_weak(p, now)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        --running;
+        return image::ImageBuffer::fromFloats(
+            {16, 12, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+            std::vector<float>(16 * 12 * 3, 0.3F));
+    }
+    base::Expected<model::SourceInfo> info(const model::FrameId&, const fs::path&) override
+    {
+        model::SourceInfo i;
+        i.width = 1000;
+        i.height = 1000;
+        return i;
+    }
+    std::atomic<int> running{0};
+    std::atomic<int> peak{0};
+};
+
+// NF-PERF-06, NF-PERF-11: Miniaturen halten das Speicherbudget ein (vorher unbegrenzt: bis zu
+// einer Miniatur je Thread, 15,7 GB bei 36 RAW-Scans)
+TEST(ThumbnailBudgetTest, M10_ThumbnailsRespectMemoryBudget)
+{
+    mocks::FakeTaskExecutor executor{8};
+    JobScheduler jobs{executor};
+    ThreadConfig c;
+    c.workers = 8;
+    c.memoryBudget = 2 * proxyRenderBytesPerPixel * 1000 * 1000; // zwei Miniaturen
+    jobs.configure(c);
+    BusyRenderer renderer;
+    mocks::FakeColorEngine color;
+    mocks::FakeImageWriter writer;
+    mocks::FakeCacheStore cache;
+    ThumbnailService service{jobs, renderer, color, writer, cache};
+    std::vector<std::shared_future<ThumbnailService::Result>> futures;
+    for (int i = 1; i <= 12; ++i) {
+        model::Frame f;
+        f.path = "rolle/DSC0" + std::to_string(1000 + i) + ".ARW";
+        std::array<std::uint8_t, 16> b{};
+        b[15] = static_cast<std::uint8_t>(i);
+        f.id = model::FrameId(b);
+        futures.push_back(service.request(f, {}, model::FilmType::ColorNegative, 160));
+    }
+    for (auto& f : futures) {
+        ASSERT_TRUE(f.get().has_value());
+    }
+    EXPECT_GE(renderer.peak.load(), 1);
+    EXPECT_LE(renderer.peak.load(), 2);
+    EXPECT_EQ(jobs.budget().used(), 0U);
 }
 
 } // namespace

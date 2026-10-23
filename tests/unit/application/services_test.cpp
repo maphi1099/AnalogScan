@@ -14,9 +14,9 @@
 #include <chrono>
 #include <cstdio>
 #include <deque>
-#include <thread>
 #include <fstream>
 #include <mutex>
+#include <thread>
 
 namespace autoneg::application {
 namespace {

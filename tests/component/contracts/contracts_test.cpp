@@ -15,6 +15,7 @@
 #include "autoneg/testing/temp_dir.hpp"
 
 #include <gtest/gtest.h>
+#include <tbb/parallel_for.h>
 
 #include <algorithm>
 #include <array>
@@ -743,6 +744,40 @@ TYPED_TEST(TaskExecutorContract, K_14_ShutdownWaitsAndRejects)
     int ran = 0;
     exec->run(ports::Priority::Interactive, [&] { ran = 1; });
     EXPECT_EQ(ran, 1);
+}
+
+// NF-ARC-16, NF-PERF-10: Wartet eine Aufgabe in einem Kernel (tbb::parallel_for), übernimmt ihr
+// Thread keine andere eingereihte Aufgabe. Darauf verlassen sich Stapel, Kontaktabzug und
+// Miniaturen, die innerhalb einer Aufgabe auf das Speicherbudget warten (sonst könnte das
+// nächste Bild auf einen Anteil warten, den die äußere Aufgabe auf demselben Thread hält).
+TEST(TbbTaskExecutorComponent, M10_WaitingTaskRunsNoOtherQueuedTask)
+{
+    adapter::tbb::TbbTaskExecutor exec(4);
+    static thread_local bool waitingInKernel = false;
+    std::atomic<int> nested{0};
+    std::atomic<int> small{0};
+    for (int i = 0; i < 8; ++i) {
+        exec.enqueue(ports::Priority::Batch, [&] {
+            waitingInKernel = true;
+            ::tbb::parallel_for(0, 256, [](int) {
+                const auto until = std::chrono::steady_clock::now() + std::chrono::microseconds(200);
+                while (std::chrono::steady_clock::now() < until) {
+                }
+            });
+            waitingInKernel = false;
+        });
+    }
+    for (int i = 0; i < 400; ++i) {
+        exec.enqueue(ports::Priority::Batch, [&] {
+            if (waitingInKernel) {
+                ++nested;
+            }
+            ++small;
+        });
+    }
+    exec.shutdown();
+    EXPECT_EQ(small.load(), 400);
+    EXPECT_EQ(nested.load(), 0) << "Aufgaben liefen verschachtelt im Kernel einer anderen";
 }
 
 } // namespace

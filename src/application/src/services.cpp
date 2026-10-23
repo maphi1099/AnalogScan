@@ -320,8 +320,8 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
             std::size_t largest = 0;
             for (std::size_t i = 0; i < items_.size(); ++i) {
                 if (auto info = renderer_.info(items_[i].frame.id, items_[i].frame.path); info) {
-                    bytes[i] = static_cast<std::size_t>(info->width) * static_cast<std::size_t>(info->height) *
-                               exportBytesPerPixel;
+                    bytes[i] = static_cast<std::size_t>(info->width) *
+                               static_cast<std::size_t>(info->height) * exportBytesPerPixel;
                     largest = std::max(largest, bytes[i]);
                 }
             }

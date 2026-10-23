@@ -12,6 +12,11 @@
 
 namespace autoneg::application {
 
+/// Geschätzter Spitzenbedarf je Quellpixel beim Rendern aus der halben Auflösung (Miniaturen,
+/// Kontaktabzug): Dekodieren, Quelle, Zwischenbilder. Gemessen etwa 8–9 Byte (61-MP-RAW);
+/// bestimmt mit dem Speicherbudget, wie viele solcher Aufträge gleichzeitig laufen.
+inline constexpr std::size_t proxyRenderBytesPerPixel = 16;
+
 /// Rechnet eine Render-Anfrage (Ergänzung K-M6-08: Naht für Tests mit einem Fake).
 class IRenderer
 {
@@ -21,7 +26,7 @@ public:
     /// Größe der Quelle ohne Dekodieren (für das Speicherbudget im Stapel); Fakes dürfen
     /// Unsupported liefern.
     [[nodiscard]] virtual base::Expected<model::SourceInfo> info(const model::FrameId&,
-                                                                const std::filesystem::path&)
+                                                                 const std::filesystem::path&)
     {
         return base::makeError(base::ErrorCode::Unsupported, "keine Quelleninformation");
     }
@@ -39,7 +44,7 @@ public:
         return executor_.execute(r);
     }
     [[nodiscard]] base::Expected<model::SourceInfo> info(const model::FrameId& f,
-                                                        const std::filesystem::path& path) override
+                                                         const std::filesystem::path& path) override
     {
         return executor_.info(f, path);
     }

@@ -589,7 +589,8 @@ image::ImageBuffer matrixShaper(const image::ImageBuffer& in, const ports::Matri
         const double b = ci == 3 ? src[i * ci + 2] : r;
         for (std::size_t c = 0; c < co; ++c) {
             const double lin = ms.matrix[c * 3] * r + ms.matrix[c * 3 + 1] * g + ms.matrix[c * 3 + 2] * b;
-            const double v = lin >= ms.t ? ms.k1 * std::pow(lin, static_cast<double>(ms.p)) + ms.k0 : ms.s * lin;
+            const double v =
+                lin >= ms.t ? ms.k1 * std::pow(lin, static_cast<double>(ms.p)) + ms.k0 : ms.s * lin;
             out[i * co + c] = static_cast<float>(v);
         }
     }

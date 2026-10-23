@@ -315,3 +315,20 @@ Format je Eintrag:
 - Ursache: Der Stress-Treiber startete unbegrenzt Stapelexporte und Erkennungen (alle paar Millisekunden); nach 600 s stand ein Rückstau von Tausenden Jobs an. Der Watchdog setzte den Herzschlag beim Abarbeiten auch ohne Fortschritt.
 - Abhilfe: Höchstens 16 offene Jobs (wie bei echter Bedienung); in der Abarbeitungsphase zählt nur ein fertiger Job als Fortschritt.
 - Status: behoben (Nachweis siehe PROGRESS)
+
+## B-38: Miniaturen ohne Speicherbudget (bis zu 16 GB beim Öffnen einer Rolle)
+- Erstmals: 23.10.2026 (nach M9, Leistungsmessung), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: alle (gemessen unter Windows, 32 Hardware-Threads)
+- Symptom: Beim Rendern der Miniaturen von 36 RAW-Scans (61 MP) 15,7 GB über der Grundlast; eine frühere Messung brach Claude Code wegen Speichermangels ab.
+- Ursache: Jeder Worker rendert eine Miniatur und dekodiert dafür eine Quelle in halber Auflösung; das MemoryBudget galt nur für den Export.
+- Abhilfe: ThumbnailService fordert je Miniatur einen Anteil am Budget an (proxyRenderBytesPerPixel · Quellpixel, wie der Kontaktabzug). Reproduziert durch `ThumbnailBudgetTest.M10_ThumbnailsRespectMemoryBudget`.
+- Status: behoben
+
+## B-39: Release-E2E: „resource deadlock would occur“ und hängender K-17 (nicht reproduziert)
+- Erstmals: 23.10.2026 (nach M9), zuletzt: 23.10.2026, Häufigkeit: 2 Läufe
+- Plattform: Windows, `windows-clang-release`, `ctest -j 8`
+- Symptom: (1) E-01, E-26, E-29, E-30 werfen „resource deadlock would occur“, danach Zugriffsverletzung in `TearDown`, weitere E2E-Prozesse hängen. (2) In einem späteren Lauf hängt K-17 (Export über die Anwendung) über 70 Minuten, ohne Kindprozess.
+- Ursache: offen. MSVC wirft diese Ausnahme, wenn ein Thread einen `std::mutex` erneut sperrt oder sich selbst joinen will. Geprüft und ausgeschlossen: oneTBB übernimmt während eines wartenden `parallel_for` keine eingereihten Aufgaben (Test `TbbTaskExecutorComponent.M10_WaitingTaskRunsNoOtherQueuedTask`).
+- Beobachtung: Nach komplettem Neubau des Release-Baus nicht mehr aufgetreten (E2E einzeln 3×, K-17 8-fach parallel 3×, volle Suite 4× grün). Der erste Fehlerlauf lief parallel zu den Linux-Tests in WSL; vor dem letzten grünen Lauf blockierte eine Datei den Linker („wird von einem anderen Prozess verwendet“).
+- Abhilfe: Release-Läufe mit `--timeout 600`, damit ein Hänger nicht unbegrenzt blockiert. Bei erneutem Auftreten: Release mit `/Z7` bauen und den Prozess mit lldb anhängen.
+- Status: beobachten

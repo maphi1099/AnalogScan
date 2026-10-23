@@ -244,8 +244,8 @@ void PixelRow(const image::PixelProgram& prog, const float* in, float* out, std:
                     const V mx = hn::Max(hn::Abs(cr), hn::Max(hn::Abs(cg), hn::Abs(cb)));
                     const V rel = hn::Min(hn::Set(d, 1.0F), hn::Div(mx, hn::Max(luma, hn::Set(d, 1e-4F))));
                     const V gain =
-                        hn::Mul(hn::Set(d, s1),
-                                hn::MulAdd(hn::Set(d, vib), hn::Sub(hn::Set(d, 1.0F), rel), hn::Set(d, 1.0F)));
+                        hn::Mul(hn::Set(d, s1), hn::MulAdd(hn::Set(d, vib), hn::Sub(hn::Set(d, 1.0F), rel),
+                                                           hn::Set(d, 1.0F)));
                     r = hn::MulAdd(gain, cr, luma);
                     g = hn::MulAdd(gain, cg, luma);
                     b = hn::MulAdd(gain, cb, luma);
@@ -440,7 +440,8 @@ HWY_INLINE V EncodeVec(D d, V lin, const ports::MatrixShaper& ms)
 }
 
 /// n Pixel ab in (Kanalzahl inChannels) nach out; n = Lanes(d).
-HWY_INLINE void MatrixShaperVec(D d, const ports::MatrixShaper& ms, const float* in, float* out, int inChannels)
+HWY_INLINE void MatrixShaperVec(D d, const ports::MatrixShaper& ms, const float* in, float* out,
+                                int inChannels)
 {
     V r;
     V g;
@@ -452,13 +453,15 @@ HWY_INLINE void MatrixShaperVec(D d, const ports::MatrixShaper& ms, const float*
     }
     const auto& m = ms.matrix;
     const auto row = [&](std::size_t k) {
-        return hn::MulAdd(hn::Set(d, m[k + 2]), b, hn::MulAdd(hn::Set(d, m[k + 1]), g, hn::Mul(hn::Set(d, m[k]), r)));
+        return hn::MulAdd(hn::Set(d, m[k + 2]), b,
+                          hn::MulAdd(hn::Set(d, m[k + 1]), g, hn::Mul(hn::Set(d, m[k]), r)));
     };
     if (ms.outChannels == 1) {
         hn::StoreU(EncodeVec(d, row(0), ms), d, out);
         return;
     }
-    hn::StoreInterleaved3(EncodeVec(d, row(0), ms), EncodeVec(d, row(3), ms), EncodeVec(d, row(6), ms), d, out);
+    hn::StoreInterleaved3(EncodeVec(d, row(0), ms), EncodeVec(d, row(3), ms), EncodeVec(d, row(6), ms), d,
+                          out);
 }
 
 void QuantizeRow(const float* in, void* out, std::size_t len, int bits)
@@ -503,7 +506,8 @@ void QuantizeRow(const float* in, void* out, std::size_t len, int bits)
     }
 }
 
-void MatrixShaperRow(const ports::MatrixShaper& ms, const float* in, float* out, std::size_t pixels, int inChannels)
+void MatrixShaperRow(const ports::MatrixShaper& ms, const float* in, float* out, std::size_t pixels,
+                     int inChannels)
 {
     const D d;
     const std::size_t n = hn::Lanes(d);

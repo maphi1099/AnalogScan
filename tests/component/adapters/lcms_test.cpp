@@ -291,8 +291,10 @@ TEST(LcmsComponent, M10_MatrixShaperMatchesLcms)
     for (float& v : px) {
         v = u(rng);
     }
-    const image::ImageBuffer src = image::ImageBuffer::fromFloats(
-        {w, h, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, px).value();
+    const image::ImageBuffer src =
+        image::ImageBuffer::fromFloats({w, h, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+                                       px)
+            .value();
     for (const ports::ProfileId id : {ports::ProfileId::Srgb, ports::ProfileId::AdobeRgb,
                                       ports::ProfileId::ProPhoto, ports::ProfileId::GrayGamma22}) {
         for (const ports::Intent intent : {ports::Intent::RelativeColorimetric, ports::Intent::Perceptual}) {
@@ -309,17 +311,16 @@ TEST(LcmsComponent, M10_MatrixShaperMatchesLcms)
                     const float lin = ms->matrix[row] * px[i * 3] + ms->matrix[row + 1] * px[i * 3 + 1] +
                                       ms->matrix[row + 2] * px[i * 3 + 2];
                     const float got = ms->encode(lin);
-                    worst = std::max(
-                        worst, std::abs(got - out[i * static_cast<std::size_t>(ms->outChannels) +
-                                                  static_cast<std::size_t>(c)]));
+                    worst = std::max(worst, std::abs(got - out[i * static_cast<std::size_t>(ms->outChannels) +
+                                                               static_cast<std::size_t>(c)]));
                 }
             }
             EXPECT_LE(worst, 1e-5F) << static_cast<int>(id);
         }
     }
     // Absolut farbmetrisch: keine geschlossene Form (Weißpunktanpassung)
-    const auto abs =
-        engine.transform(working, engine.profile(ports::ProfileId::Srgb).value(), ports::Intent::AbsoluteColorimetric);
+    const auto abs = engine.transform(working, engine.profile(ports::ProfileId::Srgb).value(),
+                                      ports::Intent::AbsoluteColorimetric);
     EXPECT_FALSE(abs.value()->matrixShaper().has_value());
 }
 

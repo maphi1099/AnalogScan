@@ -34,6 +34,7 @@
 #include <functional>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -79,7 +80,7 @@ double currentMemoryGb()
 #endif
 }
 
-/// Höchster Wert von currentMemoryGb während eines Abschnitts (Abtastung alle 20 ms).
+/// Höchster Wert von currentMemoryGb während eines Abschnitts (Abtastung alle 2 ms).
 class MemorySampler
 {
 public:
@@ -91,7 +92,7 @@ public:
                 double m = max_.load();
                 while (now > m && !max_.compare_exchange_weak(m, now)) {
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
             }
         })
     {}
@@ -366,12 +367,14 @@ int main(int argc, char** argv)
     report.line("Skalierung 1 -> " + std::to_string(eight) + " Threads", t1 / t8, "x", ">= 5 (8 Kerne)");
     setThreads(0);
     report.line("Spitzenspeicher bis hier (Einzelbild)", peakMemoryGb(), "GB", "<= 6 GB");
+    report.line("  Speicher aktuell nach Einzelexporten", currentMemoryGb(), "GB", "–");
     if (quick) {
         report.line("Spitzenspeicher des Prozesses", peakMemoryGb(), "GB", "<= 6 GB");
         return 0;
     }
 
     // Miniaturen der Rolle (NF-PERF-06)
+    std::optional<MemorySampler> thumbSampler(std::in_place);
     t0 = Clock::now();
     std::atomic<int> done{0};
     for (const application::OpenedFrame& f : opened->frames) {
@@ -384,6 +387,9 @@ int main(int argc, char** argv)
     }
     report.line("Miniaturen " + std::to_string(opened->frames.size()) + " Scans", seconds(t0, Clock::now()),
                 "s", "<= 15 s für 36");
+    report.line("Miniaturen: Speicher über der Grundlast", thumbSampler->aboveStart(), "GB", "<= Budget");
+    report.line("  Spitzenspeicher des Prozesses nach Miniaturen", peakMemoryGb(), "GB", "–");
+    report.line("  Speicher aktuell nach Miniaturen", currentMemoryGb(), "GB", "–");
 
     // Stapelexport (NF-PERF-04/-10: im Hintergrund, hier nur die Dauer)
     {
@@ -404,6 +410,8 @@ int main(int argc, char** argv)
         report.line("Stapelexport " + std::to_string(opened->frames.size()) + " Bilder (JPEG)",
                     seconds(t0, Clock::now()), "s", "–");
         report.line("Stapelexport: Speicher über der Grundlast", above, "GB", "<= Budget");
+        report.line("  Speicher aktuell nach Stapelexport", currentMemoryGb(), "GB", "–");
+        report.line("  Spitzenspeicher des Prozesses nach Stapelexport", peakMemoryGb(), "GB", "–");
     }
 
     // Kontaktabzug: Rendern der 36 Felder (ohne PDF-Ausgabe, NF-PERF-09)
@@ -413,11 +421,13 @@ int main(int argc, char** argv)
             items.push_back(
                 {{f.frame.id, f.frame.frameNo, 1.5}, f.frame, c.bus().history(f.frame.id).current()});
         }
+        MemorySampler sampler;
         t0 = Clock::now();
         const auto pages =
             c.contactSheet().render({}, items, *layout::FilmFormat::find("Kleinbild 24×36"), *shared, {});
         report.line("Kontaktabzug rendern (" + std::to_string(items.size()) + " Felder, 300 dpi)",
                     pages ? seconds(t0, Clock::now()) : -1.0, "s", "<= 30 s");
+        report.line("Kontaktabzug: Speicher über der Grundlast", sampler.aboveStart(), "GB", "<= Budget");
     }
 
     // Künstliches 100-MP-Negativ (Öffnen, Vorschau, Export)
