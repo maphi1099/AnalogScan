@@ -3,6 +3,7 @@
 #include <libraw/libraw.h>
 
 #include <algorithm>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <string>
@@ -71,29 +72,31 @@ int demosaicOf(ports::Demosaic d)
 
 image::ImageBuffer fromProcessed(const libraw_processed_image_t& img, image::ColorSpace space)
 {
+    // Direkt in den Bildspeicher umwandeln: ein Durchlauf ohne Zwischenkopie; Division wie bisher,
+    // damit die Werte bitgleich bleiben
     const int channels = img.colors == 1 ? 1 : 3;
+    const image::ImageSpec spec{img.width, img.height, channels, image::PixelFormat::F32, space};
+    auto storage = std::make_shared<image::HostStorage>(spec.sizeBytes());
+    float* v = storage->floats().data();
     const std::size_t pixels = static_cast<std::size_t>(img.width) * img.height;
-    std::vector<float> v(pixels * static_cast<std::size_t>(channels));
+    const auto ch = static_cast<std::size_t>(channels);
+    const auto stride = static_cast<std::size_t>(img.colors);
     if (img.bits == 16) {
         const auto* src = reinterpret_cast<const std::uint16_t*>(img.data);
         for (std::size_t i = 0; i < pixels; ++i) {
-            for (int c = 0; c < channels; ++c) {
-                v[i * static_cast<std::size_t>(channels) + static_cast<std::size_t>(c)] =
-                    static_cast<float>(src[i * img.colors + static_cast<std::size_t>(c)]) / 65535.0F;
+            for (std::size_t c = 0; c < ch; ++c) {
+                v[i * ch + c] = static_cast<float>(src[i * stride + c]) / 65535.0F;
             }
         }
     } else {
         const unsigned char* src = img.data;
         for (std::size_t i = 0; i < pixels; ++i) {
-            for (int c = 0; c < channels; ++c) {
-                v[i * static_cast<std::size_t>(channels) + static_cast<std::size_t>(c)] =
-                    static_cast<float>(src[i * img.colors + static_cast<std::size_t>(c)]) / 255.0F;
+            for (std::size_t c = 0; c < ch; ++c) {
+                v[i * ch + c] = static_cast<float>(src[i * stride + c]) / 255.0F;
             }
         }
     }
-    return image::ImageBuffer::fromFloats(
-               image::ImageSpec{img.width, img.height, channels, image::PixelFormat::F32, space}, v)
-        .value();
+    return image::ImageBuffer::wrap(spec, std::move(storage)).value();
 }
 
 } // namespace
