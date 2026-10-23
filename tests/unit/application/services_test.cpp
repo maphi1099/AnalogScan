@@ -9,7 +9,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdio>
 #include <deque>
+#include <thread>
 #include <fstream>
 #include <mutex>
 
@@ -199,6 +204,137 @@ TEST(ExportServiceTest, M6_ExportJobWritesAllFrames)
     const auto r = again.wait();
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, base::ErrorCode::Conflict);
+}
+
+/// Renderer mit Quellengröße, Rechenzeit und Zählung gleichzeitiger Aufrufe; schlägt für
+/// gewählte Bildnummern fehl.
+class ConcurrentRenderer final : public IRenderer
+{
+public:
+    base::Expected<image::ImageBuffer> render(const pipeline::RenderRequest& r) override
+    {
+        const int now = ++running;
+        int p = peak.load();
+        while (now > p && !peak.compare_exchange_weak(p, now)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        --running;
+        ++calls;
+        if (std::ranges::find(failing, static_cast<int>(r.frame.bytes()[15])) != failing.end()) {
+            return base::makeError(base::ErrorCode::Corrupt,
+                                   "Bild " + std::to_string(r.frame.bytes()[15]) + " defekt");
+        }
+        return image::ImageBuffer::fromFloats(
+            {8, 6, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+            std::vector<float>(8 * 6 * 3, 0.25F));
+    }
+    base::Expected<model::SourceInfo> info(const FrameId&, const fs::path&) override
+    {
+        model::SourceInfo i;
+        i.width = 1000;
+        i.height = 1000; // 1 MP: 40 MB je Bild im Budget
+        return i;
+    }
+    std::atomic<int> running{0};
+    std::atomic<int> peak{0};
+    std::atomic<int> calls{0};
+    std::vector<int> failing;
+};
+
+struct ExportFixture
+{
+    explicit ExportFixture(int threads, std::size_t budget)
+        : executor(8)
+        , jobs(executor)
+    {
+        ThreadConfig c;
+        c.workers = threads;
+        c.memoryBudget = budget;
+        jobs.configure(c);
+        roll->name = "Rolle";
+        s.folder = dir.path();
+        s.pattern = "{roll}_{frame}";
+        s.write.format = ports::FileFormat::Tiff;
+        s.write.bitDepth = 16;
+        for (int i = 1; i <= 12; ++i) {
+            items.push_back({frame(i), EditList{}});
+        }
+    }
+    autoneg::testing::TempDir dir;
+    mocks::FakeTaskExecutor executor;
+    JobScheduler jobs;
+    ConcurrentRenderer renderer;
+    mocks::FakeColorEngine color;
+    mocks::FakeImageWriter writer;
+    std::shared_ptr<model::Roll> roll = std::make_shared<model::Roll>();
+    ExportSettings s;
+    std::vector<ExportService::Item> items;
+};
+
+constexpr std::size_t mb = std::size_t{1} << 20U;
+
+// NF-PERF-11: mehrere Bilder gleichzeitig, alle geschrieben
+TEST(ExportServiceTest, M10_BatchExportRunsFramesConcurrently)
+{
+    ExportFixture f(4, 1024 * mb);
+    ExportService service(f.jobs, f.renderer, f.color, f.writer);
+    const JobHandle h = service.exportFrames(f.items, f.roll, f.s);
+    ASSERT_TRUE(h.wait().has_value());
+    EXPECT_EQ(f.renderer.calls.load(), 12);
+    EXPECT_GE(f.renderer.peak.load(), 2);
+    EXPECT_LE(f.renderer.peak.load(), 4); // nie mehr als Threads
+    for (int i = 1; i <= 12; ++i) {
+        char name[32];
+        std::snprintf(name, sizeof name, "Rolle_%03d.tif", i);
+        EXPECT_TRUE(fs::exists(f.dir.path() / name)) << name;
+    }
+    EXPECT_DOUBLE_EQ(h.progress(), 1.0);
+}
+
+// NF-PERF-11: das Speicherbudget begrenzt die Zahl gleichzeitiger Bilder
+TEST(ExportServiceTest, M10_BatchExportRespectsMemoryBudget)
+{
+    ExportFixture f(8, 2 * ExportService::exportBytesPerPixel * mb); // Platz für zwei Bilder zu 1 MP
+    ExportService service(f.jobs, f.renderer, f.color, f.writer);
+    ASSERT_TRUE(service.exportFrames(f.items, f.roll, f.s).wait().has_value());
+    EXPECT_EQ(f.renderer.calls.load(), 12);
+    EXPECT_LE(f.renderer.peak.load(), 2);
+    EXPECT_EQ(f.jobs.budget().used(), 0U); // alle Anteile zurückgegeben
+}
+
+// LF-EXP-01: Fehler wird in Bildreihenfolge gemeldet; danach beginnt kein neues Bild
+TEST(ExportServiceTest, M10_BatchExportReportsFirstErrorInFrameOrder)
+{
+    ExportFixture f(4, 1024 * mb);
+    f.renderer.failing = {5, 3};
+    ExportService service(f.jobs, f.renderer, f.color, f.writer);
+    const auto r = service.exportFrames(f.items, f.roll, f.s).wait();
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().message, "Bild 3 defekt");
+    EXPECT_LT(f.renderer.calls.load(), 12);
+}
+
+// LF-EXP-07: ein Konflikt bricht ab, bevor irgendein Bild geschrieben ist
+TEST(ExportServiceTest, M10_ConflictStopsBeforeAnyWrite)
+{
+    ExportFixture f(4, 1024 * mb);
+    std::ofstream(f.dir.path() / "Rolle_009.tif") << "alt";
+    ExportService service(f.jobs, f.renderer, f.color, f.writer);
+    const auto r = service.exportFrames(f.items, f.roll, f.s).wait();
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, base::ErrorCode::Conflict);
+    EXPECT_EQ(f.renderer.calls.load(), 0);
+    EXPECT_FALSE(fs::exists(f.dir.path() / "Rolle_001.tif"));
+}
+
+// NF-PERF-11, NF-PERF-12: ein Thread – nacheinander, ohne Verklemmung
+TEST(ExportServiceTest, M10_BatchExportWithOneThread)
+{
+    ExportFixture f(1, 1024 * mb);
+    ExportService service(f.jobs, f.renderer, f.color, f.writer);
+    ASSERT_TRUE(service.exportFrames(f.items, f.roll, f.s).wait().has_value());
+    EXPECT_EQ(f.renderer.calls.load(), 12);
+    EXPECT_EQ(f.renderer.peak.load(), 1);
 }
 
 // NF-ARC-07, NF-ARC-15

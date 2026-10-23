@@ -5,6 +5,7 @@
 // cpu_backend.cpp. Definitionen der Ergebnisse: tests/reference/include/autoneg/reference/kernels.hpp.
 
 #include "autoneg/image/pixel_program.hpp"
+#include "autoneg/ports/color.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +29,15 @@ void luminanceRow(const float* in, float* lum, std::size_t pixels, int channels)
 /// Lichter/Tiefen: out = in · (1 + s·2·max(0; 0,5 − B))·(1 − h·max(0; B − 0,5)).
 void toneRow(const float* in, const float* base, float* out, std::size_t pixels, int channels, float s,
              float h);
+
+/// Matrix-Kurven-Farbumrechnung (D-18): out = encode(M · in) mit in 1 (Grau, verdreifacht) oder
+/// 3 Kanälen, out mit ms.outChannels Kanälen. Auch der Rest einer Zeile läuft über die
+/// Vektorformel (aufgefüllter Puffer), damit jedes Pixel unabhängig von seiner Lage gleich rechnet.
+void matrixShaperRow(const ports::MatrixShaper& ms, const float* in, float* out, std::size_t pixels,
+                     int inChannels);
+
+/// Ausgabewerte nach U8 bzw. U16 (bits 8/16): floor(clamp(x, 0, 1) · max + 0,5), NaN → 0.
+void quantizeRow(const float* in, void* out, std::size_t len, int bits);
 
 /// Highway-Zielauswahl (für CpuBackend::targets usw.).
 std::int64_t supportedTargets();

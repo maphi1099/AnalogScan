@@ -749,6 +749,22 @@ base::Expected<image::ImageBuffer> CpuBackend::colorTransform(Ctx c, In in, cons
         return std::unexpected(ok.error());
     }
     const image::ImageSpec& s = in.spec();
+    // Matrix-Kurven-Profile in geschlossener Form mit SIMD statt über die Bibliothek (D-18)
+    if (const auto ms = xf.matrixShaper(); ms && (s.channels == 3 || s.channels == 1)) {
+        image::ImageSpec os = s;
+        os.channels = ms->outChannels;
+        os.space = image::ColorSpace::Output;
+        Output out(os);
+        const bool done = impl_->run([&] {
+            return forBlocks(s.height, c.cancel, [&](int y0, int y1) {
+                for (int y = y0; y < y1; ++y) {
+                    detail::matrixShaperRow(*ms, rowOf(in, y), out.row(y), static_cast<std::size_t>(s.width),
+                                            s.channels);
+                }
+            });
+        });
+        return done ? out.finish() : cancelled();
+    }
     if (s.height <= blockRows) {
         return xf.apply(in);
     }
@@ -794,6 +810,30 @@ base::Expected<image::ImageBuffer> CpuBackend::colorTransform(Ctx c, In in, cons
         return cancelled();
     }
     return out.finish();
+}
+
+base::Expected<image::ImageBuffer> CpuBackend::quantize(Ctx c, In in, int bits)
+{
+    if (auto ok = requireHostF32(in); !ok) {
+        return std::unexpected(ok.error());
+    }
+    if (bits != 8 && bits != 16) {
+        return base::makeError(base::ErrorCode::InvalidArgument, "Quantisierung nur auf 8 oder 16 Bit");
+    }
+    image::ImageSpec os = in.spec();
+    os.format = bits == 8 ? image::PixelFormat::U8 : image::PixelFormat::U16;
+    auto storage = std::make_shared<image::HostStorage>(os.sizeBytes());
+    const std::size_t len = in.spec().samplesPerRow();
+    const std::size_t rowBytes = len * (bits == 8 ? 1U : 2U);
+    std::byte* base = storage->bytes().data();
+    const bool done = impl_->run([&] {
+        return forBlocks(os.height, c.cancel, [&](int y0, int y1) {
+            for (int y = y0; y < y1; ++y) {
+                detail::quantizeRow(rowOf(in, y), base + static_cast<std::size_t>(y) * rowBytes, len, bits);
+            }
+        });
+    });
+    return done ? image::ImageBuffer::wrap(os, std::move(storage)) : cancelled();
 }
 
 base::Expected<image::Histogram> CpuBackend::histogram(Ctx c, In in, int bins)

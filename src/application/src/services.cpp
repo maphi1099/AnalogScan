@@ -1,7 +1,11 @@
 #include "autoneg/application/services.hpp"
 
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <mutex>
+#include <optional>
 #include <system_error>
 
 namespace autoneg::application {
@@ -276,11 +280,12 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
     {
     public:
         ExportJob(std::vector<Item> items, std::shared_ptr<const model::Roll> roll, ExportSettings s,
-                  IRenderer& renderer, ports::IColorEngine& color, ports::IImageWriter& writer,
-                  Release release)
+                  JobScheduler& jobs, IRenderer& renderer, ports::IColorEngine& color,
+                  ports::IImageWriter& writer, Release release)
             : items_(std::move(items))
             , roll_(std::move(roll))
             , s_(std::move(s))
+            , jobs_(jobs)
             , renderer_(renderer)
             , color_(color)
             , writer_(writer)
@@ -299,54 +304,103 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
             if (!xf) {
                 return std::unexpected(xf.error());
             }
-            int done = 0;
+            // Zieldateien vorab: ein Konflikt bricht ab, bevor ein Bild geschrieben ist
+            std::vector<std::filesystem::path> paths;
             for (const Item& item : items_) {
-                if (c.cancel.cancelled()) {
-                    return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
-                }
                 auto path = target(s_, roll, item.frame);
                 if (!path) {
                     return std::unexpected(path.error());
                 }
-                pipeline::RenderRequest r;
-                r.frame = item.frame.id;
-                r.path = item.frame.path;
-                r.list = std::make_shared<const model::EditList>(item.edits);
-                r.film = roll.filmType;
-                r.profile.mode = pipeline::RenderMode::Export;
-                if (s_.longEdge > 0) {
-                    r.profile.target = {s_.longEdge, s_.longEdge}; // lange Kante, Seitenverhältnis bleibt
+                paths.push_back(std::move(*path));
+            }
+            // Mehrere Bilder gleichzeitig (Ebene 3, NF-PERF-11): so viele, wie Threads und
+            // Speicherbudget zulassen; Dekodieren und Schreiben eines Bildes überlappen dabei
+            // mit dem Rechnen der anderen
+            std::vector<std::size_t> bytes(items_.size(), 0);
+            std::size_t largest = 0;
+            for (std::size_t i = 0; i < items_.size(); ++i) {
+                if (auto info = renderer_.info(items_[i].frame.id, items_[i].frame.path); info) {
+                    bytes[i] = static_cast<std::size_t>(info->width) * static_cast<std::size_t>(info->height) *
+                               exportBytesPerPixel;
+                    largest = std::max(largest, bytes[i]);
                 }
-                r.profile.output.transform =
-                    *xf; // im Backend datenparallel (D-17); Grau einkanalig (LF-EXP-09)
-                r.cancel = c.cancel;
-                auto out = renderer_.render(r);
-                if (release_) {
-                    release_(item.frame.id); // Quelle in voller Auflösung nicht behalten (NF-PERF-07)
+            }
+            const std::size_t threads = static_cast<std::size_t>(std::max(1, jobs_.concurrency()));
+            const std::size_t byBudget =
+                largest > 0 ? std::max<std::size_t>(1, jobs_.budget().total() / largest) : threads;
+            const std::size_t lanes = std::min({items_.size(), threads, byBudget});
+
+            std::vector<std::optional<base::Error>> errors(items_.size());
+            std::atomic<bool> failed{false};
+            std::mutex progressMutex;
+            int done = 0;
+            jobs_.parallelFor(c.priority, items_.size(), lanes, [&](std::size_t i) {
+                if (failed || c.cancel.cancelled()) {
+                    return;
                 }
-                if (!out) {
-                    return std::unexpected(out.error());
+                const MemoryBudget::Lease lease = jobs_.budget().acquireUpTo(bytes[i]);
+                auto r = exportOne(items_[i], paths[i], roll, *xf, *dst, c.cancel);
+                if (!r) {
+                    errors[i] = r.error();
+                    failed = true;
+                    return;
                 }
-                ports::WriteOptions o = s_.write;
-                o.icc = *dst;
-                if (auto ok = writer_.write(*path, *out, o); !ok) {
-                    return ok;
-                }
+                const std::scoped_lock lock(progressMutex);
                 c.progress(++done, static_cast<int>(items_.size()));
+            });
+            if (c.cancel.cancelled()) {
+                return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
+            }
+            for (const auto& e : errors) { // erster Fehler in Bildreihenfolge
+                if (e) {
+                    return std::unexpected(*e);
+                }
             }
             return {};
         }
 
     private:
+        base::Expected<void> exportOne(const Item& item, const std::filesystem::path& path,
+                                       const model::Roll& roll,
+                                       const std::shared_ptr<const ports::IColorTransform>& xf,
+                                       const ports::IccProfile& icc, const image::CancelToken& cancel)
+        {
+            pipeline::RenderRequest r;
+            r.frame = item.frame.id;
+            r.path = item.frame.path;
+            r.list = std::make_shared<const model::EditList>(item.edits);
+            r.film = roll.filmType;
+            r.profile.mode = pipeline::RenderMode::Export;
+            if (s_.longEdge > 0) {
+                r.profile.target = {s_.longEdge, s_.longEdge}; // lange Kante, Seitenverhältnis bleibt
+            }
+            r.profile.output.transform = xf; // im Backend datenparallel (D-17); Grau einkanalig (LF-EXP-09)
+            if (s_.write.bitDepth == 8 || s_.write.bitDepth == 16) {
+                r.profile.output.bits = s_.write.bitDepth; // ganzzahlig aus dem Backend (K-M10-03)
+            }
+            r.cancel = cancel;
+            auto out = renderer_.render(r);
+            if (release_) {
+                release_(item.frame.id); // Quelle in voller Auflösung nicht behalten (NF-PERF-07)
+            }
+            if (!out) {
+                return std::unexpected(out.error());
+            }
+            ports::WriteOptions o = s_.write;
+            o.icc = icc;
+            return writer_.write(path, *out, o);
+        }
+
         std::vector<Item> items_;
         std::shared_ptr<const model::Roll> roll_;
         ExportSettings s_;
+        JobScheduler& jobs_;
         IRenderer& renderer_;
         ports::IColorEngine& color_;
         ports::IImageWriter& writer_;
         Release release_;
     };
-    return jobs_.submit(std::make_unique<ExportJob>(std::move(items), std::move(roll), std::move(s),
+    return jobs_.submit(std::make_unique<ExportJob>(std::move(items), std::move(roll), std::move(s), jobs_,
                                                     renderer_, color_, writer_, release_),
                         ports::Priority::Batch);
 }

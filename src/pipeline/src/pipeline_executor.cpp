@@ -110,7 +110,11 @@ base::Expected<image::ImageBuffer> PipelineExecutor::execute(const RenderRequest
         }
     }
     if (out && lateOutput && !r.stopAfter) {
-        return backend_.colorTransform(ports::KernelContext{r.cancel}, *out, *lateOutput);
+        out = backend_.colorTransform(ports::KernelContext{r.cancel}, *out, *lateOutput);
+    }
+    // Ganzzahlige Ausgabe für den Export (K-M10-03): parallel im Backend statt im Schreiber
+    if (out && (p.output.bits == 8 || p.output.bits == 16) && p.output.transform && !r.stopAfter) {
+        return backend_.quantize(ports::KernelContext{r.cancel}, *out, p.output.bits);
     }
     return out;
 }

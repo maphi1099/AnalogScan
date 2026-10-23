@@ -117,6 +117,9 @@ public:
     /// Nach jedem Bild aufgerufen, damit die dekodierte Quelle freigegeben werden kann
     /// (SourceProvider::release, außer das Bild ist in Bearbeitung; NF-PERF-07).
     using Release = std::function<void(const model::FrameId&)>;
+    /// Geschätzter Spitzenbedarf je Quellpixel beim Export (Quelle, Ergebnis, Farbumrechnung,
+    /// Ausgabepuffer); bestimmt mit dem Speicherbudget, wie viele Bilder gleichzeitig laufen.
+    static constexpr std::size_t exportBytesPerPixel = 40;
 
     ExportService(JobScheduler& jobs, IRenderer& renderer, ports::IColorEngine& color,
                   ports::IImageWriter& writer, Release release = {})

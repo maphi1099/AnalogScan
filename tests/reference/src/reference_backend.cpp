@@ -99,10 +99,21 @@ base::Expected<image::Histogram> ReferenceBackend::histogram(Ctx c, In in, int b
     return reference::histogram(in, bins);
 }
 
+base::Expected<image::ImageBuffer> ReferenceBackend::quantize(Ctx c, In in, int bits)
+{
+    return begin(c, "quantize") ? reference::quantize(in, bits) : cancelled();
+}
+
 base::Expected<image::ImageBuffer> ReferenceBackend::colorTransform(Ctx c, In in,
                                                                     const ports::IColorTransform& xf)
 {
-    return begin(c, "colorTransform") ? xf.apply(in) : cancelled(); // Referenz: am Stück
+    if (!begin(c, "colorTransform")) {
+        return cancelled();
+    }
+    if (const auto ms = xf.matrixShaper(); ms && (in.spec().channels == 3 || in.spec().channels == 1)) {
+        return reference::matrixShaper(in, *ms); // geschlossene Form wie im CpuBackend (D-18)
+    }
+    return xf.apply(in); // Referenz: am Stück
 }
 
 } // namespace autoneg::reference

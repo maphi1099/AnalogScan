@@ -86,6 +86,7 @@ public:
     MOCK_METHOD(Expected<ImageBuffer>, inpaint, (Ctx, In, const model::SpotList&), (override));
     MOCK_METHOD(Expected<image::Histogram>, histogram, (Ctx, In, int), (override));
     MOCK_METHOD(Expected<ImageBuffer>, colorTransform, (Ctx, In, const ports::IColorTransform&), (override));
+    MOCK_METHOD(Expected<ImageBuffer>, quantize, (Ctx, In, int), (override));
 };
 
 class MockVision : public ports::IVision

@@ -35,6 +35,7 @@
 #include "autoneg/image/pixel_program.hpp"
 #include "autoneg/image/warp_plan.hpp"
 #include "autoneg/model/values.hpp"
+#include "autoneg/ports/color.hpp"
 
 #include <array>
 #include <vector>
@@ -54,6 +55,10 @@ image::ImageBuffer localTone(const image::ImageBuffer& in, float shadows, float 
 image::ImageBuffer denoise(const image::ImageBuffer& in, float strength);
 image::ImageBuffer inpaint(const image::ImageBuffer& in, const model::SpotList& spots);
 image::Histogram histogram(const image::ImageBuffer& in, int bins);
+/// Matrix-Kurven-Farbumrechnung (D-18) in double: out = encode(M · in); Grau wird verdreifacht.
+image::ImageBuffer matrixShaper(const image::ImageBuffer& in, const ports::MatrixShaper& ms);
+/// Ausgabewerte nach U8/U16: floor(clamp(x, 0, 1) · max + 0,5) in float, NaN → 0.
+image::ImageBuffer quantize(const image::ImageBuffer& in, int bits);
 
 /// Gauß-Gewichte nach obiger Definition (Länge 2·ceil(3σ) + 1).
 std::vector<float> gaussianWeights(float sigma);

@@ -1,5 +1,7 @@
 #include "autoneg/app/composition.hpp"
 
+#include "autoneg/adapter/tbb/system_memory.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -13,6 +15,17 @@ namespace {
 
 constexpr std::size_t stageCacheBytes = std::size_t{1} << 30; ///< 1 GB Zwischenstände (Architektur 5.4)
 constexpr int analysisEdge = 1500;                            ///< Analyseauflösung, lange Kante
+
+/// Standard-Speicherbudget: 40 % des Arbeitsspeichers (NF-PERF-12), mindestens 1 GB; ohne
+/// Angabe des Systems der Vorgabewert aus ThreadConfig.
+std::size_t defaultMemoryBudget()
+{
+    const std::uint64_t ram = adapter::tbb::physicalMemoryBytes();
+    if (ram == 0) {
+        return application::ThreadConfig{}.memoryBudget;
+    }
+    return std::max<std::size_t>(std::size_t{1} << 30, static_cast<std::size_t>(ram / 10 * 4));
+}
 
 const pipeline::StepRegistry& registered(pipeline::StepRegistry& r, steps::FlatFieldCache& flat)
 {
@@ -94,6 +107,7 @@ Composition::Composition(Directories dirs, application::RenderService::ReadyHand
 {
     // Gespeicherte Threadzahl und Speicherbudget (LF-DAT-04, NF-PERF-12)
     application::ThreadConfig c;
+    c.memoryBudget = defaultMemoryBudget();
     if (const auto v = config_.get("threads"); v && v->number()) {
         c.workers = static_cast<int>(*v->number());
     }

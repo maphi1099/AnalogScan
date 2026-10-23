@@ -908,7 +908,13 @@ TEST_F(E2E, E_26_PasteWithRedetect)
 // E-30: LF-BAT-09, NF-PERF-04, NF-PERF-10, LF-UI-07 – Stapelexport abbrechen, dabei bearbeiten
 TEST_F(E2E, E_30_BatchExportCancelWhileEditing)
 {
-    start(12);
+    start(36);
+    // Mehrere Bilder parallel (NF-PERF-11), aber nicht so viele, dass die Rolle fertig ist,
+    // bevor abgebrochen wird
+    application::ThreadConfig tc;
+    tc.workers = 4;
+    tc.memoryBudget = comp->jobs().budget().total();
+    comp->jobs().configure(tc);
     window->filmstrip()->selectAll();
     const fs::path out = tmp.path() / "export";
     onNextDialog([&out](QDialog* d) {
@@ -929,7 +935,7 @@ TEST_F(E2E, E_30_BatchExportCancelWhileEditing)
     ASSERT_TRUE(waitFor([cancel] { return !cancel->isVisible(); }, 30000));
     QTest::qWait(300);
     const int written = countFiles(out, ".tif");
-    EXPECT_LT(written, 12);
+    EXPECT_LT(written, 36);
     for (const auto& e : fs::directory_iterator(out)) {
         EXPECT_EQ(e.path().string().find(".tmp"), std::string::npos) << e.path(); // keine halben Dateien
     }

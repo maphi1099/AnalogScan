@@ -18,6 +18,13 @@ class IRenderer
 public:
     virtual ~IRenderer() = default;
     [[nodiscard]] virtual base::Expected<image::ImageBuffer> render(const pipeline::RenderRequest& r) = 0;
+    /// Größe der Quelle ohne Dekodieren (für das Speicherbudget im Stapel); Fakes dürfen
+    /// Unsupported liefern.
+    [[nodiscard]] virtual base::Expected<model::SourceInfo> info(const model::FrameId&,
+                                                                const std::filesystem::path&)
+    {
+        return base::makeError(base::ErrorCode::Unsupported, "keine Quelleninformation");
+    }
 };
 
 /// IRenderer über den PipelineExecutor.
@@ -30,6 +37,11 @@ public:
     [[nodiscard]] base::Expected<image::ImageBuffer> render(const pipeline::RenderRequest& r) override
     {
         return executor_.execute(r);
+    }
+    [[nodiscard]] base::Expected<model::SourceInfo> info(const model::FrameId& f,
+                                                        const std::filesystem::path& path) override
+    {
+        return executor_.info(f, path);
     }
 
 private:

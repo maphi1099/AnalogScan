@@ -58,9 +58,14 @@ public:
 
     /// Wartet, bis bytes frei sind. Fehler InvalidArgument, wenn bytes größer als das Budget ist.
     [[nodiscard]] base::Expected<Lease> acquire(std::size_t bytes);
+    /// Wie acquire, fordert aber höchstens das ganze Budget an (ein einzelnes großes Bild
+    /// läuft dann allein statt gar nicht).
+    [[nodiscard]] Lease acquireUpTo(std::size_t bytes);
     [[nodiscard]] std::optional<Lease> tryAcquire(std::size_t bytes);
-    [[nodiscard]] std::size_t total() const noexcept { return total_; }
+    [[nodiscard]] std::size_t total() const;
     [[nodiscard]] std::size_t used() const;
+    /// Neue Größe zur Laufzeit (NF-PERF-12); vergebene Anteile bleiben gültig.
+    void setTotal(std::size_t bytes);
 
 private:
     void release(std::size_t bytes);
@@ -137,13 +142,25 @@ public:
 
     /// Reiht den Job ein; nach shutdown() wird er sofort als abgebrochen gemeldet.
     JobHandle submit(std::unique_ptr<Job> job, ports::Priority p);
-    /// Threadzahl zur Laufzeit (NF-PERF-12); wirkt auf neue Aufgaben.
+    /// Threadzahl und Speicherbudget zur Laufzeit (NF-PERF-12); wirkt auf neue Aufgaben.
     void configure(const ThreadConfig& c);
+    [[nodiscard]] int concurrency() const { return executor_.concurrency(); }
+    /// Budget für große Zwischenbilder, geteilt von allen Jobs (Architektur 6.3, NF-PERF-11).
+    [[nodiscard]] MemoryBudget& budget() noexcept { return budget_; }
+
+    /// Ruft body(0 … count-1) mit höchstens lanes gleichzeitigen Bahnen auf und wartet auf das
+    /// Ende (Ebene 3: mehrere Bilder im Stapel). Der aufrufende Thread arbeitet als erste Bahn
+    /// mit, weitere Bahnen laufen als Aufgaben in der Arena p. Auf Bahnen, die noch nicht
+    /// gestartet sind, wird nicht gewartet; deshalb keine Verklemmung bei einem Worker.
+    /// body muss threadsicher sein.
+    void parallelFor(ports::Priority p, std::size_t count, std::size_t lanes,
+                     const std::function<void(std::size_t)>& body);
     /// Bricht alle offenen Jobs ab und wartet, bis keiner mehr läuft (ohne Verklemmung).
     void shutdown();
 
 private:
     ports::ITaskExecutor& executor_;
+    MemoryBudget budget_{ThreadConfig{}.memoryBudget};
     std::mutex mutex_;
     std::vector<std::weak_ptr<detail::JobState>> jobs_;
     bool closed_ = false;

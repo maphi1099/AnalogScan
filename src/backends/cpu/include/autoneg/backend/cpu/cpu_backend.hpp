@@ -67,6 +67,7 @@ public:
     base::Expected<image::Histogram> histogram(Ctx c, In in, int bins) override;
     base::Expected<image::ImageBuffer> colorTransform(Ctx c, In in,
                                                       const ports::IColorTransform& xf) override;
+    base::Expected<image::ImageBuffer> quantize(Ctx c, In in, int bits) override;
 
     /// Befehlssätze, die auf diesem Rechner nutzbar und mitkompiliert sind (U-BCK-02).
     [[nodiscard]] static std::vector<SimdTarget> targets();

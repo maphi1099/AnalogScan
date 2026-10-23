@@ -33,13 +33,22 @@ MemoryBudget::Lease::~Lease()
 
 base::Expected<MemoryBudget::Lease> MemoryBudget::acquire(std::size_t bytes)
 {
+    std::unique_lock lock(mutex_);
     if (bytes > total_) {
         return base::makeError(base::ErrorCode::InvalidArgument, "Anforderung größer als das Speicherbudget");
     }
-    std::unique_lock lock(mutex_);
     cv_.wait(lock, [&] { return used_ + bytes <= total_; });
     used_ += bytes;
     return Lease(this, bytes);
+}
+
+MemoryBudget::Lease MemoryBudget::acquireUpTo(std::size_t bytes)
+{
+    std::unique_lock lock(mutex_);
+    cv_.wait(lock, [&] { return used_ + std::min(bytes, total_) <= total_; });
+    const std::size_t n = std::min(bytes, total_);
+    used_ += n;
+    return Lease(this, n);
 }
 
 std::optional<MemoryBudget::Lease> MemoryBudget::tryAcquire(std::size_t bytes)
@@ -50,6 +59,19 @@ std::optional<MemoryBudget::Lease> MemoryBudget::tryAcquire(std::size_t bytes)
     }
     used_ += bytes;
     return Lease(this, bytes);
+}
+
+std::size_t MemoryBudget::total() const
+{
+    const std::scoped_lock lock(mutex_);
+    return total_;
+}
+
+void MemoryBudget::setTotal(std::size_t bytes)
+{
+    const std::scoped_lock lock(mutex_);
+    total_ = bytes;
+    cv_.notify_all();
 }
 
 std::size_t MemoryBudget::used() const
@@ -192,6 +214,52 @@ JobHandle JobScheduler::submit(std::unique_ptr<Job> job, ports::Priority p)
 void JobScheduler::configure(const ThreadConfig& c)
 {
     executor_.setConcurrency(c.workers);
+    budget_.setTotal(c.memoryBudget);
+}
+
+void JobScheduler::parallelFor(ports::Priority p, std::size_t count, std::size_t lanes,
+                               const std::function<void(std::size_t)>& body)
+{
+    // Gemeinsamer Zustand lebt so lange wie die letzte Bahn; späte Bahnen finden nichts mehr
+    // zu tun und berühren body nicht (closed)
+    struct Shared
+    {
+        std::mutex mutex;
+        std::condition_variable cv;
+        std::size_t next = 0;
+        std::size_t count = 0;
+        std::size_t active = 0;
+        bool closed = false;
+        const std::function<void(std::size_t)>* body = nullptr;
+    };
+    auto s = std::make_shared<Shared>();
+    s->count = count;
+    s->body = &body;
+    const auto lane = [s] {
+        for (;;) {
+            std::size_t i = 0;
+            {
+                const std::scoped_lock lock(s->mutex);
+                if (s->closed || s->next >= s->count) {
+                    return;
+                }
+                i = s->next++;
+                ++s->active;
+            }
+            (*s->body)(i);
+            const std::scoped_lock lock(s->mutex); // unter der Sperre benachrichtigen (TSan)
+            --s->active;
+            s->cv.notify_all();
+        }
+    };
+    const std::size_t used = std::min(lanes, count);
+    for (std::size_t k = 1; k < used; ++k) {
+        executor_.enqueue(p, lane);
+    }
+    lane();
+    std::unique_lock lock(s->mutex);
+    s->closed = true;
+    s->cv.wait(lock, [&] { return s->active == 0; });
 }
 
 void JobScheduler::shutdown()

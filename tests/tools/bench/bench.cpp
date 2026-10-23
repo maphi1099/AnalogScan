@@ -22,6 +22,7 @@
 #include <psapi.h>
 #else
 #include <sys/resource.h>
+#include <unistd.h>
 #endif
 
 #include <algorithm>
@@ -60,6 +61,53 @@ double peakMemoryGb()
     return static_cast<double>(u.ru_maxrss) / (1024.0 * 1024.0); // KiB
 #endif
 }
+
+/// Aktuell belegter Arbeitsspeicher (Working Set bzw. Resident Set) in GB.
+double currentMemoryGb()
+{
+#if defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS c{};
+    GetProcessMemoryInfo(GetCurrentProcess(), &c, sizeof c);
+    return static_cast<double>(c.WorkingSetSize) / (1024.0 * 1024.0 * 1024.0);
+#else
+    std::ifstream statm("/proc/self/statm");
+    long pages = 0;
+    long resident = 0;
+    statm >> pages >> resident;
+    return static_cast<double>(resident) * static_cast<double>(sysconf(_SC_PAGE_SIZE)) /
+           (1024.0 * 1024.0 * 1024.0);
+#endif
+}
+
+/// Höchster Wert von currentMemoryGb während eines Abschnitts (Abtastung alle 20 ms).
+class MemorySampler
+{
+public:
+    MemorySampler()
+        : start_(currentMemoryGb())
+        , thread_([this](const std::stop_token& stop) {
+            while (!stop.stop_requested()) {
+                const double now = currentMemoryGb();
+                double m = max_.load();
+                while (now > m && !max_.compare_exchange_weak(m, now)) {
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+        })
+    {}
+    /// Höchstwert über der Grundlast beim Start.
+    [[nodiscard]] double aboveStart()
+    {
+        thread_.request_stop();
+        thread_.join();
+        return max_.load() - start_;
+    }
+
+private:
+    double start_;
+    std::atomic<double> max_{0.0};
+    std::jthread thread_;
+};
 
 class Queue
 {
@@ -275,10 +323,20 @@ int main(int argc, char** argv)
         (void)full;
     }
 
-    // Export volle Auflösung (NF-PERF-03) und Skalierung (NF-PERF-05)
+    // Export volle Auflösung (NF-PERF-03) und Skalierung (NF-PERF-05); das Speicherbudget
+    // (Standard 40 % des Arbeitsspeichers) bleibt dabei erhalten
+    const std::size_t budget = c.jobs().budget().total();
+    report.line("Speicherbudget (NF-PERF-12)", static_cast<double>(budget) / (1U << 30U), "GB", "40 % RAM");
+    const auto setThreads = [&](int threads) {
+        application::ThreadConfig tc;
+        tc.workers = threads;
+        tc.memoryBudget = budget;
+        c.jobs().configure(tc);
+    };
     const auto exportOne = [&](int threads, const fs::path& dir) {
         application::ThreadConfig tc;
         tc.workers = threads;
+        tc.memoryBudget = budget;
         c.jobs().configure(tc);
         fs::create_directories(dir);
         application::ExportSettings s;
@@ -306,6 +364,8 @@ int main(int argc, char** argv)
     const double t8 = exportOne(eight, work / "export_8");
     report.line("Export 1 Bild, " + std::to_string(eight) + " Threads", t8, "s", "–");
     report.line("Skalierung 1 -> " + std::to_string(eight) + " Threads", t1 / t8, "x", ">= 5 (8 Kerne)");
+    setThreads(0);
+    report.line("Spitzenspeicher bis hier (Einzelbild)", peakMemoryGb(), "GB", "<= 6 GB");
     if (quick) {
         report.line("Spitzenspeicher des Prozesses", peakMemoryGb(), "GB", "<= 6 GB");
         return 0;
@@ -337,10 +397,13 @@ int main(int argc, char** argv)
         s.write.format = ports::FileFormat::Jpeg;
         s.write.bitDepth = 8;
         fs::create_directories(s.folder);
+        MemorySampler sampler;
         t0 = Clock::now();
         wait(q, c.exports().exportFrames(std::move(items), shared, s));
+        const double above = sampler.aboveStart();
         report.line("Stapelexport " + std::to_string(opened->frames.size()) + " Bilder (JPEG)",
                     seconds(t0, Clock::now()), "s", "–");
+        report.line("Stapelexport: Speicher über der Grundlast", above, "GB", "<= Budget");
     }
 
     // Kontaktabzug: Rendern der 36 Felder (ohne PDF-Ausgabe, NF-PERF-09)

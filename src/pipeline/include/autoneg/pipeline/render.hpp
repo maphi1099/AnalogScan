@@ -29,6 +29,8 @@ enum class RenderMode
 struct OutputSpec
 {
     std::shared_ptr<const ports::IColorTransform> transform;
+    /// 8 oder 16: Ergebnis ganzzahlig (U8/U16) für den Export (K-M10-03); 0 = F32
+    int bits = 0;
 };
 
 struct RenderProfile

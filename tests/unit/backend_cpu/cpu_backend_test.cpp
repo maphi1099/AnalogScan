@@ -10,10 +10,13 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace autoneg::backend::cpu {
@@ -371,6 +374,110 @@ TEST(CpuBackend, M9_ColorTransformInBlocksEqualsWhole)
         CpuBackend{}.colorTransform(ports::KernelContext{cancelled}, randomImage(64, 600, 3, 1), *xf);
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, base::ErrorCode::Cancelled);
+}
+
+/// Transformation, die nur ihre geschlossene Form anbietet (apply wird nicht gebraucht).
+class ShaperOnly final : public ports::IColorTransform
+{
+public:
+    explicit ShaperOnly(ports::MatrixShaper ms)
+        : ms_(ms)
+    {}
+    base::Expected<ImageBuffer> apply(const ImageBuffer&) const override
+    {
+        return base::makeError(base::ErrorCode::Unsupported, "nur geschlossene Form");
+    }
+    image::Lut3D lut3d(int) const override { return {}; }
+    std::optional<ports::MatrixShaper> matrixShaper() const override { return ms_; }
+
+private:
+    ports::MatrixShaper ms_;
+};
+
+// D-18, NF-ARC-05, NF-PORT-03: Matrix-Kurven-Kernel == skalare Referenz auf jeder SIMD-Stufe,
+// bitgleich für jede Threadzahl; sRGB-Kurve, Gamma, Grau-Ausgabe und Grau-Eingang
+TEST(CpuBackend, M10_MatrixShaperMatchesReferenceOnEverySimdTarget)
+{
+    ports::MatrixShaper srgb; // Rec. 2020 linear -> sRGB
+    srgb.matrix = {1.6605F, -0.5876F, -0.0728F, -0.1246F, 1.1329F, -0.0083F, -0.0182F, -0.1006F, 1.1187F};
+    srgb.t = 0.0031308F;
+    srgb.p = 1.0F / 2.4F;
+    srgb.k1 = 1.055F;
+    srgb.k0 = -0.055F;
+    srgb.s = 12.92F;
+    ports::MatrixShaper gamma = srgb;
+    gamma.t = 0.0F;
+    gamma.p = 1.0F / 2.2F;
+    gamma.k1 = 1.0F;
+    gamma.k0 = 0.0F;
+    gamma.s = 0.0F;
+    ports::MatrixShaper gray = gamma;
+    gray.outChannels = 1;
+    gray.matrix = {0.2627F, 0.6780F, 0.0593F, 0, 0, 0, 0, 0, 0};
+
+    const TargetGuard guard;
+    CpuBackend one(CpuBackend::Options{1});
+    CpuBackend many(CpuBackend::Options{16});
+    for (const auto& [ms, inChannels] : {std::pair{srgb, 3}, std::pair{gamma, 3}, std::pair{gray, 3},
+                                         std::pair{srgb, 1}}) {
+        const ShaperOnly xf(ms);
+        for (const int w : {1, 7, 257}) { // Rest kürzer als ein Vektor, ungerade Breiten
+            const ImageBuffer in = randomImage(w, 131, inChannels, static_cast<std::uint64_t>(w + inChannels));
+            const ImageBuffer ref = reference::matrixShaper(in, ms);
+            for (const SimdTarget& t : CpuBackend::targets()) {
+                SCOPED_TRACE(t.name + " w=" + std::to_string(w) + " ch=" + std::to_string(inChannels));
+                CpuBackend::forceTargetForTest(t);
+                const auto a = one.colorTransform(ctx, in, xf);
+                const auto b = many.colorTransform(ctx, in, xf);
+                ASSERT_TRUE(a && b);
+                EXPECT_EQ(a->spec().channels, ms.outChannels);
+                EXPECT_EQ(a->spec().space, image::ColorSpace::Output);
+                EXPECT_TRUE(bitEqual(*a, *b));
+                EXPECT_LE(maxRel(ref, *a), 2e-6);
+            }
+        }
+    }
+}
+
+// K-M10-03, NF-ARC-05, NF-PORT-03: Quantisierung bitgleich zur Referenz auf jeder SIMD-Stufe,
+// auch für NaN, Werte außerhalb 0…1 und halbe Stufen
+TEST(CpuBackend, M10_QuantizeMatchesReferenceOnEverySimdTarget)
+{
+    const TargetGuard guard;
+    CpuBackend one(CpuBackend::Options{1});
+    CpuBackend many(CpuBackend::Options{16});
+    for (const int w : {1, 7, 257}) {
+        ImageBuffer in = randomImage(w, 70, 3, static_cast<std::uint64_t>(31 + w));
+        std::vector<float> v(in.host().begin(), in.host().end());
+        const std::array<float, 10> special{std::numeric_limits<float>::quiet_NaN(),
+                                            -1.0F,
+                                            0.0F,
+                                            1.0F,
+                                            2.5F,
+                                            0.5F / 65535.0F,
+                                            1.5F / 255.0F,
+                                            32767.5F / 65535.0F,
+                                            127.5F / 255.0F,
+                                            std::numeric_limits<float>::infinity()};
+        for (std::size_t i = 0; i < special.size() && i < v.size(); ++i) {
+            v[i * 5 % v.size()] = special[i];
+        }
+        in = ImageBuffer::fromFloats(in.spec(), v).value();
+        for (const int bits : {8, 16}) {
+            const ImageBuffer ref = reference::quantize(in, bits);
+            for (const SimdTarget& t : CpuBackend::targets()) {
+                SCOPED_TRACE(t.name + " w=" + std::to_string(w) + " bits=" + std::to_string(bits));
+                CpuBackend::forceTargetForTest(t);
+                const auto a = one.quantize(ctx, in, bits);
+                const auto b = many.quantize(ctx, in, bits);
+                ASSERT_TRUE(a && b);
+                EXPECT_EQ(a->spec().format, bits == 8 ? image::PixelFormat::U8 : image::PixelFormat::U16);
+                EXPECT_TRUE(bitEqual(*a, ref));
+                EXPECT_TRUE(bitEqual(*b, ref));
+            }
+        }
+    }
+    EXPECT_FALSE(CpuBackend{}.quantize(ctx, randomImage(4, 4, 3, 1), 12).has_value());
 }
 
 TEST(CpuBackend, M2_CancelledTokenStopsKernel)

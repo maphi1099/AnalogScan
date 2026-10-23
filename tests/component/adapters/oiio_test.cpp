@@ -14,6 +14,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <tuple>
+#include <memory>
+#include <cstring>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -184,6 +188,56 @@ TEST(OiioComponent, K_05_WriteAndVerifyWithIndependentReaders)
     const int rc = std::system(command.c_str());
 #endif
     EXPECT_EQ(rc, 0) << "unabhängige Prüfung fehlgeschlagen (Ausgabe oben)";
+}
+
+/// Ganzzahliges Bild aus F32 wie OpenImageIO: floor(clamp(x, 0, 1) · max + 0,5) in float.
+image::ImageBuffer quantized(const image::ImageBuffer& f, int bits)
+{
+    image::ImageSpec os = f.spec();
+    os.format = bits == 8 ? image::PixelFormat::U8 : image::PixelFormat::U16;
+    auto storage = std::make_shared<image::HostStorage>(os.sizeBytes());
+    const float top = bits == 8 ? 255.0F : 65535.0F;
+    const auto src = f.host();
+    for (std::size_t i = 0; i < src.size(); ++i) {
+        const float scaled = std::clamp(src[i], 0.0F, 1.0F) * top;
+        const auto v = static_cast<unsigned>(scaled + 0.5F);
+        if (bits == 8) {
+            storage->bytes()[i] = static_cast<std::byte>(v);
+        } else {
+            const auto u = static_cast<std::uint16_t>(v);
+            std::memcpy(storage->bytes().data() + i * 2, &u, 2);
+        }
+    }
+    return image::ImageBuffer::wrap(os, std::move(storage)).value();
+}
+
+// K-M10-03, LF-EXP-01: ganzzahlige Bilder (U16/U8 aus dem Backend) ergeben dieselben Pixel wie
+// die bisherige Umwandlung aus F32 im Schreiber
+TEST(OiioComponent, M10_IntegerImagesWriteLikeFloat)
+{
+    OiioImageWriter writer;
+    OiioImageReader reader;
+    t::TempDir dir;
+    for (const int channels : {3, 1}) {
+        const image::ImageBuffer f = exportImage(channels);
+        for (const auto& [format, bits, ext] :
+             {std::tuple{ports::FileFormat::Tiff, 16, ".tif"}, std::tuple{ports::FileFormat::Png, 16, ".png"},
+              std::tuple{ports::FileFormat::Jpeg, 8, ".jpg"}, std::tuple{ports::FileFormat::Tiff, 8, ".tif"}}) {
+            SCOPED_TRACE(std::string(ext) + " " + std::to_string(bits) + " ch=" + std::to_string(channels));
+            ports::WriteOptions o;
+            o.format = format;
+            o.bitDepth = bits;
+            o.quality = 90;
+            const auto a = dir.path() / ("f" + std::to_string(channels) + std::to_string(bits) + ext);
+            const auto b = dir.path() / ("q" + std::to_string(channels) + std::to_string(bits) + ext);
+            ASSERT_TRUE(writer.write(a, f, o).has_value());
+            ASSERT_TRUE(writer.write(b, quantized(f, bits), o).has_value());
+            const auto ra = reader.read(a);
+            const auto rb = reader.read(b);
+            ASSERT_TRUE(ra && rb);
+            EXPECT_TRUE(std::ranges::equal(ra->host(), rb->host()));
+        }
+    }
 }
 
 } // namespace

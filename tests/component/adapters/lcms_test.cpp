@@ -17,6 +17,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -274,6 +275,52 @@ TEST(LcmsComponent, M9_ConcurrentTransformCreationIsRaceFree)
     for (const int n : ok) {
         EXPECT_EQ(n, 20);
     }
+}
+
+// D-18, LF-EXP-05: alle mitgelieferten Ausgabeprofile haben eine geschlossene Matrix-Kurven-Form,
+// die Little CMS auf zufälligen Farben (auch außerhalb 0…1) innerhalb von 1e-5 trifft
+TEST(LcmsComponent, M10_MatrixShaperMatchesLcms)
+{
+    LcmsColorEngine engine;
+    const ports::IccProfile working = engine.profile(ports::ProfileId::WorkingRec2020Linear).value();
+    std::mt19937 rng(1810);
+    std::uniform_real_distribution<float> u(-0.02F, 1.05F);
+    const int w = 97;
+    const int h = 31;
+    std::vector<float> px(static_cast<std::size_t>(w * h * 3));
+    for (float& v : px) {
+        v = u(rng);
+    }
+    const image::ImageBuffer src = image::ImageBuffer::fromFloats(
+        {w, h, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, px).value();
+    for (const ports::ProfileId id : {ports::ProfileId::Srgb, ports::ProfileId::AdobeRgb,
+                                      ports::ProfileId::ProPhoto, ports::ProfileId::GrayGamma22}) {
+        for (const ports::Intent intent : {ports::Intent::RelativeColorimetric, ports::Intent::Perceptual}) {
+            const auto x = engine.transform(working, engine.profile(id).value(), intent).value();
+            const auto ms = x->matrixShaper();
+            ASSERT_TRUE(ms.has_value()) << static_cast<int>(id);
+            const image::ImageBuffer want = x->apply(src).value();
+            ASSERT_EQ(want.spec().channels, ms->outChannels);
+            const auto out = want.host();
+            float worst = 0.0F;
+            for (std::size_t i = 0; i < static_cast<std::size_t>(w * h); ++i) {
+                for (int c = 0; c < ms->outChannels; ++c) {
+                    const auto row = static_cast<std::size_t>(c) * 3;
+                    const float lin = ms->matrix[row] * px[i * 3] + ms->matrix[row + 1] * px[i * 3 + 1] +
+                                      ms->matrix[row + 2] * px[i * 3 + 2];
+                    const float got = ms->encode(lin);
+                    worst = std::max(
+                        worst, std::abs(got - out[i * static_cast<std::size_t>(ms->outChannels) +
+                                                  static_cast<std::size_t>(c)]));
+                }
+            }
+            EXPECT_LE(worst, 1e-5F) << static_cast<int>(id);
+        }
+    }
+    // Absolut farbmetrisch: keine geschlossene Form (Weißpunktanpassung)
+    const auto abs =
+        engine.transform(working, engine.profile(ports::ProfileId::Srgb).value(), ports::Intent::AbsoluteColorimetric);
+    EXPECT_FALSE(abs.value()->matrixShaper().has_value());
 }
 
 } // namespace

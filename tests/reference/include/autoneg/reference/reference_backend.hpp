@@ -37,6 +37,7 @@ public:
     Result denoise(Ctx c, In in, float strength) override;
     Result inpaint(Ctx c, In in, const model::SpotList& spots) override;
     base::Expected<image::Histogram> histogram(Ctx c, In in, int bins) override;
+    base::Expected<image::ImageBuffer> quantize(Ctx c, In in, int bits) override;
     base::Expected<image::ImageBuffer> colorTransform(Ctx c, In in,
                                                       const ports::IColorTransform& xf) override;
 

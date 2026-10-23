@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <memory>
 #include <numbers>
 #include <variant>
 
@@ -567,6 +570,53 @@ image::Histogram histogram(const image::ImageBuffer& in, int bins)
     h.clipHigh = {static_cast<double>(high[0]) / n, static_cast<double>(high[1]) / n,
                   static_cast<double>(high[2]) / n};
     return h;
+}
+
+image::ImageBuffer matrixShaper(const image::ImageBuffer& in, const ports::MatrixShaper& ms)
+{
+    const image::ImageSpec& s = in.spec();
+    image::ImageSpec os = s;
+    os.channels = ms.outChannels;
+    os.space = image::ColorSpace::Output;
+    const auto src = in.host();
+    const auto pixels = static_cast<std::size_t>(s.width) * static_cast<std::size_t>(s.height);
+    const auto ci = static_cast<std::size_t>(s.channels);
+    const auto co = static_cast<std::size_t>(ms.outChannels);
+    std::vector<float> out(pixels * co);
+    for (std::size_t i = 0; i < pixels; ++i) {
+        const double r = src[i * ci];
+        const double g = ci == 3 ? src[i * ci + 1] : r;
+        const double b = ci == 3 ? src[i * ci + 2] : r;
+        for (std::size_t c = 0; c < co; ++c) {
+            const double lin = ms.matrix[c * 3] * r + ms.matrix[c * 3 + 1] * g + ms.matrix[c * 3 + 2] * b;
+            const double v = lin >= ms.t ? ms.k1 * std::pow(lin, static_cast<double>(ms.p)) + ms.k0 : ms.s * lin;
+            out[i * co + c] = static_cast<float>(v);
+        }
+    }
+    return image::ImageBuffer::fromFloats(os, out).value();
+}
+
+image::ImageBuffer quantize(const image::ImageBuffer& in, int bits)
+{
+    image::ImageSpec os = in.spec();
+    os.format = bits == 8 ? image::PixelFormat::U8 : image::PixelFormat::U16;
+    const float top = bits == 8 ? 255.0F : 65535.0F;
+    auto storage = std::make_shared<image::HostStorage>(os.sizeBytes());
+    const auto src = in.host();
+    std::byte* out = storage->bytes().data();
+    for (std::size_t i = 0; i < src.size(); ++i) {
+        // in float wie OpenImageIO: erst x · max runden, dann + 0,5
+        const float x = std::isnan(src[i]) ? 0.0F : std::clamp(src[i], 0.0F, 1.0F);
+        const float scaled = x * top;
+        const auto v = static_cast<unsigned>(scaled + 0.5F);
+        if (bits == 8) {
+            out[i] = static_cast<std::byte>(v);
+        } else {
+            const auto u = static_cast<std::uint16_t>(v);
+            std::memcpy(out + i * 2, &u, 2);
+        }
+    }
+    return image::ImageBuffer::wrap(os, std::move(storage)).value();
 }
 
 } // namespace autoneg::reference

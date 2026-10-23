@@ -156,8 +156,11 @@ OIIO::ImageSpec specOf(const image::ImageBuffer& img, const ports::WriteOptions&
 base::Expected<void> checkImage(const image::ImageBuffer& img)
 {
     const auto& s = img.spec();
-    if (img.empty() || s.format != image::PixelFormat::F32 || img.host().empty()) {
-        return base::makeError(base::ErrorCode::InvalidArgument, "Export erwartet F32 im Hauptspeicher");
+    const bool known = s.format == image::PixelFormat::F32 || s.format == image::PixelFormat::U16 ||
+                       s.format == image::PixelFormat::U8;
+    if (img.empty() || !known || img.hostBytes().empty()) {
+        return base::makeError(base::ErrorCode::InvalidArgument,
+                               "Export erwartet F32, U16 oder U8 im Hauptspeicher");
     }
     if (s.channels != 1 && s.channels != 3) {
         return base::makeError(base::ErrorCode::InvalidArgument, "Export erwartet 1 oder 3 Kanäle");
@@ -172,7 +175,11 @@ base::Expected<void> writeWith(OIIO::ImageOutput& out, const std::string& name, 
     if (!out.open(name, spec)) {
         return base::makeError(base::ErrorCode::Io, "Datei nicht anlegbar (" + out.geterror() + ")");
     }
-    const bool written = out.write_image(OIIO::TypeDesc::FLOAT, img.host().data());
+    // Ganzzahlige Bilder (K-M10-03) gehen ohne Umwandlung durch, sofern die Bittiefe passt
+    const OIIO::TypeDesc given = img.spec().format == image::PixelFormat::U16 ? OIIO::TypeDesc::UINT16
+                                 : img.spec().format == image::PixelFormat::U8 ? OIIO::TypeDesc::UINT8
+                                                                               : OIIO::TypeDesc::FLOAT;
+    const bool written = out.write_image(given, img.hostBytes().data());
     const bool closed = out.close();
     if (!written || !closed) {
         return base::makeError(base::ErrorCode::Io, "Schreiben fehlgeschlagen (" + out.geterror() + ")");

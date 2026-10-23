@@ -429,6 +429,101 @@ void ToneRow(const float* in, const float* base, float* out, std::size_t pixels,
     }
 }
 
+/// Kodierkurve: lin ≥ t ? k1 · lin^p + k0 : s · lin (lin^p über Exp/Log).
+HWY_INLINE V EncodeVec(D d, V lin, const ports::MatrixShaper& ms)
+{
+    const V tiny = hn::Set(d, 1e-30F);
+    const V pw = hn::Exp(d, hn::Mul(hn::Set(d, ms.p), hn::Log(d, hn::Max(lin, tiny))));
+    const V hi = hn::MulAdd(hn::Set(d, ms.k1), pw, hn::Set(d, ms.k0));
+    const V lo = hn::Mul(hn::Set(d, ms.s), lin);
+    return hn::IfThenElse(hn::Ge(lin, hn::Set(d, ms.t)), hi, lo);
+}
+
+/// n Pixel ab in (Kanalzahl inChannels) nach out; n = Lanes(d).
+HWY_INLINE void MatrixShaperVec(D d, const ports::MatrixShaper& ms, const float* in, float* out, int inChannels)
+{
+    V r;
+    V g;
+    V b;
+    if (inChannels == 3) {
+        hn::LoadInterleaved3(d, in, r, g, b);
+    } else {
+        r = g = b = hn::LoadU(d, in);
+    }
+    const auto& m = ms.matrix;
+    const auto row = [&](std::size_t k) {
+        return hn::MulAdd(hn::Set(d, m[k + 2]), b, hn::MulAdd(hn::Set(d, m[k + 1]), g, hn::Mul(hn::Set(d, m[k]), r)));
+    };
+    if (ms.outChannels == 1) {
+        hn::StoreU(EncodeVec(d, row(0), ms), d, out);
+        return;
+    }
+    hn::StoreInterleaved3(EncodeVec(d, row(0), ms), EncodeVec(d, row(3), ms), EncodeVec(d, row(6), ms), d, out);
+}
+
+void QuantizeRow(const float* in, void* out, std::size_t len, int bits)
+{
+    const D d;
+    const hn::RebindToSigned<D> di;
+    const std::size_t n = hn::Lanes(d);
+    const float top = bits == 8 ? 255.0F : 65535.0F;
+    const V scale = hn::Set(d, top);
+    const V half = hn::Set(d, 0.5F);
+    const V zero = hn::Zero(d);
+    const V one = hn::Set(d, 1.0F);
+    const auto level = [&](V x) {
+        const V clean = hn::IfThenElse(hn::Eq(x, x), x, zero); // NaN → 0
+        // getrennt runden wie OpenImageIO (x · max, dann + 0,5), nicht fusioniert
+        return hn::ConvertTo(di, hn::Add(hn::Mul(hn::Min(hn::Max(clean, zero), one), scale), half));
+    };
+    const auto scalar = [top](float x) {
+        const float c = x == x ? std::clamp(x, 0.0F, 1.0F) : 0.0F;
+        const float v = c * top;
+        return static_cast<int>(v + 0.5F);
+    };
+    std::size_t i = 0;
+    if (bits == 8) {
+        const hn::Rebind<std::uint8_t, D> d8;
+        auto* o = static_cast<std::uint8_t*>(out);
+        for (; i + n <= len; i += n) {
+            hn::StoreU(hn::DemoteTo(d8, level(hn::LoadU(d, in + i))), d8, o + i);
+        }
+        for (; i < len; ++i) {
+            o[i] = static_cast<std::uint8_t>(scalar(in[i]));
+        }
+        return;
+    }
+    const hn::Rebind<std::uint16_t, D> d16;
+    auto* o = static_cast<std::uint16_t*>(out);
+    for (; i + n <= len; i += n) {
+        hn::StoreU(hn::DemoteTo(d16, level(hn::LoadU(d, in + i))), d16, o + i);
+    }
+    for (; i < len; ++i) {
+        o[i] = static_cast<std::uint16_t>(scalar(in[i]));
+    }
+}
+
+void MatrixShaperRow(const ports::MatrixShaper& ms, const float* in, float* out, std::size_t pixels, int inChannels)
+{
+    const D d;
+    const std::size_t n = hn::Lanes(d);
+    const auto ci = static_cast<std::size_t>(inChannels);
+    const auto co = static_cast<std::size_t>(ms.outChannels);
+    std::size_t i = 0;
+    for (; i + n <= pixels; i += n) {
+        MatrixShaperVec(d, ms, in + i * ci, out + i * co, inChannels);
+    }
+    if (i < pixels) { // Rest über einen aufgefüllten Puffer, gleiche Formel
+        constexpr std::size_t maxLanes = HWY_MAX_BYTES / sizeof(float);
+        alignas(64) float tin[maxLanes * 3] = {};
+        alignas(64) float tout[maxLanes * 3] = {};
+        const std::size_t rest = pixels - i;
+        std::copy_n(in + i * ci, rest * ci, tin);
+        MatrixShaperVec(d, ms, tin, tout, inChannels);
+        std::copy_n(tout, rest * co, out + i * co);
+    }
+}
+
 } // namespace HWY_NAMESPACE
 } // namespace autoneg::backend::cpu::detail
 HWY_AFTER_NAMESPACE();
@@ -443,6 +538,8 @@ HWY_EXPORT(ConvolveRowV);
 HWY_EXPORT(UnsharpRow);
 HWY_EXPORT(LuminanceRow);
 HWY_EXPORT(ToneRow);
+HWY_EXPORT(MatrixShaperRow);
+HWY_EXPORT(QuantizeRow);
 
 void pixelRow(const image::PixelProgram& p, const float* in, float* out, std::size_t pixels, int channels)
 {
@@ -479,6 +576,17 @@ void toneRow(const float* in, const float* base, float* out, std::size_t pixels,
              float h)
 {
     HWY_DYNAMIC_DISPATCH(ToneRow)(in, base, out, pixels, channels, s, h);
+}
+
+void matrixShaperRow(const ports::MatrixShaper& ms, const float* in, float* out, std::size_t pixels,
+                     int inChannels)
+{
+    HWY_DYNAMIC_DISPATCH(MatrixShaperRow)(ms, in, out, pixels, inChannels);
+}
+
+void quantizeRow(const float* in, void* out, std::size_t len, int bits)
+{
+    HWY_DYNAMIC_DISPATCH(QuantizeRow)(in, out, len, bits);
 }
 
 std::int64_t supportedTargets()

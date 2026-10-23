@@ -30,7 +30,7 @@ struct KernelContext
 /// Vertrag:
 ///  - threadsicher, beliebig viele gleichzeitige Aufrufe;
 ///  - Ergebnisse unabhängig von der Threadzahl bitidentisch (NF-ARC-16);
-///  - Eingaben bleiben unverändert, Ausgaben haben das Format F32;
+///  - Eingaben bleiben unverändert, Ausgaben haben das Format F32 (außer quantize);
 ///  - Puffer anderer Backends werden bei Bedarf mit upload/download übertragen.
 class IComputeBackend
 {
@@ -69,9 +69,14 @@ public:
     [[nodiscard]] virtual base::Expected<image::Histogram>
     histogram(const KernelContext& c, const image::ImageBuffer& in, int bins) = 0;
     /// Farbtransformation datenparallel in festen Zeilenblöcken (NF-PERF-03, NF-PERF-05); xf muss
-    /// threadsicher sein. Ergebnis gleich xf.apply(in). Ergänzung D-17.
+    /// threadsicher sein. Ergebnis gleich xf.apply(in) bzw. der geschlossenen Form
+    /// xf.matrixShaper() (D-18). Ergänzung D-17.
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     colorTransform(const KernelContext& c, const image::ImageBuffer& in, const IColorTransform& xf) = 0;
+    /// Ausgabewerte (F32, 0…1) als U8 bzw. U16 für den Export (bits 8 oder 16):
+    /// floor(clamp(x, 0, 1) · (2^bits − 1) + 0,5); NaN wird 0. Ergänzung K-M10-03.
+    [[nodiscard]] virtual base::Expected<image::ImageBuffer>
+    quantize(const KernelContext& c, const image::ImageBuffer& in, int bits) = 0;
 };
 
 } // namespace autoneg::ports

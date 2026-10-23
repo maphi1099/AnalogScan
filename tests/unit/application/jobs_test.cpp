@@ -150,6 +150,67 @@ TEST(MemoryBudgetTest, U_APP_11_BudgetIsNeverExceeded)
     EXPECT_FALSE(budget.tryAcquire(1).has_value());
 }
 
+// NF-PERF-11: jede Zahl genau einmal, höchstens lanes gleichzeitig
+TEST(JobSchedulerTest, M10_ParallelForCoversAllIndicesWithinLanes)
+{
+    mocks::FakeTaskExecutor executor(8);
+    JobScheduler scheduler(executor);
+    std::vector<std::atomic<int>> seen(40);
+    std::atomic<int> running{0};
+    std::atomic<int> peak{0};
+    const auto h = scheduler.submit(job([&](JobContext& c) -> base::Expected<void> {
+                                        scheduler.parallelFor(c.priority, seen.size(), 3, [&](std::size_t i) {
+                                            const int now = ++running;
+                                            int p = peak.load();
+                                            while (now > p && !peak.compare_exchange_weak(p, now)) {
+                                            }
+                                            std::this_thread::sleep_for(2ms);
+                                            ++seen[i];
+                                            --running;
+                                        });
+                                        return {};
+                                    }),
+                                    ports::Priority::Batch);
+    ASSERT_TRUE(h.wait().has_value());
+    for (const auto& n : seen) {
+        EXPECT_EQ(n.load(), 1);
+    }
+    EXPECT_LE(peak.load(), 3);
+    EXPECT_GE(peak.load(), 2); // tatsächlich parallel
+}
+
+// NF-PERF-11: mit einem einzigen Worker keine Verklemmung (der Job arbeitet selbst mit)
+TEST(JobSchedulerTest, M10_ParallelForWithOneWorkerFinishes)
+{
+    mocks::FakeTaskExecutor executor(1);
+    JobScheduler scheduler(executor);
+    ThreadConfig one;
+    one.workers = 1;
+    scheduler.configure(one);
+    std::atomic<int> sum{0};
+    const auto h = scheduler.submit(job([&](JobContext& c) -> base::Expected<void> {
+                                        scheduler.parallelFor(c.priority, 10, 4,
+                                                              [&](std::size_t i) { sum += static_cast<int>(i); });
+                                        return {};
+                                    }),
+                                    ports::Priority::Batch);
+    ASSERT_TRUE(h.wait().has_value());
+    EXPECT_EQ(sum.load(), 45);
+}
+
+// NF-PERF-12: Budget zur Laufzeit ändern; acquireUpTo begrenzt auf das ganze Budget
+TEST(MemoryBudgetTest, M10_ResizeAndAcquireUpTo)
+{
+    MemoryBudget budget(100);
+    budget.setTotal(300);
+    EXPECT_EQ(budget.total(), 300U);
+    auto a = budget.acquireUpTo(1000); // größer als das Budget: bekommt alles
+    EXPECT_EQ(a.size(), 300U);
+    EXPECT_FALSE(budget.tryAcquire(1).has_value());
+    a = MemoryBudget::Lease{};
+    EXPECT_EQ(budget.used(), 0U);
+}
+
 /// Renderer-Fake: rechnet ein Bild je Anfrage, zählt Aufrufe, braucht etwas Zeit und bricht
 /// über das CancelToken ab.
 class SlowRenderer final : public IRenderer

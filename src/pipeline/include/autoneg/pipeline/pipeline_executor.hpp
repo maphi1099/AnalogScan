@@ -47,6 +47,12 @@ public:
     {}
 
     [[nodiscard]] base::Expected<image::ImageBuffer> execute(const RenderRequest& r);
+    /// Quellengröße ohne Dekodieren (SourceProvider::info).
+    [[nodiscard]] base::Expected<model::SourceInfo> info(const model::FrameId& f,
+                                                         const std::filesystem::path& path)
+    {
+        return sources_.info(f, path);
+    }
 
     /// Führt einen bereits kompilierten Plan auf einer gegebenen Quelle aus (ohne
     /// SourceProvider; für Analysen und Tests). Der Cache wird nur bei Execution::Whole
