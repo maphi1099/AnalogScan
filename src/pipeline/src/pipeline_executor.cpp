@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace autoneg::pipeline {
@@ -88,18 +89,28 @@ base::Expected<image::ImageBuffer> PipelineExecutor::execute(const RenderRequest
     const double scale = info->width > 0 ? static_cast<double>(src->spec().width) / info->width : 1.0;
     CompileOptions options;
     options.stopAfter = r.stopAfter;
-    const CompiledPipeline cp = compiler_.compile(*r.list, r.film, p, src->spec(), scale, options);
+    // Export mit Zielgröße (LF-EXP-06): volle Auflösung rechnen, im Arbeitsfarbraum auf die lange
+    // Kante verkleinern (nie vergrößern), erst danach in den Zielfarbraum umrechnen
+    const bool shrink = p.mode == RenderMode::Export && p.target.width > 0 && p.target.height > 0;
+    RenderProfile compileProfile = p;
+    std::shared_ptr<const ports::IColorTransform> lateOutput;
+    if (shrink) {
+        lateOutput = std::exchange(compileProfile.output.transform, nullptr);
+    }
+    const CompiledPipeline cp =
+        compiler_.compile(*r.list, r.film, compileProfile, src->spec(), scale, options);
     auto out = run(cp, *src, r, Execution::Auto, scale);
-    // Export mit Zielgröße (LF-EXP-06): volle Auflösung rechnen, dann auf die lange Kante
-    // verkleinern (nie vergrößern)
-    if (out && p.mode == RenderMode::Export && p.target.width > 0 && p.target.height > 0) {
+    if (out && shrink) {
         const double factor = std::min(static_cast<double>(p.target.width) / out->spec().width,
                                        static_cast<double>(p.target.height) / out->spec().height);
         if (factor < 1.0) {
             const base::Size size{std::max(1, static_cast<int>(std::lround(out->spec().width * factor))),
                                   std::max(1, static_cast<int>(std::lround(out->spec().height * factor)))};
-            return backend_.resample(ports::KernelContext{r.cancel}, *out, size);
+            out = backend_.resample(ports::KernelContext{r.cancel}, *out, size);
         }
+    }
+    if (out && lateOutput && !r.stopAfter) {
+        return backend_.colorTransform(ports::KernelContext{r.cancel}, *out, *lateOutput);
     }
     return out;
 }

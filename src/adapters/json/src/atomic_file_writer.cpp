@@ -68,21 +68,38 @@ base::Expected<void> writeSynced(const std::filesystem::path& tmp, std::span<con
 }
 
 /// Ziel atomar ersetzen: ReplaceFileW, falls das Ziel existiert, sonst MoveFileExW.
+/// Hält ein anderer Prozess (Virenscanner, Indexdienst, Sicherung) die Zieldatei kurz offen,
+/// scheitert das mit Freigabeverletzung oder Zugriff verweigert; dann erneut versuchen,
+/// insgesamt bis etwa 2 s (BUGS.md B-29).
 base::Expected<void> replace(const std::filesystem::path& tmp, const std::filesystem::path& target)
 {
-    std::error_code ec;
-    BOOL ok = FALSE;
-    if (std::filesystem::exists(target, ec)) {
-        ok = ReplaceFileW(target.wstring().c_str(), tmp.wstring().c_str(), nullptr,
-                          REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr);
-    } else {
-        ok = MoveFileExW(tmp.wstring().c_str(), target.wstring().c_str(), MOVEFILE_WRITE_THROUGH);
+    DWORD error = 0;
+    DWORD waitMs = 5;
+    for (DWORD waited = 0;;) {
+        std::error_code ec;
+        BOOL ok = FALSE;
+        if (std::filesystem::exists(target, ec)) {
+            ok = ReplaceFileW(target.wstring().c_str(), tmp.wstring().c_str(), nullptr,
+                              REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr);
+        } else {
+            ok = MoveFileExW(tmp.wstring().c_str(), target.wstring().c_str(), MOVEFILE_WRITE_THROUGH);
+        }
+        if (ok != FALSE) {
+            return {};
+        }
+        error = GetLastError();
+        const bool transient = error == ERROR_SHARING_VIOLATION || error == ERROR_ACCESS_DENIED ||
+                               error == ERROR_LOCK_VIOLATION || error == ERROR_UNABLE_TO_REMOVE_REPLACED;
+        if (!transient || waited >= 2000) {
+            break;
+        }
+        Sleep(waitMs);
+        waited += waitMs;
+        waitMs = std::min<DWORD>(waitMs * 2, 200);
     }
-    if (ok == FALSE) {
-        return base::makeError(base::ErrorCode::Io,
-                               describe(target) + ": Ersetzen fehlgeschlagen (" + lastError() + ")");
-    }
-    return {};
+    return base::makeError(base::ErrorCode::Io, describe(target) +
+                                                    ": Ersetzen fehlgeschlagen (Windows-Fehler " +
+                                                    std::to_string(error) + ")");
 }
 
 #else

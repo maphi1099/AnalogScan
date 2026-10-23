@@ -8,6 +8,7 @@
 #include "autoneg/image/pixel_program.hpp"
 #include "autoneg/image/warp_plan.hpp"
 #include "autoneg/model/values.hpp"
+#include "autoneg/ports/color.hpp"
 
 #include <string>
 
@@ -67,6 +68,10 @@ public:
     /// Feste Blockeinteilung, unabhängig von der Threadzahl (Kapitel 6.4).
     [[nodiscard]] virtual base::Expected<image::Histogram>
     histogram(const KernelContext& c, const image::ImageBuffer& in, int bins) = 0;
+    /// Farbtransformation datenparallel in festen Zeilenblöcken (NF-PERF-03, NF-PERF-05); xf muss
+    /// threadsicher sein. Ergebnis gleich xf.apply(in). Ergänzung D-17.
+    [[nodiscard]] virtual base::Expected<image::ImageBuffer>
+    colorTransform(const KernelContext& c, const image::ImageBuffer& in, const IColorTransform& xf) = 0;
 };
 
 } // namespace autoneg::ports

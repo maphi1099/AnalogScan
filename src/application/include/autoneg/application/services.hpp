@@ -6,6 +6,7 @@
 #include "autoneg/application/jobs.hpp"
 #include "autoneg/application/render_service.hpp"
 #include "autoneg/ports/color.hpp"
+#include "autoneg/ports/document_renderer.hpp"
 #include "autoneg/ports/film_profile_source.hpp"
 #include "autoneg/ports/image_io.hpp"
 #include "autoneg/ports/inference.hpp"
@@ -113,12 +114,17 @@ struct ExportSettings
 class ExportService
 {
 public:
+    /// Nach jedem Bild aufgerufen, damit die dekodierte Quelle freigegeben werden kann
+    /// (SourceProvider::release, außer das Bild ist in Bearbeitung; NF-PERF-07).
+    using Release = std::function<void(const model::FrameId&)>;
+
     ExportService(JobScheduler& jobs, IRenderer& renderer, ports::IColorEngine& color,
-                  ports::IImageWriter& writer)
+                  ports::IImageWriter& writer, Release release = {})
         : jobs_(jobs)
         , renderer_(renderer)
         , color_(color)
         , writer_(writer)
+        , release_(std::move(release))
     {}
 
     /// Zieldatei; Fehler Conflict, wenn sie existiert und nicht überschrieben werden darf.
@@ -138,6 +144,7 @@ private:
     IRenderer& renderer_;
     ports::IColorEngine& color_;
     ports::IImageWriter& writer_;
+    Release release_;
 };
 
 /// Platzhalter der KI-Laufzeit für Version 1.0 (NF-ARC-07, D-04): nicht verfügbar.
@@ -148,6 +155,23 @@ public:
     [[nodiscard]] bool available() const override { return false; }
     [[nodiscard]] base::Expected<std::unique_ptr<ports::IInferenceModel>>
     load(const std::filesystem::path& model) override;
+};
+
+/// Ohne Qt (Bau ohne AUTONEG_WITH_GUI): kein PDF und kein Druck des Kontaktabzugs.
+class NoDocumentRenderer final : public ports::IDocumentRenderer
+{
+public:
+    [[nodiscard]] base::Expected<void> writePdf(std::span<const ports::RenderedPage> /*pages*/,
+                                                const std::filesystem::path& /*p*/) override
+    {
+        return base::makeError(base::ErrorCode::Unsupported,
+                               "Kontaktabzug als PDF braucht den Bau mit Oberfläche");
+    }
+    [[nodiscard]] base::Expected<void> print(std::span<const ports::RenderedPage> /*pages*/,
+                                             const ports::PrintSettings& /*s*/) override
+    {
+        return base::makeError(base::ErrorCode::Unsupported, "Drucken braucht den Bau mit Oberfläche");
+    }
 };
 
 /// Platzhalter der Filmprofile für Version 1.0 (NF-ARC-15): keine Profile.

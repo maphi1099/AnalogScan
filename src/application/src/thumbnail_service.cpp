@@ -115,22 +115,6 @@ ThumbnailService::Result ThumbnailService::make(const model::Frame& f, const mod
     if (auto hit = cache_.thumbnail(f.id, size, editHash)) {
         return std::move(*hit);
     }
-    pipeline::RenderRequest r;
-    r.frame = f.id;
-    r.path = f.path;
-    r.list = std::make_shared<const model::EditList>(edits);
-    r.film = film;
-    r.profile.mode = pipeline::RenderMode::Thumbnail;
-    r.profile.target = {size, size};
-    r.profile.priority = ports::Priority::Background;
-    r.cancel = cancel;
-    auto img = renderer_.render(r);
-    if (release_) {
-        release_(f.id);
-    }
-    if (!img) {
-        return std::unexpected(img.error());
-    }
     auto working = color_.profile(ports::ProfileId::WorkingRec2020Linear);
     auto srgb = color_.profile(ports::ProfileId::Srgb);
     if (!working || !srgb) {
@@ -140,7 +124,20 @@ ThumbnailService::Result ThumbnailService::make(const model::Frame& f, const mod
     if (!xf) {
         return std::unexpected(xf.error());
     }
-    auto display = (*xf)->apply(*img);
+    pipeline::RenderRequest r;
+    r.frame = f.id;
+    r.path = f.path;
+    r.list = std::make_shared<const model::EditList>(edits);
+    r.film = film;
+    r.profile.mode = pipeline::RenderMode::Thumbnail;
+    r.profile.target = {size, size};
+    r.profile.priority = ports::Priority::Background;
+    r.profile.output.transform = *xf;
+    r.cancel = cancel;
+    auto display = renderer_.render(r);
+    if (release_) {
+        release_(f.id);
+    }
     if (!display) {
         return std::unexpected(display.error());
     }

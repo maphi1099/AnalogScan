@@ -6,13 +6,13 @@
 
 #include <string>
 
-namespace autoneg::ui {
+namespace autoneg::application {
 
 /// Vorlagen für Export (LF-EXP-10) und Kontaktabzug (LF-KTA-10) als JsonValue; die
 /// Ablage übernimmt ports::IPresetRepository. Unbekannte oder fehlende Felder behalten
 /// den Standardwert (Vorlagen älterer Versionen bleiben lesbar).
-[[nodiscard]] model::JsonValue exportToJson(const application::ExportSettings& s);
-[[nodiscard]] application::ExportSettings exportFromJson(const model::JsonValue& j);
+[[nodiscard]] model::JsonValue exportToJson(const ExportSettings& s);
+[[nodiscard]] ExportSettings exportFromJson(const model::JsonValue& j);
 
 struct SheetPreset
 {
@@ -23,4 +23,4 @@ struct SheetPreset
 [[nodiscard]] model::JsonValue sheetToJson(const SheetPreset& p);
 [[nodiscard]] SheetPreset sheetFromJson(const model::JsonValue& j);
 
-} // namespace autoneg::ui
+} // namespace autoneg::application

@@ -17,6 +17,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <thread>
 
 namespace autoneg::adapter::json {
 namespace {
@@ -291,6 +292,24 @@ TEST_F(DataStore, U_DAT_05_DefectiveFiles)
 }
 
 // LF-DAT-03
+// LF-DAT-01, LF-DAT-03: ein anderer Prozess (Virenscanner, Indexdienst) hält die Zieldatei kurz
+// offen; das Speichern darf daran nicht scheitern (unter Windows Freigabeverletzung beim Ersetzen)
+TEST_F(DataStore, M9_ReplaceSucceedsWhileTargetBrieflyOpen)
+{
+    const fs::path target = dir.path() / "bild.ARW.autoneg.json";
+    ASSERT_TRUE(writer.write(target, std::string_view("alt")).has_value());
+    auto reader = std::make_unique<std::ifstream>(target, std::ios::binary); // Datei geöffnet halten
+    ASSERT_TRUE(reader->is_open());
+    std::thread release([&reader] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        reader.reset();
+    });
+    const auto r = writer.write(target, std::string_view("neu"));
+    release.join();
+    ASSERT_TRUE(r.has_value()) << r.error().message;
+    EXPECT_EQ(readFile(target), "neu");
+}
+
 TEST_F(DataStore, U_DAT_06_AbortInEveryStage)
 {
     const fs::path target = dir.path() / "ziel.json";

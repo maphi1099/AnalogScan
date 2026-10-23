@@ -21,6 +21,17 @@
         "libraw"
       ]
     },
+    "raw-parallel": {
+      "description": "RAW-Dekodierung mit OpenMP (D-17; nicht unter ThreadSanitizer)",
+      "dependencies": [
+        {
+          "name": "libraw",
+          "features": [
+            "openmp"
+          ]
+        }
+      ]
+    },
     "imageio": {
       "description": "Bilddateien lesen und schreiben (Adapter oiio)",
       "dependencies": [

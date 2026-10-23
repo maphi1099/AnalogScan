@@ -5,7 +5,6 @@
 #include "autoneg/ui/translations.hpp"
 
 #include <QtCore/QMetaObject>
-#include <QtCore/QStandardPaths>
 #include <QtWidgets/QApplication>
 
 namespace autoneg::ui {
@@ -61,25 +60,12 @@ application::UiDispatcher GuiApplication::dispatcher()
     };
 }
 
-std::filesystem::path GuiApplication::configDir()
-{
-    // %APPDATA%\AutoNeg bzw. ~/.config/autoneg (plattformabhängig über QStandardPaths)
-    return std::filesystem::path(
-        QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation).toStdU16String());
-}
-
-std::filesystem::path GuiApplication::cacheDir()
-{
-    return std::filesystem::path(
-        QStandardPaths::writableLocation(QStandardPaths::CacheLocation).toStdU16String());
-}
-
 MainWindow& GuiApplication::createWindow(const GuiServices& s)
 {
     impl_->window = std::make_unique<MainWindow>(AppServices{
-        s.registry, s.jobs,        s.bus,        s.session,        s.sync,         s.clipboard,  s.render,
-        s.rolls,    s.thumbnails,  s.analysis,   s.exports,        s.contactSheet, s.color,      s.presets,
-        s.settings, impl_->bridge, s.sourceInfo, s.currentChanged, s.encodeEdits,  s.decodeEdits});
+        s.registry, s.jobs,        s.bus,        s.session,        s.sync,         s.clipboard,   s.render,
+        s.rolls,    s.thumbnails,  s.analysis,   s.exports,        s.contactSheet, s.color,       s.presets,
+        s.settings, impl_->bridge, s.sourceInfo, s.currentChanged, s.encodeEdits,  s.decodeEdits, s.logger});
     return *impl_->window;
 }
 

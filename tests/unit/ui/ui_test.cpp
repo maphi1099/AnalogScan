@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <numbers>
 
 namespace autoneg::ui {
@@ -26,10 +27,25 @@ void setEnv(const char* name, const char* value)
 #endif
 }
 
+/// Hält die Qt-Instanz für alle Tests und baut sie nach dem letzten Test ab (sonst meldet
+/// LeakSanitizer Qts Schriftcaches als Lecks).
+template <class T>
+class QtInstance final : public ::testing::Environment
+{
+public:
+    static std::unique_ptr<T>& slot()
+    {
+        static std::unique_ptr<T> instance;
+        return instance;
+    }
+    void TearDown() override { slot().reset(); }
+};
+
 /// Eine QApplication für alle Tests des Programms, ohne Bildschirm.
 void ensureApp()
 {
-    static QApplication* app = [] {
+    auto& app = QtInstance<QApplication>::slot();
+    if (!app) {
         setEnv("QT_QPA_PLATFORM", "offscreen");
 #if defined(AUTONEG_QT_PLUGIN_DIR)
         setEnv("QT_PLUGIN_PATH", AUTONEG_QT_PLUGIN_DIR);
@@ -37,10 +53,13 @@ void ensureApp()
         static int argc = 1;
         static char arg0[] = "autoneg_test_ui";
         static char* argv[] = {arg0, nullptr};
-        return new QApplication(argc, argv); // lebt bis Programmende
-    }();
-    (void)app;
+        app = std::make_unique<QApplication>(argc, argv);
+    }
 }
+
+// Abbau nach dem letzten Test; gtest übernimmt das Objekt
+[[maybe_unused]] ::testing::Environment* const qtTeardown =
+    ::testing::AddGlobalTestEnvironment(new QtInstance<QApplication>);
 
 const pipeline::StepRegistry& standardRegistry()
 {

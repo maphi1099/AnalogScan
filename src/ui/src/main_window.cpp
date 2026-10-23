@@ -1,12 +1,12 @@
 #include "autoneg/ui/main_window.hpp"
 
+#include "autoneg/application/presets.hpp"
 #include "autoneg/steps/step_ids.hpp"
 #include "autoneg/ui/canvas_tools.hpp"
 #include "autoneg/ui/dialogs.hpp"
 #include "autoneg/ui/edit_list_model.hpp"
 #include "autoneg/ui/image_canvas.hpp"
 #include "autoneg/ui/panels.hpp"
-#include "autoneg/ui/presets.hpp"
 #include "autoneg/ui/views.hpp"
 
 #include <QtCore/QMimeData>
@@ -528,6 +528,9 @@ void MainWindow::report(const QString& msg)
 {
     messages_.push_back(msg);
     status_->setText(msg);
+    if (s_.logger != nullptr) {
+        s_.logger->log(ports::LogLevel::Info, msg.toStdString());
+    }
 }
 
 void MainWindow::openFolder(const std::filesystem::path& folder)

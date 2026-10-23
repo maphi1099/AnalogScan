@@ -243,3 +243,27 @@ Format je Eintrag:
 - Symptom: `QFileDialog::selectFile()` + `accept()` schließt den Dialog, `getSaveFileName` liefert aber einen leeren Namen; kein PDF.
 - Abhilfe: Im Test wie ein Anwender bedienen: Text in `fileNameEdit` schreiben und den Knopf „Speichern“ drücken.
 - Status: behoben (Test)
+
+## B-29: Speichern scheitert sporadisch unter Windows (Windows-Fehler 32 beim Ersetzen)
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1 (CTest parallel)
+- Plattform: Windows, `AtomicFileWriter`
+- Symptom: K-14 `EditsLastSaveWins` meldet einmal „Ersetzen fehlgeschlagen“; einzeln nicht reproduzierbar.
+- Ursache: `ReplaceFileW` scheitert mit Freigabeverletzung (32) bzw. Zugriff verweigert (5), solange ein anderer Prozess die Zieldatei kurz offen hält (Virenscanner, Indexdienst, Sicherung, ein Leser).
+- Abhilfe: Bei diesen Fehlern bis etwa 2 s mit wachsender Pause erneut versuchen. Reproduziert mit `M9_ReplaceSucceedsWhileTargetBrieflyOpen` (Datei offen halten, nach 150 ms freigeben).
+- Status: behoben
+
+## B-30: LeakSanitizer meldet Qts Schriftcaches in allen Qt-Tests
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: Linux, Preset `linux-clang-asan`
+- Symptom: 35 Tests mit Qt scheitern mit „LeakSanitizer: detected memory leaks“ in `qt_getFreetypeData`, `QFontCache`, `QFreetypeFace::getFace`.
+- Ursache: Die Tests legten ihre Qt-Anwendung mit `new` an und gaben sie nie frei.
+- Abhilfe: Qt-Instanz in einer gtest-Umgebung halten, die sie nach dem letzten Test abbaut (`QtInstance<T>`, statisch registriert).
+- Status: behoben (Nachweis unter ASan siehe PROGRESS)
+
+## B-31: Leistung: serielle Farbumrechnung und RAW-Dekodierung
+- Erstmals: 23.10.2026 (M9), zuletzt: 23.10.2026, Häufigkeit: 1
+- Plattform: alle, Messprogramm `tests/tools/bench`
+- Symptom: Export 61 MP 15–23 s, keine Skalierung mit der Threadzahl; Stapelexport von 36 Bildern 843 s und 19,8 GB Speicher.
+- Ursache: `IColorTransform::apply` (Little CMS) und `LibRaw::dcraw_process` laufen auf einem Kern; der SourceProvider behielt jede Quelle in voller Auflösung.
+- Abhilfe: `IComputeBackend::colorTransform` (Zeilenblöcke, oneTBB), LibRaw mit OpenMP, Freigabe der Quellen nach jedem Bild (D-17, K-M9-05). Danach: Export 61-MP-RAW 7,3 s, 100 MP (TIFF) 9,9 s, 5,3 GB.
+- Status: behoben; Skalierung 1 → 8 Threads 2,5 statt ≥ 5 bleibt offen (serielles TIFF-Schreiben, Little-CMS-Gleitkommapfad)

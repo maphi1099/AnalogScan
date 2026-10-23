@@ -10,6 +10,7 @@
 #include "autoneg/application/thumbnail_service.hpp"
 #include "autoneg/ports/color.hpp"
 #include "autoneg/ports/repositories.hpp"
+#include "autoneg/ports/services.hpp"
 #include "autoneg/ui/qt_session_bridge.hpp"
 #include "autoneg/ui/ui_controller.hpp"
 
@@ -70,6 +71,8 @@ struct AppServices
     /// Bearbeitungsliste ↔ JSON für Bearbeitungsvorlagen (EditCodec der Datenhaltung).
     std::function<model::JsonValue(const model::EditList&)> encodeEdits;
     std::function<model::EditList(const model::JsonValue&)> decodeEdits;
+    /// Protokoll (NF-REL-03); Meldungen der Oberfläche landen auch dort.
+    ports::ILogger* logger = nullptr;
 };
 
 /// Hauptfenster (Architektur 9.14, LF-UI-01): Filmstreifen, Arbeitsfläche, Werkzeuge,

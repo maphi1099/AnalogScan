@@ -743,6 +743,59 @@ CpuBackend::Result CpuBackend::resample(Ctx c, In in, base::Size size)
     return done ? out.finish() : cancelled();
 }
 
+base::Expected<image::ImageBuffer> CpuBackend::colorTransform(Ctx c, In in, const ports::IColorTransform& xf)
+{
+    if (auto ok = requireHostF32(in); !ok) {
+        return std::unexpected(ok.error());
+    }
+    const image::ImageSpec& s = in.spec();
+    if (s.height <= blockRows) {
+        return xf.apply(in);
+    }
+    // Erster Block allein: liefert Kanalzahl und Farbraum der Ausgabe
+    const auto first = in.copyRegion({0, 0, s.width, blockRows});
+    if (!first) {
+        return std::unexpected(first.error());
+    }
+    auto head = xf.apply(*first);
+    if (!head) {
+        return head;
+    }
+    image::ImageSpec os = s;
+    os.channels = head->spec().channels;
+    os.space = head->spec().space;
+    Output out(os);
+    const std::size_t rowSamples = os.samplesPerRow();
+    std::copy_n(head->host().data(), rowSamples * static_cast<std::size_t>(blockRows), out.row(0));
+    std::mutex errorMutex;
+    std::optional<base::Error> error;
+    const bool done = impl_->run([&] {
+        return forBlocks(s.height - blockRows, c.cancel, [&](int y0, int y1) {
+            const int top = y0 + blockRows;
+            const auto part = in.copyRegion({0, top, s.width, y1 - y0});
+            auto res =
+                part ? xf.apply(*part) : base::Expected<image::ImageBuffer>(std::unexpected(part.error()));
+            if (!res || res->spec().channels != os.channels) {
+                const std::scoped_lock lock(errorMutex);
+                if (!error) {
+                    error = res ? base::Error{base::ErrorCode::Internal,
+                                              "Farbtransformation: Kanalzahl uneinheitlich"}
+                                : res.error();
+                }
+                return;
+            }
+            std::copy_n(res->host().data(), rowSamples * static_cast<std::size_t>(y1 - y0), out.row(top));
+        });
+    });
+    if (error) {
+        return std::unexpected(*error);
+    }
+    if (!done) {
+        return cancelled();
+    }
+    return out.finish();
+}
+
 base::Expected<image::Histogram> CpuBackend::histogram(Ctx c, In in, int bins)
 {
     if (auto ok = requireHostF32(in); !ok) {

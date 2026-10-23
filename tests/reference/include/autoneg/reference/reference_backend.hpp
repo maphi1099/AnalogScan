@@ -37,6 +37,8 @@ public:
     Result denoise(Ctx c, In in, float strength) override;
     Result inpaint(Ctx c, In in, const model::SpotList& spots) override;
     base::Expected<image::Histogram> histogram(Ctx c, In in, int bins) override;
+    base::Expected<image::ImageBuffer> colorTransform(Ctx c, In in,
+                                                      const ports::IColorTransform& xf) override;
 
     /// Anzahl der Aufrufe des Kernels name ("runPixel", "warp", …).
     [[nodiscard]] int calls(const std::string& name) const;

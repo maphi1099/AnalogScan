@@ -5,6 +5,7 @@ autoneg_add_module(application
         src/commands.cpp
         src/jobs.cpp
         src/persistence_queue.cpp
+        src/presets.cpp
         src/render_service.cpp
         src/roll_service.cpp
         src/services.cpp

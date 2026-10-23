@@ -155,7 +155,8 @@ TYPED_TEST(DataContract, K_14_EditsLastSaveWins)
     auto& repo = this->setup.edits();
     const model::Frame f = this->folder.frame(1);
     for (int i = 1; i <= 5; ++i) {
-        ASSERT_TRUE(repo.save(f, this->folder.data(f, 0.1 * i)).has_value());
+        const auto saved = repo.save(f, this->folder.data(f, 0.1 * i));
+        ASSERT_TRUE(saved.has_value()) << saved.error().message;
     }
     const auto back = repo.load(f);
     ASSERT_TRUE(back.has_value() && back->has_value());

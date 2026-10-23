@@ -1,6 +1,6 @@
-#include "autoneg/ui/presets.hpp"
+#include "autoneg/application/presets.hpp"
 
-namespace autoneg::ui {
+namespace autoneg::application {
 
 namespace {
 
@@ -32,7 +32,7 @@ std::string stringOr(const model::JsonValue& j, std::string_view key, std::strin
 
 } // namespace
 
-model::JsonValue exportToJson(const application::ExportSettings& s)
+model::JsonValue exportToJson(const ExportSettings& s)
 {
     model::JsonValue j;
     j.set("format", static_cast<int>(s.write.format));
@@ -48,9 +48,9 @@ model::JsonValue exportToJson(const application::ExportSettings& s)
     return j;
 }
 
-application::ExportSettings exportFromJson(const model::JsonValue& j)
+ExportSettings exportFromJson(const model::JsonValue& j)
 {
-    application::ExportSettings s;
+    ExportSettings s;
     s.write.format = static_cast<ports::FileFormat>(intOr(j, "format", static_cast<int>(s.write.format)));
     s.write.bitDepth = intOr(j, "bitDepth", s.write.bitDepth);
     s.write.quality = intOr(j, "quality", s.write.quality);
@@ -104,4 +104,4 @@ SheetPreset sheetFromJson(const model::JsonValue& j)
     return p;
 }
 
-} // namespace autoneg::ui
+} // namespace autoneg::application

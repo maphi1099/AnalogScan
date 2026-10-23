@@ -12,7 +12,7 @@ autoneg_add_module(ui
         src/image_canvas.cpp
         src/main_window.cpp
         src/panels.cpp
-        src/presets.cpp
+
         src/qt_session_bridge.cpp
         src/translations.cpp
         src/ui_controller.cpp

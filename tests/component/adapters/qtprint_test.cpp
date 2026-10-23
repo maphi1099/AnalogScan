@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 
 namespace autoneg::adapter::qtprint {
@@ -42,11 +43,26 @@ std::optional<std::string> getEnv(const char* name)
 #endif
 }
 
+/// Hält die Qt-Instanz für alle Tests und baut sie nach dem letzten Test ab (sonst meldet
+/// LeakSanitizer Qts Schriftcaches als Lecks).
+template <class T>
+class QtInstance final : public ::testing::Environment
+{
+public:
+    static std::unique_ptr<T>& slot()
+    {
+        static std::unique_ptr<T> instance;
+        return instance;
+    }
+    void TearDown() override { slot().reset(); }
+};
+
 /// Eine Qt-Instanz für alle Tests des Programms, ohne Bildschirm: unter Linux offscreen, unter
 /// Windows die native Plattform (offscreen fände dort keine Schriften), wie im Programm.
 QtGuiSession& session()
 {
-    static QtGuiSession* s = [] {
+    auto& s = QtInstance<QtGuiSession>::slot();
+    if (!s) {
 #if defined(_WIN32)
         setEnv("QT_QPA_PLATFORM", "windows");
 #else
@@ -55,10 +71,14 @@ QtGuiSession& session()
 #if defined(AUTONEG_QT_PLUGIN_DIR)
         setEnv("QT_PLUGIN_PATH", AUTONEG_QT_PLUGIN_DIR);
 #endif
-        return new QtGuiSession(); // bewusst nie zerstört: Qt-Instanz lebt bis Programmende
-    }();
+        s = std::make_unique<QtGuiSession>();
+    }
     return *s;
 }
+
+// Abbau nach dem letzten Test; gtest übernimmt das Objekt
+[[maybe_unused]] ::testing::Environment* const qtTeardown =
+    ::testing::AddGlobalTestEnvironment(new QtInstance<QtGuiSession>);
 
 /// Verlauf als Testbild, damit der Inhalt nicht trivial ist.
 image::ImageBuffer gradient(int w, int h, int seed)

@@ -5,7 +5,9 @@
 // bekanntem Bildfeld); Testing/Data wird nicht benutzt, damit dort nichts geschrieben wird.
 
 #include "autoneg/adapter/oiio/oiio_image_io.hpp"
+#include "autoneg/adapter/qtprint/qt_document_renderer.hpp"
 #include "autoneg/app/composition.hpp"
+#include "autoneg/app/gui_services.hpp"
 #include "autoneg/testing/synthetic.hpp"
 #include "autoneg/testing/temp_dir.hpp"
 #include "autoneg/ui/canvas_tools.hpp"
@@ -69,10 +71,25 @@ void setEnv(const char* name, const char* value)
 #endif
 }
 
+/// Hält die Qt-Instanz für alle Tests und baut sie nach dem letzten Test ab (sonst meldet
+/// LeakSanitizer Qts Schriftcaches als Lecks).
+template <class T>
+class QtInstance final : public ::testing::Environment
+{
+public:
+    static std::unique_ptr<T>& slot()
+    {
+        static std::unique_ptr<T> instance;
+        return instance;
+    }
+    void TearDown() override { slot().reset(); }
+};
+
 /// Eine Qt-Anwendung für alle Tests des Programms.
 ui::GuiApplication& gui()
 {
-    static ui::GuiApplication* g = [] {
+    auto& g = QtInstance<ui::GuiApplication>::slot();
+    if (!g) {
         setEnv("QT_QPA_PLATFORM", "offscreen");
 #if defined(AUTONEG_QT_PLUGIN_DIR)
         setEnv("QT_PLUGIN_PATH", AUTONEG_QT_PLUGIN_DIR);
@@ -80,10 +97,14 @@ ui::GuiApplication& gui()
         static int argc = 1;
         static char arg0[] = "autoneg_test_e2e";
         static char* argv[] = {arg0, nullptr};
-        return new ui::GuiApplication(argc, argv); // lebt bis Programmende
-    }();
+        g = std::make_unique<ui::GuiApplication>(argc, argv);
+    }
     return *g;
 }
+
+// Abbau nach dem letzten Test; gtest übernimmt das Objekt
+[[maybe_unused]] ::testing::Environment* const qtTeardown =
+    ::testing::AddGlobalTestEnvironment(new QtInstance<ui::GuiApplication>);
 
 /// Wartet unter Abarbeitung der Ereignisse, bis cond gilt (höchstens ms).
 bool waitFor(const std::function<bool()>& cond, int ms = 20000)
@@ -147,10 +168,11 @@ protected:
     }
     void launch()
     {
-        comp = std::make_unique<app::Composition>(
-            gui(), app::Directories{tmp.path() / "config", tmp.path() / "cache"});
+        comp =
+            std::make_unique<app::Composition>(app::Directories{tmp.path() / "config", tmp.path() / "cache"},
+                                               gui().previewSink(), gui().dispatcher(), document);
         gui().setLanguage(comp->language()); // wie das Programm beim Start
-        window = &gui().createWindow(comp->services());
+        window = &gui().createWindow(app::guiServices(*comp));
         window->resize(1200, 800);
         window->show();
     }
@@ -212,6 +234,7 @@ protected:
 
     testing::TempDir tmp;
     fs::path rollDir;
+    adapter::qtprint::QtDocumentRenderer document;
     std::unique_ptr<app::Composition> comp;
     MainWindow* window = nullptr;
 };

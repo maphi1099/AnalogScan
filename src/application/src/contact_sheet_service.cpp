@@ -124,12 +124,12 @@ ContactSheetService::render(const layout::ContactSheetSpec& s, std::span<const I
             r.profile.mode = pipeline::RenderMode::Thumbnail;
             r.profile.target = {px, px};
             r.profile.priority = ports::Priority::Batch;
+            r.profile.output.transform = *xf; // im Backend datenparallel (D-17)
             r.cancel = cancel;
-            auto img = renderer_.render(r);
-            if (!img) {
-                return std::unexpected(img.error());
+            auto converted = renderer_.render(r);
+            if (release_) {
+                release_(item->source.id);
             }
-            auto converted = (*xf)->apply(*img);
             if (!converted) {
                 return std::unexpected(converted.error());
             }

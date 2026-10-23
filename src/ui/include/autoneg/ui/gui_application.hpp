@@ -12,6 +12,7 @@
 #include "autoneg/application/thumbnail_service.hpp"
 #include "autoneg/ports/color.hpp"
 #include "autoneg/ports/repositories.hpp"
+#include "autoneg/ports/services.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -47,6 +48,8 @@ struct GuiServices
     /// Bearbeitungsliste ↔ JSON für Bearbeitungsvorlagen (EditCodec der Datenhaltung).
     std::function<model::JsonValue(const model::EditList&)> encodeEdits;
     std::function<model::EditList(const model::JsonValue&)> decodeEdits;
+    /// Protokoll (NF-REL-03); Meldungen der Oberfläche landen auch dort.
+    ports::ILogger* logger = nullptr;
 };
 
 /// Qt-Anwendung der Oberfläche: besitzt QApplication, die Brücke (QtSessionBridge) und das
@@ -67,10 +70,6 @@ public:
     [[nodiscard]] application::RenderService::ReadyHandler previewSink();
     /// Für den AnalysisService: führt Aufgaben im UI-Thread aus.
     [[nodiscard]] application::UiDispatcher dispatcher();
-
-    /// Benutzerverzeichnisse (Architektur 8.1): Einstellungen/Vorlagen bzw. Cache.
-    [[nodiscard]] static std::filesystem::path configDir();
-    [[nodiscard]] static std::filesystem::path cacheDir();
 
     /// Erzeugt das Hauptfenster (für Tests ohne exec()).
     MainWindow& createWindow(const GuiServices& s);

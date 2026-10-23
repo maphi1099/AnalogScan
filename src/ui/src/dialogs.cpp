@@ -1,6 +1,6 @@
 #include "autoneg/ui/dialogs.hpp"
 
-#include "autoneg/ui/presets.hpp"
+#include "autoneg/application/presets.hpp"
 #include "autoneg/ui/translations.hpp"
 #include "autoneg/ui/ui_controller.hpp"
 
@@ -118,7 +118,7 @@ ExportDialog::ExportDialog(QWidget* parent)
         }
         const auto j = presets_->load({ports::PresetKind::Export, presetCombo_->itemText(i).toStdString()});
         if (j) {
-            application::ExportSettings s = exportFromJson(*j);
+            application::ExportSettings s = application::exportFromJson(*j);
             if (s.folder.empty()) {
                 s.folder = settings().folder; // Vorlage ohne Ordner: Ziel bleibt
             }
@@ -134,7 +134,7 @@ ExportDialog::ExportDialog(QWidget* parent)
                                                    QLineEdit::Normal, QString(), &ok);
         if (ok && !name.trimmed().isEmpty()) {
             if (auto r = presets_->save(ports::PresetKind::Export, name.trimmed().toStdString(),
-                                        exportToJson(settings()));
+                                        application::exportToJson(settings()));
                 !r) {
                 QMessageBox::warning(this, tr("Vorlage speichern"),
                                      QString::fromStdString(r.error().message));
@@ -293,7 +293,7 @@ ContactSheetDialog::ContactSheetDialog(QWidget* parent)
                                                    QLineEdit::Normal, QString(), &ok);
         if (ok && !name.trimmed().isEmpty()) {
             if (auto r = presets_->save(ports::PresetKind::ContactSheet, name.trimmed().toStdString(),
-                                        sheetToJson({spec(), format()}));
+                                        application::sheetToJson({spec(), format()}));
                 !r) {
                 QMessageBox::warning(this, tr("Vorlage speichern"),
                                      QString::fromStdString(r.error().message));
@@ -308,7 +308,7 @@ ContactSheetDialog::ContactSheetDialog(QWidget* parent)
         const auto j =
             presets_->load({ports::PresetKind::ContactSheet, presetCombo_->itemText(i).toStdString()});
         if (j) {
-            SheetPreset p = sheetFromJson(*j);
+            application::SheetPreset p = application::sheetFromJson(*j);
             p.spec.header = spec().header; // Rollendaten bleiben
             setSpec(p.spec, p.format);
         }

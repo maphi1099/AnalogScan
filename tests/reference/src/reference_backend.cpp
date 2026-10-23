@@ -9,6 +9,7 @@ base::Expected<image::ImageBuffer> cancelled()
 {
     return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
 }
+
 } // namespace
 
 bool ReferenceBackend::begin(Ctx c, const std::string& name)
@@ -96,6 +97,12 @@ base::Expected<image::Histogram> ReferenceBackend::histogram(Ctx c, In in, int b
         return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
     }
     return reference::histogram(in, bins);
+}
+
+base::Expected<image::ImageBuffer> ReferenceBackend::colorTransform(Ctx c, In in,
+                                                                    const ports::IColorTransform& xf)
+{
+    return begin(c, "colorTransform") ? xf.apply(in) : cancelled(); // Referenz: am Stück
 }
 
 } // namespace autoneg::reference

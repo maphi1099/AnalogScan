@@ -34,12 +34,16 @@ public:
         model::EditList edits;
     };
 
+    /// Nach jedem Feld: dekodierte Quelle freigeben (wie beim Export, NF-PERF-07).
+    using Release = std::function<void(const model::FrameId&)>;
+
     ContactSheetService(JobScheduler& jobs, IRenderer& renderer, ports::IColorEngine& color,
-                        ports::IDocumentRenderer& document)
+                        ports::IDocumentRenderer& document, Release release = {})
         : jobs_(jobs)
         , renderer_(renderer)
         , color_(color)
         , document_(document)
+        , release_(std::move(release))
     {}
 
     [[nodiscard]] std::vector<layout::PageLayout> build(const layout::ContactSheetSpec& s,
@@ -65,6 +69,7 @@ private:
     IRenderer& renderer_;
     ports::IColorEngine& color_;
     ports::IDocumentRenderer& document_;
+    Release release_;
 };
 
 } // namespace autoneg::application

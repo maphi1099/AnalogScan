@@ -2,3 +2,4 @@
 add_subdirectory(render_pfm)
 add_subdirectory(decode_raw)
 add_subdirectory(analyze)
+add_subdirectory(bench)

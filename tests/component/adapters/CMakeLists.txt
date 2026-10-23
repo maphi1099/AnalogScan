@@ -40,3 +40,10 @@ if(AUTONEG_WITH_GUI)
             AUTONEG_QT_PLUGIN_DIR="${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/$<$<CONFIG:Debug>:debug/>Qt6/plugins")
     endif()
 endif()
+
+# K-20: Protokoll mit spdlog
+autoneg_add_test(spdlog
+    LABEL component
+    SOURCES spdlog_test.cpp
+    DEPS adapter_spdlog test_support
+)

@@ -276,13 +276,15 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
     {
     public:
         ExportJob(std::vector<Item> items, std::shared_ptr<const model::Roll> roll, ExportSettings s,
-                  IRenderer& renderer, ports::IColorEngine& color, ports::IImageWriter& writer)
+                  IRenderer& renderer, ports::IColorEngine& color, ports::IImageWriter& writer,
+                  Release release)
             : items_(std::move(items))
             , roll_(std::move(roll))
             , s_(std::move(s))
             , renderer_(renderer)
             , color_(color)
             , writer_(writer)
+            , release_(std::move(release))
         {}
         std::string name() const override { return "Export"; }
         base::Expected<void> run(JobContext& c) override
@@ -315,12 +317,13 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
                 if (s_.longEdge > 0) {
                     r.profile.target = {s_.longEdge, s_.longEdge}; // lange Kante, Seitenverhältnis bleibt
                 }
+                r.profile.output.transform =
+                    *xf; // im Backend datenparallel (D-17); Grau einkanalig (LF-EXP-09)
                 r.cancel = c.cancel;
-                auto img = renderer_.render(r);
-                if (!img) {
-                    return std::unexpected(img.error());
+                auto out = renderer_.render(r);
+                if (release_) {
+                    release_(item.frame.id); // Quelle in voller Auflösung nicht behalten (NF-PERF-07)
                 }
-                auto out = (*xf)->apply(*img); // mit Graustufenprofil einkanalig (LF-EXP-09)
                 if (!out) {
                     return std::unexpected(out.error());
                 }
@@ -341,9 +344,10 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
         IRenderer& renderer_;
         ports::IColorEngine& color_;
         ports::IImageWriter& writer_;
+        Release release_;
     };
     return jobs_.submit(std::make_unique<ExportJob>(std::move(items), std::move(roll), std::move(s),
-                                                    renderer_, color_, writer_),
+                                                    renderer_, color_, writer_, release_),
                         ports::Priority::Batch);
 }
 

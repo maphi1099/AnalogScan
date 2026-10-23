@@ -1,6 +1,7 @@
 // Unit-Tests CpuBackend gegen die skalare Referenz (tests/reference), Architektur 9.10.
 
 #include "autoneg/backend/cpu/cpu_backend.hpp"
+#include "autoneg/mocks/fakes.hpp"
 #include "autoneg/reference/kernels.hpp"
 
 #include <gtest/gtest.h>
@@ -338,6 +339,38 @@ TEST(CpuBackend, M2_ResultsBitIdenticalForAnyThreadCount)
                          many.unsharp(ctx, in, 0.5F, 1.5F, 0.0F).value()));
     EXPECT_TRUE(bitEqual(one.localTone(ctx, in, 0.4F, 0.2F, 6.0F).value(),
                          many.localTone(ctx, in, 0.4F, 0.2F, 6.0F).value()));
+}
+
+// NF-PERF-03, NF-PERF-05, NF-ARC-16: Farbtransformation in Zeilenblöcken = am Stück (D-17)
+TEST(CpuBackend, M9_ColorTransformInBlocksEqualsWhole)
+{
+    mocks::FakeColorEngine color;
+    const auto working = color.profile(ports::ProfileId::WorkingRec2020Linear).value();
+    for (const ports::ProfileId target : {ports::ProfileId::Srgb, ports::ProfileId::GrayGamma22}) {
+        const auto xf =
+            color.transform(working, color.profile(target).value(), ports::Intent::Perceptual).value();
+        for (const int h : {7, 64, 389, 1001}) { // kleiner, gleich und kein Vielfaches der Blockhöhe
+            const ImageBuffer in = randomImage(257, h, 3, static_cast<std::uint64_t>(7 + h));
+            const ImageBuffer whole = xf->apply(in).value();
+            CpuBackend one(CpuBackend::Options{1});
+            CpuBackend many(CpuBackend::Options{16});
+            const auto a = one.colorTransform(ctx, in, *xf);
+            const auto b = many.colorTransform(ctx, in, *xf);
+            ASSERT_TRUE(a && b);
+            EXPECT_EQ(a->spec().channels, whole.spec().channels);
+            EXPECT_TRUE(bitEqual(*a, whole)) << h;
+            EXPECT_TRUE(bitEqual(*b, whole)) << h;
+        }
+    }
+    image::CancelToken cancelled;
+    cancelled.cancel();
+    const auto xf =
+        color.transform(working, color.profile(ports::ProfileId::Srgb).value(), ports::Intent::Perceptual)
+            .value();
+    const auto r =
+        CpuBackend{}.colorTransform(ports::KernelContext{cancelled}, randomImage(64, 600, 3, 1), *xf);
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error().code, base::ErrorCode::Cancelled);
 }
 
 TEST(CpuBackend, M2_CancelledTokenStopsKernel)

@@ -53,7 +53,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M6 | Datenhaltung und Anwendung | Fertig (autonom, D-15) | U-DAT-01…15, U-APP-01…16, K-14 (ITaskExecutor) |
 | M7 | Kontaktabzug | Fertig (autonom, D-15) | U-LAY-01…09, K-15 |
 | M8 | Oberfläche, E2E | Fertig (autonom, D-15); Lücken siehe K-M8-11 | U-UI-01…05, K-14 (Repositories, Cache), E-01…03, E-05, E-09, E-10, E-12, E-13 (Teil), E-15, E-17…E-19, E-21…E-29, E-30, E-31…E-34, E-36, E-38, E-39, E-41…E-46, E-48 |
-| M9 | CLI, Leistung, Abschluss | Offen | – |
+| M9 | CLI, Leistung, Abschluss | Fertig (autonom, D-15) | K-16, K-17, K-18 (Messprogramm, T-17), K-20, E-49 (über K-18) |
 
 ### M0 – Ergebnis
 
@@ -194,6 +194,31 @@ Offen aus M6:
 
 Offen nach M8 (K-M8-11): Weißabgleich-Pipette, Kurven-Werkzeug (Tonwerte und Kurven), Basis übernehmen/sperren (E-06/E-07), Flat-Field-Kalibrierung (E-08), Messbereich anzeigen (E-04), einheitlicher Kontaktabzug in E2E (E-35), Drucken (E-37, braucht Drucker), schreibgeschützter Ordner (E-40), hohe Pixeldichte (E-47), Leistung (E-49, M9), Detailansicht mit ROI. Gleiche Scans mit identischem Inhalt teilen sich die FrameId.
 
+### M9 – Ergebnis
+
+- Gemeinsame Kompositionswurzel `apps/shared` (`autoneg::app::Composition`, ohne Qt) für GUI, Kommandozeile und Tests; Benutzerverzeichnisse nach Architektur 8.
+- `autoneg-cli`: `info`, `detect`, `export` (Optionen wie im Exportdialog, `--preset`), `contact-sheet` (PDF, nur mit Qt); UTF-8-Manifest unter Windows.
+- `SpdLogger` (adapter_spdlog) mit eigener rotierender Senke (Unicode-Pfade unter Windows); Protokoll `autoneg.log` im Cache-Verzeichnis.
+- Leistung (D-17): `IComputeBackend::colorTransform` (Farbumrechnung datenparallel, bitgleich), LibRaw mit OpenMP (Feature `raw-parallel`, nicht unter TSan), Freigabe der Quellen nach jedem Exportbild.
+- Behoben (je zuerst per Test reproduziert): Ersetzen unter Windows bei kurz geöffneter Zieldatei (B-29); Lecks der Qt-Instanz in Tests (B-30).
+- Tests: K-17 (CLI = Anwendung, Pixel bitgleich), K-16 (Stress, Watchdog, Konsistenz), K-20 (Protokoll, Rotation, Umlaute), `M9_*` (Backend, Datenhaltung, CLI-Aufruffehler).
+
+Leistungsmessung (K-18/E-49, `tests/tools/bench`, Release, Entwicklerrechner mit 32 Hardware-Threads – nicht der Referenzrechner mit 8 Kernen):
+
+| Messung | Ergebnis | Ziel |
+|---|---|---|
+| Vorschau nach Regler, 95. Perzentil (61 MP / 100 MP) | 9,3 / 9,2 ms | ≤ 100 ms |
+| Bild öffnen bis Vorschau (61-MP-RAW / 100-MP-TIFF) | 0,86 / 1,03 s | ≤ 3 s |
+| Export volle Auflösung 100 MP (TIFF 16 bit) | 9,9 s | ≤ 10 s |
+| Export 61-MP-RAW inkl. Dekodieren | 7,3 s | – |
+| Skalierung 1 → 8 Threads | 2,5 × | ≥ 5 (offen) |
+| Miniaturen 36 Scans | 8,9 s | ≤ 15 s |
+| Kontaktabzug 36 Felder | 29,5 s | ≤ 30 s (knapp) |
+| Stapelexport 36 Bilder JPEG | 308 s | – |
+| Spitzenspeicher | 5,3 GB | ≤ 6 GB |
+
+Offen nach M9: Skalierung (serielles TIFF-Schreiben, Gleitkommapfad von Little CMS), Stapelexport rechnet Bilder nacheinander, Werte auf dem Referenzrechner prüfen; Lücken aus K-M8-11; K-11 (Annotationen).
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -219,6 +244,7 @@ Offen nach M8 (K-M8-11): Weißabgleich-Pipette, Kurven-Werkzeug (Tonwerte und Ku
 | K-M1-01…14 | 19.10.2026 | Abweichungen von den Klassendiagrammen in M1 (Details in `abweichungen_planung.txt`, Abschnitt G) |
 | D-15 | 23.10.2026 | Weiterarbeit bis M9 ohne Meilenstein-OK; eigene Entscheidungen als ENTWICKLER |
 | D-16 | 23.10.2026 | Qt 6.11.2 (vcpkg, reduzierte Features), Option `AUTONEG_WITH_GUI`, TSan ohne GUI (ENTWICKLER) |
+| D-17 | 23.10.2026 | Farbumrechnung datenparallel im Backend, LibRaw mit OpenMP (ENTWICKLER) |
 
 ## Offene Fragen an den Nutzer
 
@@ -250,3 +276,9 @@ Offen nach M8 (K-M8-11): Weißabgleich-Pipette, Kurven-Werkzeug (Tonwerte und Ku
 - `src/ui/src/gui_application.cpp`: Benutzerverzeichnisse über `QStandardPaths` (%APPDATA% bzw. ~/.config).
 - `src/adapters/json/src/json_config_store.cpp`: Vorlagennamen als UTF-8-Pfad (`u8path`), Windows-unzulässige Zeichen kodiert.
 - `src/application/src/roll_service.cpp`: Änderungszeit über `clock_cast`, Dateiendungen ohne Beachtung der Groß-/Kleinschreibung.
+- `apps/shared/composition.cpp`: Benutzerverzeichnisse über `%APPDATA%`/`%LOCALAPPDATA%` (UTF-16, `_wdupenv_s`) bzw. `XDG_*`/`HOME`.
+- `apps/shared/utf8.manifest`: nur Windows (Codepage UTF-8 für argv); unter Linux sind Argumente ohnehin UTF-8.
+- `src/adapters/spdlog/src/spd_logger.cpp`: Datei über `std::ofstream(std::filesystem::path)`; Zeilenende CR LF unter Windows.
+- `src/adapters/json/src/atomic_file_writer.cpp`: Wiederholversuch nur unter Windows (B-29).
+- `tests/tools/bench/bench.cpp`: Spitzenspeicher über `GetProcessMemoryInfo` bzw. `getrusage`.
+- `vcpkg.json` Feature `raw-parallel`: OpenMP-Laufzeit vcomp (Windows) bzw. libgomp/libomp (Linux).

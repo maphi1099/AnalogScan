@@ -9,6 +9,9 @@ namespace autoneg::adapter::opencv {
 class OpenCvVision final : public ports::IVision
 {
 public:
+    /// Stellt die Meldungen von OpenCV auf Warnungen und Fehler (keine INFO-Ausgaben auf stderr).
+    OpenCvVision();
+
     [[nodiscard]] base::Expected<image::ImageBuffer> edges(const image::ImageBuffer& img,
                                                            float sigma) override;
     [[nodiscard]] base::Expected<std::vector<ports::Polygon>>

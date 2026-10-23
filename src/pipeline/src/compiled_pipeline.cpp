@@ -187,9 +187,9 @@ std::uint64_t OutputPass::contentHash() const
         .value();
 }
 
-base::Expected<image::ImageBuffer> OutputPass::run(ExecContext& /*x*/, const image::ImageBuffer& in) const
+base::Expected<image::ImageBuffer> OutputPass::run(ExecContext& x, const image::ImageBuffer& in) const
 {
-    return xf_->apply(in);
+    return x.backend.colorTransform(x.kernel(), in, *xf_); // datenparallel (D-17)
 }
 
 int CompiledPipeline::totalHalo() const noexcept

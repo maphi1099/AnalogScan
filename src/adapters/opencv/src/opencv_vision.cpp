@@ -1,6 +1,7 @@
 #include "autoneg/adapter/opencv/opencv_vision.hpp"
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/utils/logger.hpp>
 #include <opencv2/imgproc.hpp>
 
 #include <cmath>
@@ -72,6 +73,11 @@ auto guarded(F&& f) -> decltype(f())
 }
 
 } // namespace
+
+OpenCvVision::OpenCvVision()
+{
+    cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_WARNING);
+}
 
 base::Expected<image::ImageBuffer> OpenCvVision::edges(const image::ImageBuffer& img, float sigma)
 {
