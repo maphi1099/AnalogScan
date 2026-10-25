@@ -83,6 +83,10 @@ TEST_F(CliComponent, K_17_CliExportEqualsApplicationExport)
         for (const application::OpenedFrame& f : opened->frames) {
             c.bus().open(f.frame, f.data);
             const std::vector<model::FrameId> target{f.frame.id};
+            // Filmtyp wie nach der Wahl in der Oberfläche (K-M10-08): sonst nur der Scan
+            c.bus().execute(application::SetEntryCommand(entry(
+                                "autoneg.filmmode", model::ParamSet{}.with("type", std::string("color")))),
+                            target, opened->roll);
             c.bus().execute(
                 application::SetEntryCommand(entry(
                     "autoneg.crop", model::ParamSet{}.with("rect", model::NormRect{0.1, 0.2, 0.8, 0.6}))),
@@ -101,7 +105,7 @@ TEST_F(CliComponent, K_17_CliExportEqualsApplicationExport)
         ASSERT_TRUE(again.has_value());
         std::vector<application::ExportService::Item> items;
         for (const application::OpenedFrame& f : again->frames) {
-            ASSERT_EQ(f.data.edits.size(), 3U);
+            ASSERT_EQ(f.data.edits.size(), 4U);
             items.push_back({f.frame, f.data.edits});
         }
         application::ExportSettings s;

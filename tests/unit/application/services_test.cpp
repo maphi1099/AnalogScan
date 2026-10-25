@@ -136,8 +136,12 @@ TEST(AnalysisServiceTest, U_APP_16_AutomaticsWriteEntries)
     ownCrop.params = ParamSet{}.with("rect", model::NormRect{0.2, 0.2, 0.5, 0.5});
     manual.edits = EditList{}.with(ownCrop);
     bus.open(f2, manual);
-    ASSERT_TRUE(service.detectFrame(f1, roll).wait().has_value());
-    ASSERT_TRUE(service.detectFrame(f2, roll).wait().has_value());
+    ASSERT_TRUE(service.detectFrame(f1, roll, roll->filmType).wait().has_value());
+    ASSERT_TRUE(service.detectFrame(f2, roll, roll->filmType).wait().has_value());
+    // K-M10-08: ohne festgelegten Filmtyp keine Erkennung, verständliche Meldung
+    const auto none = service.detectFrame(f1, roll, model::FilmType::Unconverted).wait();
+    ASSERT_FALSE(none.has_value());
+    EXPECT_NE(none.error().message.find("Filmtyp nicht festgelegt"), std::string::npos);
     {
         const std::scoped_lock lock(mutex);
         for (auto& task : uiQueue) {

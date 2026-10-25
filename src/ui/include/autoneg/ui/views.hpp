@@ -4,8 +4,11 @@
 #include "autoneg/model/roll.hpp"
 
 #include <QtCore/QAbstractListModel>
+#include <QtCore/QHash>
 #include <QtGui/QImage>
+#include <QtGui/QPixmap>
 #include <QtWidgets/QListView>
+#include <QtWidgets/QStyledItemDelegate>
 #include <QtWidgets/QWidget>
 
 #include <vector>
@@ -70,6 +73,22 @@ private:
 };
 
 /// Filmstreifen: waagerechte Liste der Miniaturen mit Mehrfachauswahl.
+/// Zeichnet eine Miniatur eingepasst in die feste Zelle der Ansicht (Seitenverhältnis bleibt,
+/// mittig, Rand frei), darunter Bildnummer und Bewertung. Für Filmstreifen und Übersicht.
+class ThumbnailDelegate final : public QStyledItemDelegate
+{
+    Q_OBJECT
+
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+    void paint(QPainter* p, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+    [[nodiscard]] QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+
+private:
+    /// Skalierte Miniaturen je Bild und Zielgröße (Miniaturen ändern sich selten)
+    mutable QHash<QString, QPixmap> cache_;
+};
+
 class FilmstripView final : public QListView
 {
     Q_OBJECT
@@ -84,6 +103,24 @@ public:
 Q_SIGNALS:
     void currentFrameChanged(const autoneg::model::FrameId& f);
     void selectionChangedFrames();
+
+private:
+    FilmstripModel* model_ = nullptr;
+};
+
+/// Ordneransicht der Rolle (Filmansicht): alle Bilder im aktuellen Stand als Raster, gleiche
+/// Auswahl wie der Filmstreifen. Doppelklick öffnet das Bild in der Bildansicht.
+class OverviewView final : public QListView
+{
+    Q_OBJECT
+
+public:
+    explicit OverviewView(QWidget* parent = nullptr);
+    /// Modell und Auswahl des Filmstreifens übernehmen.
+    void share(FilmstripView* strip);
+
+Q_SIGNALS:
+    void openFrame(const autoneg::model::FrameId& f);
 
 private:
     FilmstripModel* model_ = nullptr;

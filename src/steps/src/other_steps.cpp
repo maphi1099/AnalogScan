@@ -18,7 +18,8 @@ using pipeline::Phase;
 // --- Filmtyp ---------------------------------------------------------------------------------
 
 FilmModeStep::FilmModeStep()
-    : d_(describe(id::filmmode, rank::filmmode, "Filmtyp", Phase::Conversion, {stringParam("type", "color")}))
+    : d_(describe(id::filmmode, rank::filmmode, "Filmtyp", Phase::Conversion, {stringParam("type", "color")},
+                  pipeline::FilmTypeMask::any()))
 {}
 
 base::Expected<void> FilmModeStep::validate(const model::ParamSet& p) const
@@ -32,10 +33,23 @@ base::Expected<void> FilmModeStep::validate(const model::ParamSet& p) const
 
 void FilmModeStep::configure(pipeline::StepContext& ctx, const model::ParamSet& p) const
 {
-    const std::string t = param(p, "type", std::string("color"));
-    ctx.film = t == "bw"      ? model::FilmType::BwNegative
-               : t == "slide" ? model::FilmType::Slide
-                              : model::FilmType::ColorNegative;
+    ctx.film = fromString(param(p, "type", std::string("color")));
+}
+
+model::FilmType FilmModeStep::fromString(std::string_view t) noexcept
+{
+    return t == "bw"      ? model::FilmType::BwNegative
+           : t == "slide" ? model::FilmType::Slide
+                          : model::FilmType::ColorNegative;
+}
+
+model::FilmType FilmModeStep::effective(const model::EditList& l, model::FilmType rollDefault)
+{
+    const model::EditEntry* e = l.get(model::StepId(std::string(id::filmmode)));
+    if (e == nullptr || !e->enabled) {
+        return rollDefault;
+    }
+    return fromString(e->params.get<std::string>("type").value_or("color"));
 }
 
 const char* FilmModeStep::toString(model::FilmType t) noexcept
@@ -47,6 +61,8 @@ const char* FilmModeStep::toString(model::FilmType t) noexcept
         return "bw";
     case model::FilmType::Slide:
         return "slide";
+    case model::FilmType::Unconverted:
+        return "raw";
     }
     return "color";
 }
@@ -56,7 +72,8 @@ const char* FilmModeStep::toString(model::FilmType t) noexcept
 OrientationStep::OrientationStep()
     : DescribedGeometric(
           describe(id::orientation, rank::orientation, "Orientierung", Phase::Geometry,
-                   {intParam("quarterTurns", 0, 0, 3), boolParam("flipH", false), boolParam("flipV", false)}))
+                   {intParam("quarterTurns", 0, 0, 3), boolParam("flipH", false), boolParam("flipV", false)},
+                   pipeline::FilmTypeMask::any()))
 {}
 
 void OrientationStep::emit(pipeline::WarpBuilder& b, const model::ParamSet& p,
@@ -67,7 +84,8 @@ void OrientationStep::emit(pipeline::WarpBuilder& b, const model::ParamSet& p,
 
 RotationStep::RotationStep()
     : DescribedGeometric(describe(id::rotation, rank::rotation, "Feindrehung", Phase::Geometry,
-                                  {doubleParam("angle", 0.0, -45.0, 45.0, "°"), boolParam("autoFill", true)}))
+                                  {doubleParam("angle", 0.0, -45.0, 45.0, "°"), boolParam("autoFill", true)},
+                                  pipeline::FilmTypeMask::any()))
 {}
 
 bool RotationStep::isNeutral(const model::ParamSet& p) const
@@ -98,7 +116,8 @@ void RotationStep::emit(pipeline::WarpBuilder& b, const model::ParamSet& p,
 CropStep::CropStep()
     : DescribedGeometric(
           describe(id::crop, rank::crop, "Zuschnitt", Phase::Geometry,
-                   {rectParam("rect"), stringParam("aspect", ""), doubleParam("inset", 0.0, 0.0, 0.1, "")}))
+                   {rectParam("rect"), stringParam("aspect", ""), doubleParam("inset", 0.0, 0.0, 0.1, "")},
+                   pipeline::FilmTypeMask::any()))
 {}
 
 bool CropStep::isNeutral(const model::ParamSet& p) const
@@ -222,7 +241,7 @@ FlatFieldCache::gainMap(const std::string& id, base::Size size, ports::IComputeB
 
 FlatFieldStep::FlatFieldStep(FlatFieldCache& cache)
     : DescribedRegion(describe(id::flatfield, rank::flatfield, "Leuchtflächenkorrektur", Phase::Source,
-                               {stringParam("profile", "")}, pipeline::FilmTypeMask::all(),
+                               {stringParam("profile", "")}, pipeline::FilmTypeMask::any(),
                                Options{.cacheAfter = true}))
     , cache_(cache)
 {}
@@ -254,7 +273,7 @@ FlatFieldStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, c
 
 RetouchStep::RetouchStep()
     : DescribedRegion(describe(id::retouch, rank::retouch, "Staubretusche", Phase::Geometry,
-                               {spotsParam("spots")}, pipeline::FilmTypeMask::all(),
+                               {spotsParam("spots")}, pipeline::FilmTypeMask::any(),
                                Options{.cacheAfter = true}))
 {}
 

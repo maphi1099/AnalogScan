@@ -14,6 +14,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace autoneg::application {
@@ -58,8 +59,10 @@ public:
         , fns_(std::move(fns))
     {}
 
-    /// Bildfeld, Schräglage und (bei Negativen) Basis eines Bildes.
-    JobHandle detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll);
+    /// Bildfeld, Schräglage und (bei Negativen) Basis eines Bildes. film ist der Filmtyp des Bilds
+    /// (steps::FilmModeStep::effective); ohne festgelegten Filmtyp scheitert der Job (K-M10-08).
+    JobHandle detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                          model::FilmType film);
     /// Basis im vom Anwender gezogenen Rechteck messen (LF-BAS-04); Eintrag mit Herkunft
     /// manuell und source = "manual".
     JobHandle measureBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
@@ -88,8 +91,10 @@ private:
 
 /// Dateinamen beim Export (LF-EXP-07): Platzhalter {roll}, {frame} (dreistellig), {name}
 /// (Scan ohne Endung), {film}; Zeichen, die Dateisysteme nicht erlauben, werden ersetzt.
+/// film: Filmtyp des Bilds (Eintrag "Filmtyp" oder Rollen-Standard); ohne Angabe der Rollen-Standard.
 [[nodiscard]] std::string exportName(const std::string& pattern, const model::Roll& roll,
-                                     const model::Frame& frame);
+                                     const model::Frame& frame,
+                                     std::optional<model::FilmType> film = std::nullopt);
 
 enum class OverwritePolicy
 {
@@ -132,7 +137,8 @@ public:
 
     /// Zieldatei; Fehler Conflict, wenn sie existiert und nicht überschrieben werden darf.
     [[nodiscard]] static base::Expected<std::filesystem::path>
-    target(const ExportSettings& s, const model::Roll& roll, const model::Frame& frame);
+    target(const ExportSettings& s, const model::Roll& roll, const model::Frame& frame,
+           std::optional<model::FilmType> film = std::nullopt);
 
     struct Item
     {

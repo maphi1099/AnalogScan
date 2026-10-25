@@ -24,11 +24,14 @@
 
 class QAction;
 class QComboBox;
+class QDockWidget;
 class QLabel;
 class QProgressBar;
 class QPushButton;
+class QStackedWidget;
 class QTableView;
 class QTabWidget;
+class QToolBar;
 
 namespace autoneg::ui {
 
@@ -41,6 +44,8 @@ class FilmstripView;
 class GradationPanel;
 class HistogramWidget;
 class ImageCanvas;
+class ImportPage;
+class OverviewView;
 class RectPickerTool;
 class RetouchTool;
 
@@ -100,6 +105,20 @@ public:
     [[nodiscard]] GradationPanel* gradationPanel() const { return gradation_; }
     [[nodiscard]] ConversionPanel* conversionPanel() const { return conversion_; }
     [[nodiscard]] AdjustPanel* adjustPanel() const { return adjust_; }
+    [[nodiscard]] ImportPage* importPage() const { return import_; }
+    [[nodiscard]] OverviewView* overview() const { return overview_; }
+    [[nodiscard]] QComboBox* rollFilmCombo() const { return rollFilm_; }
+
+    /// Ansichten (K-M10-08): Import einer neuen Rolle, Übersicht (alle Bilder), Bildansicht.
+    enum class View
+    {
+        Start,
+        Import,
+        Overview,
+        Image
+    };
+    [[nodiscard]] View view() const { return view_; }
+    void showView(View v);
     [[nodiscard]] UiController& controller() { return *ui_; }
     [[nodiscard]] QAction* action(const QString& name) const;
     [[nodiscard]] bool rollOpen() const { return roll_ != nullptr; }
@@ -123,7 +142,15 @@ private:
     void buildActions();
     void requestPreview(const model::EditList& l);
     void refreshCurrent();
+    /// Filmtyp eines Bilds (Eintrag "Filmtyp" oder Rollen-Standard).
+    [[nodiscard]] model::FilmType filmOf(const model::FrameId& f) const;
+    void chooseFilm(const std::string& type);
+    void detect(const std::vector<model::FrameId>& frames, const QString& what);
     void onRollOpened(application::OpenedRoll r);
+    /// Filmtyp der Rolle festlegen (Import, Übersicht): speichern, Miniaturen und Vorschau neu.
+    void setRollFilm(model::FilmType film);
+    void closeRoll();
+    void refreshAllThumbnails();
     void onPreview(const PreviewFrame& p);
     void requestThumbnail(const model::Frame& f);
     void setTool(int which);
@@ -151,6 +178,16 @@ private:
     ConversionPanel* conversion_ = nullptr;
     GradationPanel* gradation_ = nullptr;
     AdjustPanel* adjust_ = nullptr;
+    QStackedWidget* stack_ = nullptr;
+    QWidget* startPage_ = nullptr;
+    ImportPage* import_ = nullptr;
+    QWidget* overviewPage_ = nullptr;
+    OverviewView* overview_ = nullptr;
+    QLabel* overviewTitle_ = nullptr;
+    QComboBox* rollFilm_ = nullptr;
+    QToolBar* viewBar_ = nullptr;
+    std::vector<QDockWidget*> editorDocks_; ///< nur in der Bildansicht sichtbar
+    View view_ = View::Start;
     QProgressBar* progress_ = nullptr;
     QPushButton* cancel_ = nullptr;
     QLabel* status_ = nullptr;

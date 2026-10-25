@@ -105,6 +105,7 @@ TEST(StressComponent, K_16_ConcurrencyUnderLoad)
         [&queue](std::function<void()> f) { queue.post(std::move(f)); }, document);
     auto opened = c.rolls().open(roll);
     ASSERT_TRUE(opened.has_value());
+    opened->roll.filmType = model::FilmType::ColorNegative; // sonst nur der unkonvertierte Scan
     const auto shared = std::make_shared<const model::Roll>(opened->roll);
     std::vector<model::Frame> frames;
     for (const application::OpenedFrame& f : opened->frames) {
@@ -169,7 +170,7 @@ TEST(StressComponent, K_16_ConcurrencyUnderLoad)
             break;
         case 6:
             if (jobs.size() < maxJobs) {
-                jobs.push_back(c.analysis().detectFrame(f, shared));
+                jobs.push_back(c.analysis().detectFrame(f, shared, shared->filmType));
             }
             break;
         case 7: { // Stapelexport aller Bilder

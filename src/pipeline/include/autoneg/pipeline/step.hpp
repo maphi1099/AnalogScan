@@ -54,9 +54,16 @@ public:
         }
     }
 
+    /// Alle drei Filmtypen (nicht der unkonvertierte Scan).
     [[nodiscard]] static constexpr FilmTypeMask all() noexcept
     {
         return {model::FilmType::ColorNegative, model::FilmType::BwNegative, model::FilmType::Slide};
+    }
+    /// Auch für den unkonvertierten Scan (filmunabhängige Schritte: Geometrie, Retusche).
+    [[nodiscard]] static constexpr FilmTypeMask any() noexcept
+    {
+        return {model::FilmType::ColorNegative, model::FilmType::BwNegative, model::FilmType::Slide,
+                model::FilmType::Unconverted};
     }
     [[nodiscard]] constexpr bool contains(model::FilmType t) const noexcept { return (bits_ & bit(t)) != 0; }
 

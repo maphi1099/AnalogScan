@@ -1,5 +1,7 @@
 #include "autoneg/application/services.hpp"
 
+#include "autoneg/steps/other_steps.hpp"
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -53,6 +55,8 @@ const char* filmName(model::FilmType f)
         return "SW";
     case model::FilmType::Slide:
         return "Dia";
+    case model::FilmType::Unconverted:
+        return "Scan";
     }
     return "";
 }
@@ -109,15 +113,17 @@ model::EditList SetAutomaticEntriesCommand::apply(const model::EditList& l, cons
     return out;
 }
 
-JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll)
+JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                       model::FilmType film)
 {
     class DetectJob final : public Job
     {
     public:
-        DetectJob(model::Frame f, std::shared_ptr<const model::Roll> roll, AnalysisFunctions fns,
-                  CommandBus& bus, UiDispatcher ui)
+        DetectJob(model::Frame f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
+                  AnalysisFunctions fns, CommandBus& bus, UiDispatcher ui)
             : f_(std::move(f))
             , roll_(std::move(roll))
+            , film_(film)
             , fns_(std::move(fns))
             , bus_(bus)
             , ui_(std::move(ui))
@@ -125,6 +131,11 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
         std::string name() const override { return "Bildfeld erkennen"; }
         base::Expected<void> run(JobContext& c) override
         {
+            const model::FilmType film = film_;
+            if (film == model::FilmType::Unconverted) {
+                return base::makeError(base::ErrorCode::InvalidArgument,
+                                       "Filmtyp nicht festgelegt (Farbnegativ, S/W-Negativ oder Dia wählen)");
+            }
             auto img = fns_.image(f_);
             if (!img) {
                 return std::unexpected(img.error());
@@ -132,7 +143,6 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
             if (c.cancel.cancelled()) {
                 return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
             }
-            const model::FilmType film = roll_ ? roll_->filmType : model::FilmType::ColorNegative;
             auto d = fns_.detect(*img, film);
             if (!d) {
                 return std::unexpected(d.error()); // Oberfläche meldet, Zuschnitt bleibt (LF-GEO-05)
@@ -161,11 +171,12 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
     private:
         model::Frame f_;
         std::shared_ptr<const model::Roll> roll_;
+        model::FilmType film_;
         AnalysisFunctions fns_;
         CommandBus& bus_;
         UiDispatcher ui_;
     };
-    return jobs_.submit(std::make_unique<DetectJob>(f, std::move(roll), fns_, bus_, ui_),
+    return jobs_.submit(std::make_unique<DetectJob>(f, std::move(roll), film, fns_, bus_, ui_),
                         ports::Priority::Background);
 }
 
@@ -221,7 +232,8 @@ JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<co
                         ports::Priority::Interactive);
 }
 
-std::string exportName(const std::string& pattern, const model::Roll& roll, const model::Frame& frame)
+std::string exportName(const std::string& pattern, const model::Roll& roll, const model::Frame& frame,
+                       std::optional<model::FilmType> film)
 {
     std::string out;
     char num[16];
@@ -238,7 +250,7 @@ std::string exportName(const std::string& pattern, const model::Roll& roll, cons
                 } else if (key == "name") {
                     out += frame.path.stem().string();
                 } else if (key == "film") {
-                    out += filmName(roll.filmType);
+                    out += filmName(film.value_or(roll.filmType));
                 } else {
                     out += pattern.substr(i, end - i + 1); // unbekannt: unverändert
                 }
@@ -258,14 +270,15 @@ std::string exportName(const std::string& pattern, const model::Roll& roll, cons
 }
 
 base::Expected<std::filesystem::path> ExportService::target(const ExportSettings& s, const model::Roll& roll,
-                                                            const model::Frame& frame)
+                                                            const model::Frame& frame,
+                                                            std::optional<model::FilmType> film)
 {
     const char* ext = s.write.format == ports::FileFormat::Tiff     ? ".tif"
                       : s.write.format == ports::FileFormat::Jpeg   ? ".jpg"
                       : s.write.format == ports::FileFormat::Png    ? ".png"
                       : s.write.format == ports::FileFormat::JpegXl ? ".jxl"
                                                                     : ".dng";
-    std::filesystem::path p = s.folder / (exportName(s.pattern, roll, frame) + ext);
+    std::filesystem::path p = s.folder / (exportName(s.pattern, roll, frame, film) + ext);
     std::error_code ec;
     if (s.overwrite == OverwritePolicy::Never && std::filesystem::exists(p, ec)) {
         return base::makeError(base::ErrorCode::Conflict, p.filename().string() + " existiert bereits");
@@ -307,7 +320,8 @@ JobHandle ExportService::exportFrames(std::vector<Item> items, std::shared_ptr<c
             // Zieldateien vorab: ein Konflikt bricht ab, bevor ein Bild geschrieben ist
             std::vector<std::filesystem::path> paths;
             for (const Item& item : items_) {
-                auto path = target(s_, roll, item.frame);
+                auto path =
+                    target(s_, roll, item.frame, steps::FilmModeStep::effective(item.edits, roll.filmType));
                 if (!path) {
                     return std::unexpected(path.error());
                 }

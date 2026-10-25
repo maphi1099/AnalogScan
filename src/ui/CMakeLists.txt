@@ -10,6 +10,7 @@ autoneg_add_module(ui
         src/edit_list_model.cpp
         src/gui_application.cpp
         src/image_canvas.cpp
+        src/import_page.cpp
         src/main_window.cpp
         src/panels.cpp
 

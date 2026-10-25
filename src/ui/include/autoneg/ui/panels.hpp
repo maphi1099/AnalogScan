@@ -32,6 +32,9 @@ public:
         , ui_(ui)
     {}
     virtual void bindList(const model::EditList& l) = 0;
+    /// Filmtyp des aktuellen Bilds: Bedienelemente, die für ihn nicht gelten, werden gesperrt
+    /// (K-M10-08). Vor der Wahl eines Filmtyps (Unconverted) gibt es nur den Scan.
+    virtual void setFilm(model::FilmType /*film*/) {}
 
 protected:
     /// Setzt einen Parameter eines Schritts; die übrigen Parameter des Eintrags bleiben.
@@ -113,9 +116,12 @@ class ConversionPanel final : public ToolPanel
 public:
     explicit ConversionPanel(UiController& ui, QWidget* parent = nullptr);
     void bindList(const model::EditList& l) override;
+    void setFilm(model::FilmType film) override;
     [[nodiscard]] QComboBox* filmType() const { return filmType_; }
 
 Q_SIGNALS:
+    /// Wahl im Feld Filmtyp: "color", "bw", "slide" oder "raw" (Filmtyp entfernen).
+    void filmTypeChosen(const QString& type);
     void autoFrameRequested();
     void autoBaseRequested();
     void autoLevelsRequested();
@@ -125,6 +131,9 @@ Q_SIGNALS:
 private:
     QComboBox* filmType_ = nullptr;
     QCheckBox* showArea_ = nullptr;
+    QLabel* hint_ = nullptr;
+    std::vector<QPushButton*> filmButtons_; ///< Auto-Bildfeld, Auto-Tonwerte: nur mit Filmtyp
+    std::vector<QWidget*> baseControls_;    ///< Filmbasis: nur bei Negativen
 };
 
 /// Regler der Bildbearbeitung (LF-EDT-04 … -11): Belichtung, Weißabgleich, Kontrast, Lichter/
@@ -136,6 +145,7 @@ class AdjustPanel final : public ToolPanel
 public:
     explicit AdjustPanel(UiController& ui, QWidget* parent = nullptr);
     void bindList(const model::EditList& l) override;
+    void setFilm(model::FilmType film) override;
     [[nodiscard]] const std::vector<ParamSlider*>& sliders() const { return sliders_; }
     [[nodiscard]] ParamSlider* slider(const std::string& step, const std::string& param) const;
 
@@ -144,6 +154,8 @@ Q_SIGNALS:
 
 private:
     std::vector<ParamSlider*> sliders_;
+    QLabel* hint_ = nullptr;
+    QPushButton* picker_ = nullptr;
 };
 
 } // namespace autoneg::ui

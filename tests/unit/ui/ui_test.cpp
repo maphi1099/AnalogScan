@@ -5,7 +5,9 @@
 #include "autoneg/ui/canvas_tools.hpp"
 #include "autoneg/ui/edit_list_model.hpp"
 #include "autoneg/ui/panels.hpp"
+#include "autoneg/ui/views.hpp"
 
+#include <QtGui/QPainter>
 #include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
 #include <gtest/gtest.h>
@@ -208,6 +210,60 @@ TEST(CropRotateToolTest, U_UI_04_AspectKeptWhileDragging)
 }
 
 // U-UI-05: LF-KON-09
+// K-M10-08 (Fehler des Nutzers: Miniaturen ragten aus den Kästchen): jede Miniatur wird mit
+// erhaltenem Seitenverhältnis in die feste Zelle eingepasst
+TEST(ThumbnailDelegateTest, M10_ThumbnailFitsIntoCell)
+{
+    ensureApp();
+    FilmstripModel model;
+    model::Frame f;
+    std::array<std::uint8_t, 16> b{};
+    b[15] = 1;
+    f.id = model::FrameId(b);
+    f.frameNo = 1;
+    model.setFrames({f});
+    FilmstripView view;
+    view.setStripModel(&model);
+    for (const QSize src : {QSize(400, 100), QSize(100, 400), QSize(256, 171)}) {
+        QImage img(src, QImage::Format_RGB32);
+        img.fill(Qt::red);
+        model.setThumbnail(f.id, img);
+        QImage canvas(view.gridSize(), QImage::Format_ARGB32);
+        canvas.fill(Qt::transparent);
+        QPainter p(&canvas);
+        QStyleOptionViewItem o;
+        o.initFrom(&view);
+        o.rect = QRect(QPoint(0, 0), view.gridSize());
+        o.widget = &view;
+        view.itemDelegate()->paint(&p, o, model.index(0));
+        p.end();
+        int left = canvas.width();
+        int right = -1;
+        int top = canvas.height();
+        int bottom = -1;
+        for (int y = 0; y < canvas.height(); ++y) {
+            for (int x = 0; x < canvas.width(); ++x) {
+                const QColor c = canvas.pixelColor(x, y);
+                if (c.red() > 200 && c.green() < 60 && c.blue() < 60) {
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+            }
+        }
+        ASSERT_GE(right, 0) << "keine Miniatur gezeichnet";
+        const int w = right - left + 1;
+        const int h = bottom - top + 1;
+        EXPECT_LE(w, view.iconSize().width());
+        EXPECT_LE(h, view.iconSize().height());
+        // füllt das Kästchen in einer Richtung, Seitenverhältnis bleibt (±2 px Rundung)
+        EXPECT_TRUE(w >= view.iconSize().width() - 2 || h >= view.iconSize().height() - 2) << w << "x" << h;
+        EXPECT_NEAR(static_cast<double>(w) / h, static_cast<double>(src.width()) / src.height(), 0.1);
+        EXPECT_LT(bottom, view.gridSize().height()); // bleibt in der Zelle
+    }
+}
+
 TEST(GradationPanelTest, U_UI_05_GradeButtonsSetParameter)
 {
     ensureApp();

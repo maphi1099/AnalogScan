@@ -1,5 +1,6 @@
 #include "autoneg/ui/panels.hpp"
 
+#include "autoneg/steps/other_steps.hpp"
 #include "autoneg/steps/step_ids.hpp"
 
 #include <QtCore/QEvent>
@@ -302,12 +303,19 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     filmType_ = new QComboBox(this);
     filmType_->setObjectName(QStringLiteral("filmType"));
+    filmType_->addItem(tr("– Filmtyp wählen –"), QStringLiteral("raw"));
     filmType_->addItem(tr("Farbnegativ"), QStringLiteral("color"));
     filmType_->addItem(tr("S/W-Negativ"), QStringLiteral("bw"));
     filmType_->addItem(tr("Dia"), QStringLiteral("slide"));
     filmType_->setToolTip(tr("Filmtyp (LF-KON-01)"));
     layout->addWidget(new QLabel(tr("Filmtyp"), this));
     layout->addWidget(filmType_);
+    hint_ = new QLabel(tr("Zu Beginn zeigt AutoNeg den Scan unverändert.") + QLatin1Char(' ') +
+                           tr("Filmtyp wählen, um die markierten Bilder zu konvertieren."),
+                       this);
+    hint_->setObjectName(QStringLiteral("filmHint"));
+    hint_->setWordWrap(true);
+    layout->addWidget(hint_);
     const auto button = [this, layout](const QString& text, const QString& name, const QString& tip) {
         auto* b = new QPushButton(text, this);
         b->setObjectName(name);
@@ -315,34 +323,51 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
         layout->addWidget(b);
         return b;
     };
-    connect(button(tr("Auto-Bildfeld"), QStringLiteral("autoFrame"), tr("Bildfeld automatisch erkennen")),
-            &QPushButton::clicked, this, &ConversionPanel::autoFrameRequested);
-    connect(button(tr("Auto-Basis"), QStringLiteral("autoBase"), tr("Filmbasis im Filmrand messen")),
-            &QPushButton::clicked, this, &ConversionPanel::autoBaseRequested);
-    connect(button(tr("Basis messen"), QStringLiteral("pickBase"), tr("Messrechteck in den Filmrand ziehen")),
-            &QPushButton::clicked, this, &ConversionPanel::pickBaseRequested);
-    connect(
-        button(tr("Auto-Tonwerte"), QStringLiteral("autoLevels"), tr("Tonwertgrenzen automatisch setzen")),
-        &QPushButton::clicked, this, &ConversionPanel::autoLevelsRequested);
+    QPushButton* autoFrame =
+        button(tr("Auto-Bildfeld"), QStringLiteral("autoFrame"), tr("Bildfeld automatisch erkennen"));
+    QPushButton* autoBase =
+        button(tr("Auto-Basis"), QStringLiteral("autoBase"), tr("Filmbasis im Filmrand messen"));
+    QPushButton* pickBase =
+        button(tr("Basis messen"), QStringLiteral("pickBase"), tr("Messrechteck in den Filmrand ziehen"));
+    QPushButton* autoLevels =
+        button(tr("Auto-Tonwerte"), QStringLiteral("autoLevels"), tr("Tonwertgrenzen automatisch setzen"));
+    connect(autoFrame, &QPushButton::clicked, this, &ConversionPanel::autoFrameRequested);
+    connect(autoBase, &QPushButton::clicked, this, &ConversionPanel::autoBaseRequested);
+    connect(pickBase, &QPushButton::clicked, this, &ConversionPanel::pickBaseRequested);
+    connect(autoLevels, &QPushButton::clicked, this, &ConversionPanel::autoLevelsRequested);
+    filmButtons_ = {autoFrame, autoLevels};
     showArea_ = new QCheckBox(tr("Messbereich anzeigen"), this);
     showArea_->setObjectName(QStringLiteral("showBaseArea"));
     showArea_->setToolTip(tr("Zeigt den Bereich, in dem die Filmbasis gemessen wurde"));
     layout->addWidget(showArea_);
     layout->addStretch(1);
+    baseControls_ = {autoBase, pickBase, showArea_};
     connect(showArea_, &QCheckBox::toggled, this, &ConversionPanel::showBaseAreaToggled);
-    connect(filmType_, &QComboBox::activated, this, [this](int i) {
-        commit(withParam(std::string(id::filmmode), "type", filmType_->itemData(i).toString().toStdString()));
-    });
+    // Die Wahl gilt für alle markierten Bilder; der MainWindow trägt sie ein
+    connect(filmType_, &QComboBox::activated, this,
+            [this](int i) { Q_EMIT filmTypeChosen(filmType_->itemData(i).toString()); });
+    setFilm(model::FilmType::Unconverted);
 }
 
-void ConversionPanel::bindList(const model::EditList& l)
+void ConversionPanel::bindList(const model::EditList& /*l*/)
 {
-    std::string type = "color";
-    if (const model::EditEntry* e = l.get(model::StepId(std::string(id::filmmode)))) {
-        type = e->params.get<std::string>("type").value_or("color");
-    }
+    // Der Filmtyp hängt auch vom Rollen-Standard ab und kommt über setFilm
+}
+
+void ConversionPanel::setFilm(model::FilmType film)
+{
     const QSignalBlocker block(filmType_);
-    filmType_->setCurrentIndex(std::max(0, filmType_->findData(QString::fromStdString(type))));
+    filmType_->setCurrentIndex(
+        std::max(0, filmType_->findData(QString::fromLatin1(steps::FilmModeStep::toString(film)))));
+    const bool chosen = film != model::FilmType::Unconverted;
+    const bool negative = film == model::FilmType::ColorNegative || film == model::FilmType::BwNegative;
+    hint_->setVisible(!chosen);
+    for (QPushButton* b : filmButtons_) {
+        b->setEnabled(chosen);
+    }
+    for (QWidget* w : baseControls_) {
+        w->setEnabled(negative);
+    }
 }
 
 // --- AdjustPanel -------------------------------------------------------------------------------
@@ -400,12 +425,31 @@ AdjustPanel::AdjustPanel(UiController& ui, QWidget* parent)
             }
         });
     }
-    auto* picker = new QPushButton(tr("Weißabgleich-Pipette"), this);
-    picker->setObjectName(QStringLiteral("whitePicker"));
-    picker->setToolTip(tr("Neutrale Stelle im Bild anklicken"));
-    layout->addWidget(picker);
+    picker_ = new QPushButton(tr("Weißabgleich-Pipette"), this);
+    picker_->setObjectName(QStringLiteral("whitePicker"));
+    picker_->setToolTip(tr("Neutrale Stelle im Bild anklicken"));
+    layout->addWidget(picker_);
+    hint_ = new QLabel(tr("Erst den Filmtyp wählen (Reiter Konvertierung)."), this);
+    hint_->setObjectName(QStringLiteral("adjustHint"));
+    hint_->setWordWrap(true);
+    layout->insertWidget(0, hint_);
     layout->addStretch(1);
-    connect(picker, &QPushButton::clicked, this, &AdjustPanel::whitePickerRequested);
+    connect(picker_, &QPushButton::clicked, this, &AdjustPanel::whitePickerRequested);
+    setFilm(model::FilmType::Unconverted);
+}
+
+void AdjustPanel::setFilm(model::FilmType film)
+{
+    // Ein Regler gilt, wenn sein Schritt für den Filmtyp aktiv ist (Tabelle 1 der Architektur)
+    const auto applies = [this, film](const std::string& step) {
+        const pipeline::IStep* st = ui_.registry().find(model::StepId(step));
+        return st != nullptr && st->descriptor().films.contains(film);
+    };
+    for (ParamSlider* s : sliders_) {
+        s->setEnabled(applies(s->step()));
+    }
+    picker_->setEnabled(applies(std::string(id::whitebalance)));
+    hint_->setVisible(film == model::FilmType::Unconverted);
 }
 
 ParamSlider* AdjustPanel::slider(const std::string& step, const std::string& param) const

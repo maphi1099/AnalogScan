@@ -86,10 +86,14 @@ Begleitdateien neben den Scans bleiben dabei bewusst erhalten.
 \begin{enumerate}
   \item \menu{Datei \textrightarrow{} Ordner öffnen …} (\taste{Strg+O}) und den Ordner mit den
         Scans einer Rolle wählen. Alternativ einen Ordner oder eine Datei auf das Fenster ziehen.
-  \item Im Dock \menu{Werkzeuge}, Reiter \menu{Konvertierung}, den \menu{Filmtyp} wählen
-        (\menu{Farbnegativ}, \menu{S/W-Negativ} oder \menu{Dia}).
-  \item Im Filmstreifen alle Bilder markieren (in den Filmstreifen klicken, dann \taste{Strg+A}) und \menu{Auto-Bildfeld} klicken:
-        AutoNeg erkennt Bildfeld, Schräglage und Filmbasis jedes Bilds.
+  \item Bei einer neuen Rolle erscheint der \emph{Import-Bildschirm}: Er zeigt die Scans
+        unverändert (als Negativ) und fragt, um welchen Film es sich handelt
+        (\menu{Farbnegativ}, \menu{S/W-Negativ} oder \menu{Dia}). Filmtyp wählen, optional
+        \menu{Bildfeld und Filmbasis gleich erkennen} ankreuzen, dann \menu{Importieren}.
+  \item Ohne die Erkennung beim Import: im Filmstreifen alle Bilder markieren (in den
+        Filmstreifen klicken, dann \taste{Strg+A}) und \menu{Auto-Bildfeld} klicken. AutoNeg
+        erkennt Bildfeld, Schräglage und Filmbasis jedes Bilds; erst mit der Filmbasis wird ein
+        Farbnegativ farbrichtig.
   \item Ein Bild anklicken und im Reiter \menu{Anpassen} Belichtung, Farbe und Kontrast
         einstellen. Bei Schwarzweiß im Reiter \menu{Gradation} die Filterstufe wählen.
   \item Gelungene Einstellungen mit \menu{Bearbeiten \textrightarrow{} Bearbeitung kopieren}
@@ -101,6 +105,15 @@ Begleitdateien neben den Scans bleiben dabei bewusst erhalten.
 
 % ---------------------------------------------------------------------------------------------
 \section{Das Hauptfenster}
+
+Am linken Rand wechselt man zwischen zwei Ansichten:
+\begin{description}
+  \item[Übersicht] (\taste{G}) alle Bilder der Rolle im aktuellen Stand als Raster, wie ein
+        Leuchttisch. Oben steht der \menu{Filmtyp der Rolle}, der sich hier jederzeit ändern
+        lässt. Ein Doppelklick öffnet ein Bild in der Bildansicht. Markierungen gelten in beiden
+        Ansichten.
+  \item[Bildansicht] (\taste{E}) ein Bild bearbeiten, mit diesen Bereichen:
+\end{description}
 
 \begin{description}
   \item[Bildfläche] In der Mitte: das aktuelle Bild als Positiv. Bei 100\,\% oder 200\,\%
@@ -149,8 +162,18 @@ geöffnet, wird sie nur lesend angezeigt.
 \section{Konvertierung}
 
 \subsection{Filmtyp}
-Im Reiter \menu{Konvertierung} legt \menu{Filmtyp} fest, wie das Negativ bzw. Dia umgerechnet
-wird: \menu{Farbnegativ} (C-41), \menu{S/W-Negativ} oder \menu{Dia} (E-6).
+Der Filmtyp legt fest, wie das Negativ bzw. Dia umgerechnet wird: \menu{Farbnegativ} (C-41),
+\menu{S/W-Negativ} oder \menu{Dia} (E-6). Solange keiner gewählt ist, zeigt AutoNeg den Scan
+unverändert. Festgelegt wird er beim Import für die ganze Rolle; ändern lässt er sich
+\begin{itemize}
+  \item für die ganze Rolle in der Übersicht (\menu{Filmtyp der Rolle}) und
+  \item für einzelne Bilder im Reiter \menu{Konvertierung}: die Wahl gilt für alle markierten
+        Bilder und erscheint als Eintrag \enquote{Filmtyp} in der Bearbeitungsliste.
+\end{itemize}
+Die Bedienelemente richten sich nach dem Filmtyp: Die \menu{Gradation} nach Ilford Multigrade
+gibt es nur bei S/W-Negativ; Weißabgleich und Sättigung sind bei S/W gesperrt, die Filmbasis bei
+Dias. Ohne Filmtyp sind Regler und Automatiken gesperrt; Zuschnitt, Drehen und Retusche gehen
+immer.
 
 \subsection{Bildfeld und Filmbasis}
 \begin{description}
@@ -363,7 +386,7 @@ autoneg-cli.exe\textquotedbl}, nur für den eigenen Benutzer
 
 \begin{lstlisting}
 autoneg-cli info <ordner>
-autoneg-cli detect <ordner>
+autoneg-cli detect <ordner> [--film color|bw|slide]
 autoneg-cli export <ordner> -o <ziel> [--format tiff|jpeg|png|jxl] [--bits 8|16]
             [--quality 1-100] [--profile srgb|adobergb|prophoto] [--long-edge <px>]
             [--gray] [--pattern <muster>] [--preset <exportvorlage>] [--only-kept]
@@ -383,6 +406,9 @@ autoneg-cli contact-sheet <ordner> -o <datei.pdf> [--preset <layoutvorlage>]
   \item[contact-sheet] schreibt den Kontaktabzug als PDF; \datei{--film-format} erwartet den
         Namen wie im Dialog, etwa \datei{\textquotedbl Kleinbild 24×36\textquotedbl}.
 \end{description}
+\datei{--film color|bw|slide} (Farbnegativ, S/W-Negativ, Dia) gilt für Bilder ohne eigenen
+Filmtyp; \datei{detect} trägt ihn in die Begleitdateien ein. Ohne Filmtyp bleibt ein Bild der
+unveränderte Scan, und \datei{detect} überspringt es mit einer Meldung.
 Für alle Befehle: \datei{--config <ordner>} und \datei{--cache <ordner>} wählen andere
 Einstellungs- bzw. Zwischenspeicherordner. \datei{--help} zeigt die Hilfe, \datei{--version}
 die Version. Rückgabewert 0 bei Erfolg, 1 bei einem Fehler, 2 bei falschem Aufruf.
@@ -424,6 +450,7 @@ weiter; nichts wird stillschweigend überschrieben.
   \taste{Strg+Umschalt+R} & Bild zurücksetzen & \taste{Strg+]}      & 90\textdegree{} nach rechts \\
   \taste{P} & Behalten                    & \taste{Strg+H}         & waagerecht spiegeln \\
   \taste{X} & Verwerfen                   & \taste{U}              & Bewertung entfernen \\
+  \taste{G} & Übersicht                   & \taste{E}              & Bildansicht \\
   \bottomrule
 \end{tabular}
 \end{center}
@@ -440,6 +467,11 @@ Folgende Bedienelemente sind vorhanden, haben in dieser Ausgabe aber noch keine 
   \item \menu{Messbereich anzeigen} (Reiter \menu{Konvertierung}).
   \item \menu{Auto-Tonwerte}: die Tonwertgrenzen setzt die Konvertierung bereits selbst.
 \end{itemize}
+Die automatische Bildfelderkennung findet bei manchen Scans kein Bildfeld (Meldung
+\enquote{Kein Bildfeld erkennbar}), etwa wenn das Bild bis an die Perforation reicht. Dann den
+Zuschnitt mit \menu{Zuschneiden und Drehen} setzen und die Filmbasis mit \menu{Basis messen}
+im Filmrand bestimmen; ohne Filmbasis bleibt ein Farbnegativ stark farbstichig.
+
 Außerdem: Der Export der Oberfläche überschreibt keine vorhandenen Dateien (die Kommandozeile
 mit \datei{--overwrite} schon); eine Kompression für TIFF und PNG ist nicht wählbar (JPEG XL wird
 verlustfrei geschrieben); Filmprofile, automatische Staubentfernung und die Rechnung auf der

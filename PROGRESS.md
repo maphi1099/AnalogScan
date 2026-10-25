@@ -255,6 +255,14 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - Geprüft (23.10.2026): stille Installation für den eigenen Benutzer, `autoneg-cli` export und contact-sheet ohne Entwicklungsumgebung im PATH, Start der Oberfläche mit Rolle, stille Deinstallation ohne Rückstände.
 - Handbuch: `docs/handbuch/handbuch.tex` (K-M10-07); setzen mit `pdflatex handbuch.tex` (zweimal). Abschnitt „Einschränkungen“ nennt die Bedienelemente ohne Funktion (Weißabgleich-Pipette, Messbereich anzeigen, Auto-Tonwerte).
 
+### Import, Filmtyp und Ansichten (25.10.2026)
+
+- Neue Rollen starten ohne Filmtyp und zeigen die Scans unverändert; Import-Bildschirm mit Pflichtwahl des Filmtyps, Übersicht und Bildansicht mit Umschalter am linken Rand, Bedienelemente nach Filmtyp (K-M10-08).
+- Miniaturen in festen Zellen eingepasst (B-41).
+- Kommandozeile `--film color|bw|slide`.
+- Tests: `M10_ImportScreenThenViewsAndFilmTypes`, `M10_ImportCancelClosesRoll`, `M10_ThumbnailFitsIntoCell`, Erkennung ohne Filmtyp; E2E über den Import-Bildschirm (T-19).
+- Beobachtung: Die Bildfelderkennung findet bei 12 von 13 echten Scans aus `Testing/Data/102MSDCF-2` kein Bildfeld; ohne Basis wird ein Farbnegativ fast vollständig cyan. Offen (LF-GEO-01, LF-BAS-01).
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |

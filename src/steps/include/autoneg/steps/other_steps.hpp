@@ -3,6 +3,7 @@
 #include "autoneg/base/error.hpp"
 #include "autoneg/base/geometry.hpp"
 #include "autoneg/image/image_buffer.hpp"
+#include "autoneg/model/edit_list.hpp"
 #include "autoneg/model/values.hpp"
 #include "autoneg/pipeline/step.hpp"
 #include "autoneg/pipeline/warp_builder.hpp"
@@ -12,6 +13,7 @@
 #include <memory>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace autoneg::steps {
@@ -29,6 +31,10 @@ public:
     void configure(pipeline::StepContext& ctx, const model::ParamSet& p) const override;
 
     [[nodiscard]] static const char* toString(model::FilmType t) noexcept;
+    /// Wert des Parameters "type" (color, bw, slide) als Filmtyp.
+    [[nodiscard]] static model::FilmType fromString(std::string_view t) noexcept;
+    /// Filmtyp eines Bilds: sein Eintrag "Filmtyp" (aktiv) oder sonst der Rollen-Standard.
+    [[nodiscard]] static model::FilmType effective(const model::EditList& l, model::FilmType rollDefault);
 
 private:
     pipeline::StepDescriptor d_;

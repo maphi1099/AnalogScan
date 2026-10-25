@@ -6,6 +6,8 @@
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QPixmap>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QStyle>
 
 #include <algorithm>
 
@@ -186,8 +188,9 @@ QVariant FilmstripModel::data(const QModelIndex& index, int role) const
         return text;
     }
     case Qt::DecorationRole:
+        // Miniatur in Originalgröße; die Ansicht passt sie in ihre Zellen ein (ThumbnailDelegate)
         if (!it->thumbnail.isNull()) {
-            return QPixmap::fromImage(it->thumbnail);
+            return it->thumbnail;
         }
         return {};
     case Qt::ToolTipRole:
@@ -217,6 +220,7 @@ FilmstripView::FilmstripView(QWidget* parent)
     setIconSize(QSize(160, 120));
     setGridSize(QSize(176, 150)); // feste Zellen, auch bevor Miniaturen da sind
     setUniformItemSizes(true);
+    setItemDelegate(new ThumbnailDelegate(this));
     setSelectionMode(QAbstractItemView::ExtendedSelection);
     setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     setMinimumHeight(170);
@@ -248,6 +252,99 @@ std::vector<model::FrameId> FilmstripView::selectedFrames() const
         }
     }
     return out;
+}
+
+// --- ThumbnailDelegate -------------------------------------------------------------------------
+
+QSize ThumbnailDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& /*index*/) const
+{
+    const auto* view = qobject_cast<const QListView*>(option.widget);
+    return view != nullptr && view->gridSize().isValid() ? view->gridSize() - QSize(4, 4) : QSize(172, 146);
+}
+
+void ThumbnailDelegate::paint(QPainter* p, const QStyleOptionViewItem& option, const QModelIndex& index) const
+{
+    QStyleOptionViewItem o = option;
+    initStyleOption(&o, index);
+    const QWidget* w = option.widget;
+    QStyle* style = w != nullptr ? w->style() : QApplication::style();
+    // Hintergrund und Auswahl wie die Plattform, ohne eigenen Inhalt
+    o.text.clear();
+    o.icon = QIcon();
+    o.features &= ~QStyleOptionViewItem::HasDecoration;
+    style->drawPrimitive(QStyle::PE_PanelItemViewItem, &o, p, w);
+
+    const auto* view = qobject_cast<const QListView*>(w);
+    const QSize box = view != nullptr ? view->iconSize() : QSize(160, 120);
+    const int textHeight = option.fontMetrics.height() + 4;
+    const QRect cell = option.rect.adjusted(2, 2, -2, -2);
+    const QRect imageArea(cell.left() + (cell.width() - box.width()) / 2, cell.top() + 2, box.width(),
+                          std::min(box.height(), cell.height() - textHeight - 2));
+    // dunkle Fläche als Rahmen der Miniatur (wie ein Leuchttisch-Rähmchen)
+    p->fillRect(imageArea, option.palette.color(QPalette::Dark));
+    const QImage img = index.data(Qt::DecorationRole).value<QImage>();
+    if (!img.isNull()) {
+        const qreal dpr = w != nullptr ? w->devicePixelRatioF() : 1.0;
+        const QSize target = img.size().scaled(imageArea.size() * dpr, Qt::KeepAspectRatio);
+        const QString key =
+            QStringLiteral("%1-%2x%3").arg(img.cacheKey()).arg(target.width()).arg(target.height());
+        auto it = cache_.find(key);
+        if (it == cache_.end()) {
+            if (cache_.size() > 512) {
+                cache_.clear();
+            }
+            QPixmap pm =
+                QPixmap::fromImage(img.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            pm.setDevicePixelRatio(dpr);
+            it = cache_.insert(key, pm);
+        }
+        const QSizeF logical = QSizeF(it->size()) / dpr;
+        const QPointF at(imageArea.left() + (imageArea.width() - logical.width()) / 2.0,
+                         imageArea.top() + (imageArea.height() - logical.height()) / 2.0);
+        p->drawPixmap(at, *it);
+    }
+    const QRect textRect(cell.left(), imageArea.bottom() + 2, cell.width(), textHeight);
+    const QVariant fg = index.data(Qt::ForegroundRole);
+    p->save();
+    p->setPen(fg.canConvert<QColor>() ? fg.value<QColor>()
+                                      : option.palette.color((option.state & QStyle::State_Selected) != 0
+                                                                 ? QPalette::HighlightedText
+                                                                 : QPalette::Text));
+    p->drawText(textRect, Qt::AlignHCenter | Qt::AlignTop, index.data(Qt::DisplayRole).toString());
+    p->restore();
+}
+
+// --- OverviewView ------------------------------------------------------------------------------
+
+OverviewView::OverviewView(QWidget* parent)
+    : QListView(parent)
+{
+    setViewMode(QListView::IconMode);
+    setFlow(QListView::LeftToRight);
+    setWrapping(true);
+    setResizeMode(QListView::Adjust);
+    setMovement(QListView::Static);
+    setIconSize(QSize(240, 180));
+    setGridSize(QSize(260, 214));
+    setUniformItemSizes(true);
+    setSelectionMode(QAbstractItemView::ExtendedSelection);
+    setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    setItemDelegate(new ThumbnailDelegate(this));
+    setObjectName(QStringLiteral("overview"));
+    connect(this, &QListView::doubleClicked, this, [this](const QModelIndex& i) {
+        if (model_ != nullptr) {
+            if (const FilmstripModel::Item* it = model_->itemAt(i.row())) {
+                Q_EMIT openFrame(it->frame.id);
+            }
+        }
+    });
+}
+
+void OverviewView::share(FilmstripView* strip)
+{
+    model_ = strip->stripModel();
+    setModel(model_);
+    setSelectionModel(strip->selectionModel()); // eine Auswahl für beide Ansichten
 }
 
 void FilmstripView::selectFrame(const model::FrameId& f)

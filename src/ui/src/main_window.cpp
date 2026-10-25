@@ -1,11 +1,13 @@
 #include "autoneg/ui/main_window.hpp"
 
 #include "autoneg/application/presets.hpp"
+#include "autoneg/steps/other_steps.hpp"
 #include "autoneg/steps/step_ids.hpp"
 #include "autoneg/ui/canvas_tools.hpp"
 #include "autoneg/ui/dialogs.hpp"
 #include "autoneg/ui/edit_list_model.hpp"
 #include "autoneg/ui/image_canvas.hpp"
+#include "autoneg/ui/import_page.hpp"
 #include "autoneg/ui/panels.hpp"
 #include "autoneg/ui/views.hpp"
 
@@ -14,6 +16,7 @@
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
 #include <QtGui/QAction>
+#include <QtGui/QActionGroup>
 #include <QtGui/QCloseEvent>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
@@ -21,6 +24,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QHeaderView>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLabel>
@@ -29,6 +33,7 @@
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QScrollArea>
+#include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QTableView>
@@ -182,9 +187,22 @@ MainWindow::~MainWindow()
 
 void MainWindow::buildUi()
 {
-    canvas_ = new ImageCanvas(this);
+    // Seiten der Mitte: Start, Import, Übersicht, Bildansicht (K-M10-08)
+    stack_ = new QStackedWidget(this);
+    stack_->setObjectName(QStringLiteral("views"));
+    startPage_ = new QLabel(tr("Ordner mit Scans öffnen (Strg+O) oder hierher ziehen."), stack_);
+    static_cast<QLabel*>(startPage_)->setAlignment(Qt::AlignCenter);
+    startPage_->setObjectName(QStringLiteral("startPage"));
+    import_ = new ImportPage(stack_);
+    overviewPage_ = new QWidget(stack_);
+    overviewPage_->setObjectName(QStringLiteral("overviewPage"));
+    canvas_ = new ImageCanvas(stack_);
     canvas_->setObjectName(QStringLiteral("canvas"));
-    setCentralWidget(canvas_);
+    stack_->addWidget(startPage_);
+    stack_->addWidget(import_);
+    stack_->addWidget(overviewPage_);
+    stack_->addWidget(canvas_);
+    setCentralWidget(stack_);
 
     stripModel_ = new FilmstripModel(this);
     filmstrip_ = new FilmstripView(this);
@@ -205,6 +223,49 @@ void MainWindow::buildUi()
     stripLayout->addWidget(filmstrip_);
     stripDock->setWidget(stripBox);
     addDockWidget(Qt::BottomDockWidgetArea, stripDock);
+    editorDocks_.push_back(stripDock);
+
+    // Übersicht: Kopf mit Rolle und Filmtyp der Rolle, darunter alle Bilder im aktuellen Stand
+    auto* overviewLayout = new QVBoxLayout(overviewPage_);
+    auto* head = new QHBoxLayout;
+    overviewTitle_ = new QLabel(overviewPage_);
+    QFont big = overviewTitle_->font();
+    big.setPointSizeF(big.pointSizeF() * 1.3);
+    big.setBold(true);
+    overviewTitle_->setFont(big);
+    head->addWidget(overviewTitle_, 1);
+    head->addWidget(new QLabel(tr("Filmtyp der Rolle"), overviewPage_));
+    rollFilm_ = new QComboBox(overviewPage_);
+    rollFilm_->setObjectName(QStringLiteral("rollFilm"));
+    rollFilm_->addItem(tr("– Filmtyp wählen –"), static_cast<int>(model::FilmType::Unconverted));
+    rollFilm_->addItem(tr("Farbnegativ"), static_cast<int>(model::FilmType::ColorNegative));
+    rollFilm_->addItem(tr("S/W-Negativ"), static_cast<int>(model::FilmType::BwNegative));
+    rollFilm_->addItem(tr("Dia"), static_cast<int>(model::FilmType::Slide));
+    rollFilm_->setToolTip(tr("Gilt für alle Bilder ohne eigenen Filmtyp (Reiter Konvertierung)"));
+    head->addWidget(rollFilm_);
+    overviewLayout->addLayout(head);
+    overview_ = new OverviewView(overviewPage_);
+    overview_->share(filmstrip_);
+    overviewLayout->addWidget(overview_, 1);
+    import_->setPreviewModel(stripModel_);
+    connect(overview_, &OverviewView::openFrame, this, [this](const model::FrameId& f) {
+        selectFrame(f);
+        showView(View::Image);
+    });
+    connect(rollFilm_, &QComboBox::activated, this,
+            [this](int i) { setRollFilm(static_cast<model::FilmType>(rollFilm_->itemData(i).toInt())); });
+    connect(import_, &ImportPage::accepted, this, [this](model::FilmType film, bool detectNow) {
+        setRollFilm(film);
+        showView(View::Image);
+        if (detectNow) {
+            std::vector<model::FrameId> all;
+            for (const model::Frame& f : frames_) {
+                all.push_back(f.id);
+            }
+            detect(all, tr("Bildfeld erkennen"));
+        }
+    });
+    connect(import_, &ImportPage::cancelled, this, [this] { closeRoll(); });
     connect(filmstrip_, &FilmstripView::currentFrameChanged, this, &MainWindow::selectFrame);
     connect(filmstrip_, &FilmstripView::selectionChangedFrames, this,
             [this] { s_.session.selection = filmstrip_->selectedFrames(); });
@@ -229,6 +290,7 @@ void MainWindow::buildUi()
     toolDock->setObjectName(QStringLiteral("toolsDock"));
     toolDock->setWidget(tools_);
     addDockWidget(Qt::RightDockWidgetArea, toolDock);
+    editorDocks_.push_back(toolDock);
 
     histogram_ = new HistogramWidget(this);
     histogram_->setObjectName(QStringLiteral("histogram"));
@@ -236,6 +298,7 @@ void MainWindow::buildUi()
     histDock->setObjectName(QStringLiteral("histogramDock"));
     histDock->setWidget(histogram_);
     addDockWidget(Qt::RightDockWidgetArea, histDock);
+    editorDocks_.push_back(histDock);
 
     editModel_ = new EditListModel(*ui_, this);
     editView_ = new QTableView(this);
@@ -256,6 +319,7 @@ void MainWindow::buildUi()
     listDock->setObjectName(QStringLiteral("editListDock"));
     listDock->setWidget(listBox);
     addDockWidget(Qt::RightDockWidgetArea, listDock);
+    editorDocks_.push_back(listDock);
     connect(remove, &QPushButton::clicked, this, [this] {
         const QModelIndex i = editView_->currentIndex();
         if (i.isValid()) {
@@ -263,20 +327,12 @@ void MainWindow::buildUi()
         }
     });
 
-    connect(conversion_, &ConversionPanel::autoFrameRequested, this, [this] {
-        for (const model::FrameId& f : targets()) {
-            if (const model::Frame* fr = frame(f)) {
-                trackJob(s_.analysis.detectFrame(*fr, roll_), tr("Bildfeld erkennen"));
-            }
-        }
-    });
-    connect(conversion_, &ConversionPanel::autoBaseRequested, this, [this] {
-        for (const model::FrameId& f : targets()) {
-            if (const model::Frame* fr = frame(f)) {
-                trackJob(s_.analysis.detectFrame(*fr, roll_), tr("Basis messen"));
-            }
-        }
-    });
+    connect(conversion_, &ConversionPanel::filmTypeChosen, this,
+            [this](const QString& type) { chooseFilm(type.toStdString()); });
+    connect(conversion_, &ConversionPanel::autoFrameRequested, this,
+            [this] { detect(targets(), tr("Bildfeld erkennen")); });
+    connect(conversion_, &ConversionPanel::autoBaseRequested, this,
+            [this] { detect(targets(), tr("Basis messen")); });
     connect(conversion_, &ConversionPanel::autoLevelsRequested, this,
             [this] { report(tr("Auto-Tonwerte: die Tonwertgrenzen setzt die Konvertierung selbst.")); });
     connect(conversion_, &ConversionPanel::pickBaseRequested, this, [this] { setTool(2); });
@@ -482,6 +538,119 @@ void MainWindow::buildActions()
                           "export", "contactSheet"}) {
         bar->addAction(action(QString::fromLatin1(n)));
     }
+
+    // Umschalten Übersicht / Bildansicht: Leiste am linken Rand (K-M10-08)
+    QMenu* views = menuBar()->addMenu(tr("&Fenster"));
+    auto* overviewAction = add(views, QStringLiteral("viewOverview"), tr("Übersicht"),
+                               QKeySequence(Qt::Key_G), [this] { showView(View::Overview); });
+    auto* imageAction = add(views, QStringLiteral("viewImage"), tr("Bildansicht"), QKeySequence(Qt::Key_E),
+                            [this] { showView(View::Image); });
+    overviewAction->setCheckable(true);
+    imageAction->setCheckable(true);
+    overviewAction->setToolTip(tr("Alle Bilder der Rolle im aktuellen Stand (G)"));
+    imageAction->setToolTip(tr("Ein Bild bearbeiten (E)"));
+    auto* group = new QActionGroup(this);
+    group->addAction(overviewAction);
+    group->addAction(imageAction);
+    viewBar_ = new QToolBar(tr("Ansicht"), this);
+    viewBar_->setObjectName(QStringLiteral("viewBar"));
+    viewBar_->setMovable(false);
+    viewBar_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    viewBar_->addAction(overviewAction);
+    viewBar_->addAction(imageAction);
+    addToolBar(Qt::LeftToolBarArea, viewBar_);
+    showView(View::Start);
+}
+
+void MainWindow::showView(View v)
+{
+    // Ohne Rolle gibt es nur den Start; während des Imports keine Übersicht und keine Bildansicht
+    if (!roll_ && v != View::Start) {
+        v = View::Start;
+    }
+    view_ = v;
+    QWidget* page = v == View::Start      ? startPage_
+                    : v == View::Import   ? static_cast<QWidget*>(import_)
+                    : v == View::Overview ? overviewPage_
+                                          : static_cast<QWidget*>(canvas_);
+    stack_->setCurrentWidget(page);
+    for (QDockWidget* d : editorDocks_) {
+        d->setVisible(v == View::Image);
+    }
+    const bool navigable = roll_ && v != View::Import;
+    action(QStringLiteral("viewOverview"))->setEnabled(navigable);
+    action(QStringLiteral("viewImage"))->setEnabled(navigable);
+    action(QStringLiteral("viewOverview"))->setChecked(v == View::Overview);
+    action(QStringLiteral("viewImage"))->setChecked(v == View::Image);
+    viewBar_->setVisible(navigable);
+    // Bildwerkzeuge nur in der Bildansicht; Befehle für die Rolle nicht während des Imports
+    for (const char* n : {"toolCrop", "toolRetouch", "compare", "clipping", "zoomFit", "zoom100", "zoom200",
+                          "rotateLeft", "rotateRight", "flipH"}) {
+        if (QAction* a = action(QString::fromLatin1(n))) {
+            a->setEnabled(v == View::Image);
+        }
+    }
+    for (const char* n : {"export", "contactSheet", "undo", "redo", "copy", "paste", "resetAll",
+                          "saveEditPreset", "sync", "rateKeep", "rateReject", "rateNone"}) {
+        if (QAction* a = action(QString::fromLatin1(n))) {
+            a->setEnabled(navigable);
+        }
+    }
+    if (v == View::Overview && roll_) {
+        overviewTitle_->setText(tr("%1 – %n Bild(er)", nullptr, static_cast<int>(frames_.size()))
+                                    .arg(QString::fromStdString(roll_->name)));
+        rollFilm_->setCurrentIndex(std::max(0, rollFilm_->findData(static_cast<int>(roll_->filmType))));
+    }
+    if (v == View::Image) {
+        refreshCurrent();
+        requestPreview(ui_->currentList());
+    }
+}
+
+void MainWindow::setRollFilm(model::FilmType film)
+{
+    if (!roll_) {
+        return;
+    }
+    model::Roll r = *roll_;
+    r.filmType = film;
+    if (!readOnly_) {
+        if (auto ok = s_.rolls.save(r); !ok) {
+            report(tr("Rollendatei nicht gespeichert: %1").arg(QString::fromStdString(ok.error().message)));
+        }
+    }
+    roll_ = std::make_shared<const model::Roll>(std::move(r));
+    s_.session.roll = roll_;
+    refreshAllThumbnails();
+    refreshCurrent();
+    requestPreview(ui_->currentList());
+}
+
+void MainWindow::refreshAllThumbnails()
+{
+    for (const model::Frame& f : frames_) {
+        requestThumbnail(f);
+    }
+}
+
+void MainWindow::closeRoll()
+{
+    if (roll_) {
+        for (const model::Frame& f : frames_) {
+            s_.bus.close(f.id);
+        }
+        s_.rolls.close(roll_->folder);
+    }
+    roll_.reset();
+    s_.session.roll.reset();
+    s_.session.current = {};
+    s_.session.selection.clear();
+    frames_.clear();
+    sources_.clear();
+    stripModel_->setFrames({});
+    canvas_->setImage({}, {});
+    setWindowTitle(QStringLiteral("AutoNeg"));
+    showView(View::Start);
 }
 
 void MainWindow::setTool(int which)
@@ -595,6 +764,14 @@ void MainWindow::onRollOpened(application::OpenedRoll r)
         filmstrip_->selectFrame(frames_.front().id);
     }
     report(tr("%n Bild(er) geöffnet", nullptr, static_cast<int>(frames_.size())));
+    // Neue Rolle: erst der Import-Bildschirm (Filmtyp festlegen), sonst gleich die Bildansicht
+    if (roll_->filmType == model::FilmType::Unconverted && !readOnly_) {
+        import_->setRoll(qs(roll_->folder), QString::fromStdString(roll_->name),
+                         static_cast<int>(frames_.size()));
+        showView(View::Import);
+    } else {
+        showView(View::Image);
+    }
     Q_EMIT rollOpened();
 }
 
@@ -678,6 +855,55 @@ void MainWindow::selectFrame(const model::FrameId& f)
     refreshCurrent();
 }
 
+model::FilmType MainWindow::filmOf(const model::FrameId& f) const
+{
+    const model::FilmType rollFilm = roll_ ? roll_->filmType : model::FilmType::Unconverted;
+    if (f == model::FrameId{} || !s_.bus.isOpen(f)) {
+        return rollFilm;
+    }
+    return steps::FilmModeStep::effective(s_.bus.history(f).current(), rollFilm);
+}
+
+void MainWindow::chooseFilm(const std::string& type)
+{
+    // Filmtyp für die markierten Bilder festlegen bzw. entfernen (K-M10-08)
+    if (!roll_) {
+        return;
+    }
+    const auto t = targets();
+    if (type == "raw") {
+        s_.bus.execute(application::RemoveEntryCommand(model::StepId(std::string(id::filmmode))), t, *roll_);
+    } else {
+        model::EditEntry e;
+        e.step = model::StepId(std::string(id::filmmode));
+        e.params = model::ParamSet{}.with("type", type);
+        s_.bus.execute(application::SetEntryCommand(e), t, *roll_);
+    }
+    refreshCurrent();
+}
+
+void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString& what)
+{
+    // Erkennung braucht den Filmtyp; Bilder ohne Filmtyp werden übersprungen und gemeldet
+    int skipped = 0;
+    for (const model::FrameId& f : frames) {
+        const model::Frame* fr = frame(f);
+        if (fr == nullptr) {
+            continue;
+        }
+        const model::FilmType film = filmOf(f);
+        if (film == model::FilmType::Unconverted) {
+            ++skipped;
+            continue;
+        }
+        trackJob(s_.analysis.detectFrame(*fr, roll_, film), what);
+    }
+    if (skipped > 0) {
+        report(tr("%1: %n Bild(er) ohne Filmtyp übersprungen – zuerst den Filmtyp wählen.", nullptr, skipped)
+                   .arg(what));
+    }
+}
+
 void MainWindow::refreshCurrent()
 {
     const model::EditList l = ui_->currentList();
@@ -685,6 +911,12 @@ void MainWindow::refreshCurrent()
     conversion_->bindList(l);
     gradation_->bindList(l);
     adjust_->bindList(l);
+    // Bedienelemente nach Filmtyp: Gradation (Ilford Multigrade) nur bei S/W-Negativ
+    const model::FilmType film = filmOf(s_.session.current);
+    conversion_->setFilm(film);
+    gradation_->setFilm(film);
+    adjust_->setFilm(film);
+    tools_->setTabVisible(tools_->indexOf(gradation_), film == model::FilmType::BwNegative);
     // Größe des Ergebnisses in Quellpixeln: Zuschnitt und Vierteldrehung berücksichtigt
     if (const auto it = sources_.find(s_.session.current); it != sources_.end() && it->second.width > 0) {
         double w = it->second.width;
@@ -947,11 +1179,7 @@ void MainWindow::doPaste()
     const auto t = targets();
     s_.bus.execute(cmd, t, *roll_);
     if (d.mode() == application::PasteMode::Redetect && !cmd.redetect().empty()) {
-        for (const model::FrameId& f : t) {
-            if (const model::Frame* fr = frame(f)) {
-                trackJob(s_.analysis.detectFrame(*fr, roll_), tr("Erkennung"));
-            }
-        }
+        detect(t, tr("Erkennung"));
     }
     refreshCurrent();
 }

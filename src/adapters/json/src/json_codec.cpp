@@ -139,15 +139,19 @@ const char* toString(model::FilmType f)
         return "bw";
     case model::FilmType::Slide:
         return "slide";
+    case model::FilmType::Unconverted:
+        return "raw";
     }
-    return "color";
+    return "raw";
 }
 
+/// Unbekannt oder fehlend: noch nicht festgelegt (K-M10-08)
 model::FilmType filmTypeOf(std::string_view s)
 {
-    return s == "bw"      ? model::FilmType::BwNegative
+    return s == "color"   ? model::FilmType::ColorNegative
+           : s == "bw"    ? model::FilmType::BwNegative
            : s == "slide" ? model::FilmType::Slide
-                          : model::FilmType::ColorNegative;
+                          : model::FilmType::Unconverted;
 }
 
 // --- Parameterwerte ----------------------------------------------------------------------
@@ -496,7 +500,7 @@ base::Expected<model::Roll> EditCodec::rollFromJson(const model::JsonValue& j) c
     }
     model::Roll r;
     r.name = stringOr(j, "name");
-    r.filmType = filmTypeOf(stringOr(j, "filmType", "color"));
+    r.filmType = filmTypeOf(stringOr(j, "filmType", "raw"));
     JsonValue filmRest;
     if (const JsonValue* f = j.find("film"); f != nullptr && f->isObject()) {
         r.film.filmName = stringOr(*f, "name");

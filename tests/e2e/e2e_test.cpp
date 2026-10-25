@@ -15,6 +15,7 @@
 #include "autoneg/ui/edit_list_model.hpp"
 #include "autoneg/ui/gui_application.hpp"
 #include "autoneg/ui/image_canvas.hpp"
+#include "autoneg/ui/import_page.hpp"
 #include "autoneg/ui/main_window.hpp"
 #include "autoneg/ui/panels.hpp"
 #include "autoneg/ui/translations.hpp"
@@ -45,6 +46,7 @@
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QTabWidget>
 #include <QtWidgets/QTableView>
 #include <gtest/gtest.h>
 
@@ -54,6 +56,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <memory>
 
 namespace autoneg {
@@ -164,7 +167,17 @@ protected:
         ASSERT_TRUE(waitFor([this, frames] {
             return window->rollOpen() && window->filmstrip()->model()->rowCount() == frames;
         }));
+        importAs(film);
         ASSERT_TRUE(waitFor([this] { return window->previewsShown() > 0; })) << "keine Vorschau";
+    }
+    /// Import-Bildschirm einer neuen Rolle: Filmtyp wählen und importieren (K-M10-08)
+    void importAs(model::FilmType film)
+    {
+        ASSERT_TRUE(waitFor([this] { return window->view() == ui::MainWindow::View::Import; }));
+        window->importPage()->choose(film);
+        ASSERT_TRUE(window->importPage()->importButton()->isEnabled());
+        window->importPage()->importButton()->click();
+        ASSERT_EQ(window->view(), ui::MainWindow::View::Image);
     }
     void launch()
     {
@@ -249,6 +262,7 @@ TEST_F(E2E, E_01_OpenFolderShowsFilmstripAndPanels)
     t.start();
     window->openFolder(rollDir);
     ASSERT_TRUE(waitFor([this] { return window->filmstrip()->model()->rowCount() == 36; }));
+    importAs(model::FilmType::ColorNegative);
     ASSERT_TRUE(waitFor([this] { return window->filmstrip()->stripModel()->thumbnailsLoaded() >= 1; }));
     EXPECT_LE(t.elapsed(), 2000 * 5) << "erste Miniatur zu spät (Debug-Bau großzügig)";
     ASSERT_TRUE(
@@ -515,6 +529,7 @@ TEST_F(E2E, E_42_BrokenFileDoesNotCrash)
     launch();
     window->openFolder(rollDir);
     ASSERT_TRUE(waitFor([this] { return window->filmstrip()->model()->rowCount() == 3; }));
+    importAs(model::FilmType::ColorNegative);
     const auto* broken = window->filmstrip()->stripModel()->itemAt(2);
     window->selectFrame(broken->frame.id);
     ASSERT_TRUE(waitFor([this] { return window->filmstrip()->stripModel()->itemAt(2)->failed; }, 20000));
@@ -690,7 +705,9 @@ TEST_F(E2E, E_28_EditPresetAcrossRestart)
     const fs::path other = tmp.path() / "andere";
     writeRoll(other, 2);
     window->openFolder(other);
-    ASSERT_TRUE(waitFor([this] { return window->rollOpen() && window->previewsShown() > 0; }));
+    ASSERT_TRUE(waitFor([this] { return window->rollOpen(); }));
+    importAs(model::FilmType::ColorNegative);
+    ASSERT_TRUE(waitFor([this] { return window->previewsShown() > 0; }));
     auto* menu = window->findChild<QMenu*>(QStringLiteral("applyEditPreset"));
     ASSERT_NE(menu, nullptr);
     Q_EMIT menu->aboutToShow();
@@ -958,13 +975,95 @@ TEST_F(E2E, E_09_DetectionFailureIsReported)
                     .has_value());
     launch();
     window->openFolder(rollDir);
-    ASSERT_TRUE(waitFor([this] { return window->rollOpen() && window->previewsShown() > 0; }));
+    ASSERT_TRUE(waitFor([this] { return window->rollOpen(); }));
+    importAs(model::FilmType::ColorNegative);
+    ASSERT_TRUE(waitFor([this] { return window->previewsShown() > 0; }));
     const int before = static_cast<int>(window->messages().size());
     window->findChild<QPushButton*>(QStringLiteral("autoFrame"))->click();
     ASSERT_TRUE(waitFor([&] { return static_cast<int>(window->messages().size()) > before; }, 30000));
     EXPECT_TRUE(window->messages().last().startsWith(QStringLiteral("Bildfeld erkennen")))
         << window->messages().last().toStdString();
     EXPECT_EQ(entry("autoneg.crop"), nullptr);
+}
+
+// K-M10-08 (Wunsch des Nutzers 25.10.2026): neue Rolle → Import-Bildschirm mit Filmtyp, Scans
+// zunächst unverändert; danach Bildansicht, Übersicht umschaltbar, Filmtyp später änderbar,
+// Bedienelemente passend zum Filmtyp (Gradation nur bei S/W-Negativ)
+TEST_F(E2E, M10_ImportScreenThenViewsAndFilmTypes)
+{
+    rollDir = tmp.path() / "rolle";
+    writeRoll(rollDir, 4, model::FilmType::BwNegative);
+    launch();
+    EXPECT_EQ(window->view(), ui::MainWindow::View::Start);
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->view() == ui::MainWindow::View::Import; }));
+    // ohne Filmtyp kein Import und keine Ansichten
+    EXPECT_FALSE(window->importPage()->importButton()->isEnabled());
+    EXPECT_FALSE(action("viewOverview")->isEnabled());
+    EXPECT_FALSE(action("viewImage")->isEnabled());
+    EXPECT_FALSE(window->filmstrip()->isVisible());
+    ASSERT_TRUE(
+        waitFor([this] { return window->filmstrip()->stripModel()->thumbnailsLoaded() == 4; }, 30000));
+    window->importPage()->choose(model::FilmType::BwNegative);
+    window->importPage()->importButton()->click();
+    ASSERT_EQ(window->view(), ui::MainWindow::View::Image);
+    EXPECT_TRUE(window->filmstrip()->isVisible());
+    // Filmtyp der Rolle gespeichert
+    std::ifstream rollFile(rollDir / "roll.autoneg.json");
+    const std::string rollJson((std::istreambuf_iterator<char>(rollFile)), std::istreambuf_iterator<char>());
+    EXPECT_NE(rollJson.find("\"bw\""), std::string::npos) << rollJson;
+    // S/W: Gradation sichtbar, Weißabgleich gesperrt
+    auto* tabs = window->findChild<QTabWidget*>(QStringLiteral("tools"));
+    ASSERT_NE(tabs, nullptr);
+    EXPECT_TRUE(tabs->isTabVisible(tabs->indexOf(window->gradationPanel())));
+    EXPECT_FALSE(window->adjustPanel()->slider("autoneg.whitebalance", "temperature")->isEnabled());
+    EXPECT_TRUE(window->adjustPanel()->slider("autoneg.exposure", "ev")->isEnabled());
+    // Übersicht: alle Bilder, Doppelklick öffnet die Bildansicht
+    action("viewOverview")->trigger();
+    ASSERT_EQ(window->view(), ui::MainWindow::View::Overview);
+    EXPECT_TRUE(window->overview()->isVisible());
+    EXPECT_FALSE(window->filmstrip()->isVisible());
+    EXPECT_EQ(window->overview()->model()->rowCount(), 4);
+    EXPECT_EQ(window->rollFilmCombo()->currentData().toInt(), static_cast<int>(model::FilmType::BwNegative));
+    // Filmtyp der Rolle ändern: Dia → keine Gradation
+    const int slide = window->rollFilmCombo()->findData(static_cast<int>(model::FilmType::Slide));
+    window->rollFilmCombo()->setCurrentIndex(slide);
+    Q_EMIT window->rollFilmCombo()->activated(slide);
+    Q_EMIT window->overview()->doubleClicked(window->overview()->model()->index(2, 0));
+    ASSERT_EQ(window->view(), ui::MainWindow::View::Image);
+    EXPECT_EQ(window->filmstrip()->currentIndex().row(), 2);
+    EXPECT_FALSE(tabs->isTabVisible(tabs->indexOf(window->gradationPanel())));
+    EXPECT_TRUE(window->adjustPanel()->slider("autoneg.whitebalance", "temperature")->isEnabled());
+    // Filmtyp wieder offen: nur der Scan, Regler und Automatiken gesperrt
+    action("viewOverview")->trigger();
+    const int none = window->rollFilmCombo()->findData(static_cast<int>(model::FilmType::Unconverted));
+    window->rollFilmCombo()->setCurrentIndex(none);
+    Q_EMIT window->rollFilmCombo()->activated(none);
+    action("viewImage")->trigger();
+    EXPECT_FALSE(window->adjustPanel()->slider("autoneg.exposure", "ev")->isEnabled());
+    EXPECT_FALSE(window->findChild<QPushButton*>(QStringLiteral("autoFrame"))->isEnabled());
+    // Wiederöffnen: bekannte Rolle mit Filmtyp geht direkt in die Bildansicht
+    action("viewOverview")->trigger();
+    window->rollFilmCombo()->setCurrentIndex(slide);
+    Q_EMIT window->rollFilmCombo()->activated(slide);
+    restart();
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->rollOpen(); }));
+    EXPECT_EQ(window->view(), ui::MainWindow::View::Image);
+}
+
+// K-M10-08: Abbrechen auf dem Import-Bildschirm schließt die Rolle wieder
+TEST_F(E2E, M10_ImportCancelClosesRoll)
+{
+    rollDir = tmp.path() / "rolle";
+    writeRoll(rollDir, 2);
+    launch();
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->view() == ui::MainWindow::View::Import; }));
+    window->importPage()->findChild<QPushButton*>(QStringLiteral("importCancel"))->click();
+    EXPECT_EQ(window->view(), ui::MainWindow::View::Start);
+    EXPECT_FALSE(window->rollOpen());
+    EXPECT_FALSE(fs::exists(rollDir / "roll.autoneg.json"));
 }
 
 // E-48: LF-DAT-04, NF-PERF-12 – Einstellungen bleiben nach Neustart erhalten

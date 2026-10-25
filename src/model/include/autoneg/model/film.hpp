@@ -9,7 +9,8 @@ enum class FilmType
 {
     ColorNegative, ///< Farbnegativ C-41
     BwNegative,    ///< S/W-Negativ
-    Slide          ///< Dia E-6
+    Slide,         ///< Dia E-6
+    Unconverted    ///< noch nicht festgelegt: der Scan wird unverändert gezeigt (K-M10-08)
 };
 
 /// Bewertung eines Bildes (LF-BAT-10).

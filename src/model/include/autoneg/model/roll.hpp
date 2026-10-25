@@ -30,7 +30,7 @@ struct Roll
     RollId id;
     std::string name;
     std::filesystem::path folder;
-    FilmType filmType = FilmType::ColorNegative;
+    FilmType filmType = FilmType::Unconverted; ///< Rollen-Standard; den Filmtyp legt der Nutzer fest
     FilmInfo film;
     EditList defaults; ///< Rollen-Standard (LF-BAT-01)
     std::vector<FrameId> frames;

@@ -340,3 +340,12 @@ Format je Eintrag:
 - Ursache: Ein Test bindet `<tbb/parallel_for.h>` ein, ohne gegen `TBB::tbb` zu linken. Dadurch fehlen die Definitionen der Bibliothek (`TBB_USE_DEBUG`); der Linker mischt Inline-Funktionen mit unterschiedlicher Konfiguration aus Test und Adapter.
 - Abhilfe: Jedes Ziel, das TBB-Header einbindet, linkt `TBB::tbb` (hier `tests/component/contracts/CMakeLists.txt`).
 - Status: behoben (Nachweis siehe PROGRESS)
+
+## B-41: Miniaturen ragen aus den Kästchen des Filmstreifens
+- Erstmals: 25.10.2026 (vom Nutzer gemeldet), zuletzt: 25.10.2026, Häufigkeit: 1
+- Plattform: alle
+- Symptom: Die Miniaturen im Filmstreifen sind größer als ihre Zellen und überlappen.
+- Ursache: Das Modell lieferte die Miniatur als QPixmap in Originalgröße; QStyledItemDelegate zeichnet eine Pixmap in ihrer eigenen Größe statt in der iconSize der Ansicht.
+- Abhilfe: ThumbnailDelegate passt jede Miniatur mit erhaltenem Seitenverhältnis mittig in die Zelle ein (Filmstreifen, Übersicht, Import). Test `ThumbnailDelegateTest.M10_ThumbnailFitsIntoCell`.
+- Status: behoben
+

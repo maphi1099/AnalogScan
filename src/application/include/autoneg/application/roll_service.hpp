@@ -65,6 +65,9 @@ public:
 
     /// Gibt die Sperre der Rolle frei (beim Schließen).
     void close(const std::filesystem::path& folder) { rolls_.unlock(folder); }
+    /// Rollendaten speichern (roll.autoneg.json), z. B. den beim Import gewählten Filmtyp. Kleine
+    /// Datei, atomar geschrieben; läuft im aufrufenden Thread (K-M10-09).
+    [[nodiscard]] base::Expected<void> save(const model::Roll& r) { return rolls_.save(r); }
 
 private:
     JobScheduler& jobs_;
