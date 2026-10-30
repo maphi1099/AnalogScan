@@ -1,6 +1,6 @@
-#include "autoneg/app/composition.hpp"
+#include "shared/composition.hpp"
 
-#include "autoneg/adapter/tbb/system_memory.hpp"
+#include "adapters/tbb/system_memory.hpp"
 
 #include <algorithm>
 #include <cmath>

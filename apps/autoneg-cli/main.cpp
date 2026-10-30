@@ -9,13 +9,13 @@
 //
 // Gemeinsame Optionen: --config <ordner> --cache <ordner> (Benutzerverzeichnisse ersetzen)
 
-#include "autoneg/app/composition.hpp"
-#include "autoneg/application/presets.hpp"
-#include "autoneg/steps/other_steps.hpp"
-#include "autoneg/steps/step_ids.hpp"
+#include "application/presets.hpp"
+#include "shared/composition.hpp"
+#include "steps/other_steps.hpp"
+#include "steps/step_ids.hpp"
 
 #if AUTONEG_WITH_GUI
-#include "autoneg/adapter/qtprint/qt_document_renderer.hpp"
+#include "adapters/qtprint/qt_document_renderer.hpp"
 #endif
 
 #include <chrono>

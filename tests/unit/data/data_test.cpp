@@ -2,12 +2,12 @@
 // AtomicFileWriter, SchemaMigrator. Arbeiten in einem eigenen temporären Ordner (T-03);
 // die Prüfsumme liefert ein zählender Fake.
 
-#include "autoneg/adapter/json/atomic_file_writer.hpp"
-#include "autoneg/adapter/json/json_codec.hpp"
-#include "autoneg/adapter/json/json_config_store.hpp"
-#include "autoneg/adapter/json/json_sidecar_store.hpp"
-#include "autoneg/adapter/json/schema_migrator.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "adapters/json/atomic_file_writer.hpp"
+#include "adapters/json/json_codec.hpp"
+#include "adapters/json/json_config_store.hpp"
+#include "adapters/json/json_sidecar_store.hpp"
+#include "adapters/json/schema_migrator.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

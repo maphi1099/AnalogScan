@@ -1,7 +1,7 @@
 """Prüft, dass jeder übersetzbare Text der Oberfläche eine englische Übersetzung hat (LF-UI-03).
 
-Sucht alle tr("…")-Literale in src/ui/src/*.cpp und vergleicht sie mit der Tabelle in
-src/ui/src/translations.cpp (Zeilen der Form {"Deutsch", "English"},). Meldet fehlende und
+Sucht alle tr("…")-Literale in src/ui/*.cpp und vergleicht sie mit der Tabelle in
+src/ui/translations.cpp (Zeilen der Form {"Deutsch", "English"},). Meldet fehlende und
 überzählige Einträge. Aufruf: python -X utf8 check_translations.py <quellwurzel> [--list]
 """
 import glob
@@ -15,7 +15,7 @@ ENTRY = re.compile(r'^\s*\{\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\}
 
 def sources(root):
     found = set()
-    for f in sorted(glob.glob(os.path.join(root, 'src', 'ui', 'src', '*.cpp'))):
+    for f in sorted(glob.glob(os.path.join(root, 'src', 'ui', '*.cpp'))):
         if os.path.basename(f) == 'translations.cpp':
             continue
         with open(f, encoding='utf-8') as fh:
@@ -29,7 +29,7 @@ def table(root):
     entries = {}
     core = set()
     in_core = False
-    with open(os.path.join(root, 'src', 'ui', 'src', 'translations.cpp'), encoding='utf-8') as fh:
+    with open(os.path.join(root, 'src', 'ui', 'translations.cpp'), encoding='utf-8') as fh:
         for line in fh:
             if 'Schrittnamen' in line:
                 in_core = True

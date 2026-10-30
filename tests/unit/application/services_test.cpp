@@ -1,11 +1,11 @@
 // Unit-Tests der Dienste (Architektur 9.13): Export-Dateinamen und -Job, Automatiken über den
 // CommandBus, Schrittkatalog, Platzhalter für Version 1.1. Ports durch Fakes ersetzt.
 
-#include "autoneg/application/services.hpp"
-#include "autoneg/mocks/fake_task_executor.hpp"
-#include "autoneg/mocks/fakes.hpp"
-#include "autoneg/steps/registry.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "application/services.hpp"
+#include "mocks/fake_task_executor.hpp"
+#include "mocks/fakes.hpp"
+#include "steps/registry.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 
@@ -151,7 +151,9 @@ TEST(AnalysisServiceTest, U_APP_16_AutomaticsWriteEntries)
     const EditList& l1 = bus.history(f1.id).current();
     ASSERT_NE(l1.get(StepId("autoneg.crop")), nullptr);
     EXPECT_EQ(l1.get(StepId("autoneg.crop"))->origin, Origin::Automatic);
-    EXPECT_EQ(l1.get(StepId("autoneg.crop"))->params.get<model::NormRect>("rect").value().y, 0.12);
+    // Zuschnitt 1 % innerhalb des erkannten Bildfelds (y 0,12, Höhe 0,76)
+    EXPECT_DOUBLE_EQ(l1.get(StepId("autoneg.crop"))->params.get<model::NormRect>("rect").value().y,
+                     0.12 + 0.01 * 0.76);
     ASSERT_NE(l1.get(StepId("autoneg.filmbase")), nullptr);
     EXPECT_EQ(l1.get(StepId("autoneg.filmbase"))->origin, Origin::Automatic);
     EXPECT_EQ(l1.get(StepId("autoneg.rotation"))->params.get<double>("angle").value(), -0.4);

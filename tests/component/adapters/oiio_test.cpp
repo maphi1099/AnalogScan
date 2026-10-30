@@ -2,12 +2,11 @@
 // K-05 prüft die geschriebenen Dateien mit unabhängigen Lesern (Python: tifffile, Pillow,
 // imagecodecs) über tests/component/adapters/verify_export.py.
 
+#include "adapters/lcms/lcms_color_engine.hpp"
+#include "adapters/oiio/oiio_image_io.hpp"
+#include "support/synthetic.hpp"
+#include "support/temp_dir.hpp"
 #include "test_files.hpp"
-
-#include "autoneg/adapter/lcms/lcms_color_engine.hpp"
-#include "autoneg/adapter/oiio/oiio_image_io.hpp"
-#include "autoneg/testing/synthetic.hpp"
-#include "autoneg/testing/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

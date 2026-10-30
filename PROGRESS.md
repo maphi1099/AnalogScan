@@ -59,7 +59,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 
 Dateien:
 - `CMakeLists.txt` (C++23, nur Clang/GCC zugelassen, Optionen `AUTONEG_BUILD_TESTS`, `AUTONEG_CHECK_ARCHITECTURE`, `AUTONEG_ARCH_VIOLATION_DEMO`, `AUTONEG_SANITIZER`, `AUTONEG_TESTDATA_DIR`)
-- `CMakePresets.json`: `windows-clang`, `linux-clang`, `linux-gcc`, `linux-clang-asan`, `linux-clang-tsan`; Build-/Test-Presets `<preset>-debug`, `-release` (Sanitizer nur Debug). Ninja Multi-Config, Ausgabe `build/<preset>`.
+- `CMakePresets.json`: `windows-clang`, `linux-clang`, `linux-gcc`, `linux-clang-asan`, `linux-clang-tsan`; Build-/Test-Presets `<preset>-debug`, `-release` (Sanitizer nur Debug). Ninja Multi-Config, Ausgabe `build/<preset>`. (Seit 26.10.2026 ersetzt, siehe „Ordnerstruktur vereinfacht“.)
 - `vcpkg.json`: Baseline `664933b8d385dfc01f4e0cdff4c7c74e71f6a740`; Standard nur `gtest`; Features `raw`, `imageio`, `color`, `vision`, `threading`, `persistence`, `hashing`, `logging`, `gui` (noch nicht aktiviert).
 - `cmake/AutoNegModule.cmake` (`autoneg_add_module`, `autoneg_add_program`, `autoneg_finalize_architecture`), `cmake/AutoNegWarnings.cmake` (Warnungen als Fehler, Sanitizer), `cmake/AutoNegTest.cmake` (`autoneg_add_test` mit Labels unit/component/e2e; linkt nur `GTest::gmock_main`; zusätzlicher CTest `<ziel>.linked` gegen still verschwundene Tests, B-07).
 - 20 Module als statische Ziele mit Platzhalter `moduleName()`: `base`, `model`, `image`, `layout`, `ports`, `pipeline`, `steps`, `analysis`, `application`, `ui`, `adapter_{libraw,oiio,lcms,opencv,json,xxhash,qtprint,spdlog,tbb}`, `backend_cpu`. Kein Vulkan-Ziel.
@@ -250,7 +250,7 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 
 ### Auslieferung Windows und Handbuch
 
-- Installer: `installer/windows/build_installer.ps1` baut Release, installiert mit `cmake --install` nach `build/install-windows` und erzeugt mit Inno Setup `build/installer/AutoNeg-<Version>-Setup-x64.exe` (K-M10-06). Inno Setup: `winget install JRSoftware.InnoSetup`.
+- Installer: `installer/windows/build_installer.ps1` baut Release, installiert mit `cmake --install` nach `build/Release_Win/install` und erzeugt mit Inno Setup `build/Installer/AutoNeg-<Version>-Setup-x64.exe` (K-M10-06). Inno Setup: `winget install JRSoftware.InnoSetup`.
 - Installationsregeln: `cmake/AutoNegInstall.cmake` (nur Windows).
 - Geprüft (23.10.2026): stille Installation für den eigenen Benutzer, `autoneg-cli` export und contact-sheet ohne Entwicklungsumgebung im PATH, Start der Oberfläche mit Rolle, stille Deinstallation ohne Rückstände.
 - Handbuch: `docs/handbuch/handbuch.tex` (K-M10-07); setzen mit `pdflatex handbuch.tex` (zweimal). Abschnitt „Einschränkungen“ nennt die Bedienelemente ohne Funktion (Weißabgleich-Pipette, Messbereich anzeigen, Auto-Tonwerte).
@@ -261,7 +261,13 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - Miniaturen in festen Zellen eingepasst (B-41).
 - Kommandozeile `--film color|bw|slide`.
 - Tests: `M10_ImportScreenThenViewsAndFilmTypes`, `M10_ImportCancelClosesRoll`, `M10_ThumbnailFitsIntoCell`, Erkennung ohne Filmtyp; E2E über den Import-Bildschirm (T-19).
-- Beobachtung: Die Bildfelderkennung findet bei 12 von 13 echten Scans aus `Testing/Data/102MSDCF-2` kein Bildfeld; ohne Basis wird ein Farbnegativ fast vollständig cyan. Offen (LF-GEO-01, LF-BAS-01).
+- Beobachtung: Die Bildfelderkennung findet bei 12 von 13 echten Scans aus `Testing/Data/102MSDCF-2` kein Bildfeld; ohne Basis wird ein Farbnegativ fast vollständig cyan. Behoben am 30.10.2026 (K-M10-10): 36/36 erkannt, automatische Tonwertgrenzen je Kanal, Zuschnitt 1 % innen. Prüfwerkzeug `tests/tools/analyze` (Übersichtsbilder) und `autoneg-cli detect/export`.
+
+### Ordnerstruktur vereinfacht (26.10.2026, Wunsch des Nutzers)
+
+- Quellcode flach: Jedes Modul ist ein Ordner mit seinen Headern, Quelldateien und einer `CMakeLists.txt`, ohne `include/autoneg/...` und `src/` darunter (`src/model/roll.hpp`, `src/adapters/json/json_codec.cpp`). Gleiches gilt für `apps/` und die Testhilfen (`tests/mocks`, `tests/support`, `tests/reference`).
+- Includes relativ zu `src/`, `apps/` bzw. `tests/`: `#include "model/roll.hpp"`, `"adapters/json/json_codec.hpp"`, `"shared/composition.hpp"`, `"mocks/ports.hpp"`. Die Architekturprüfung ordnet Header über diese Ordner zu (`includeRoots` in `tools/architecture_rules.json`, je Modul auch mehrere).
+- Build-Ordner: `build/Debug_Win`, `build/Release_Win`, `build/Debug_Linux`, `build/Release_Linux`, `build/Installer` (nur die Setup-Datei). Presets `windows-debug`, `windows-release`, `linux-debug`, `linux-release` mit Ninja (eine Konfiguration je Ordner). Die Prüfbauten `linux-gcc`, `linux-asan`, `linux-tsan` liegen außerhalb von `build/` unter `~/autoneg-checks/<preset>` in WSL.
 
 ## Entscheidungen
 
@@ -299,34 +305,34 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 ## Plattformabhängiger Code (auf dem anderen System prüfen)
 
 - `cmake/triplets/*` und `tests/CMakeLists.txt` (taskset): nur Linux/TSan.
-- `src/backends/cpu/src/kernels_hwy.cpp`: Highway-Zielauswahl zur Laufzeit; auf beiden Systemen AVX2 + EMU128 getestet (Rechner ohne AVX-512).
-- `src/pipeline/src/source_provider.cpp`: std::shared_future / Threads (U-PIP-16 auf beiden Systemen grün).
+- `src/backends/cpu/kernels_hwy.cpp`: Highway-Zielauswahl zur Laufzeit; auf beiden Systemen AVX2 + EMU128 getestet (Rechner ohne AVX-512).
+- `src/pipeline/source_provider.cpp`: std::shared_future / Threads (U-PIP-16 auf beiden Systemen grün).
 
 - `cmake/AutoNegWarnings.cmake`: getrennte Warnungs-Zweige für clang-cl und clang/GCC – nach jeder Änderung beide Systeme bauen (beide am 19.10.2026 grün).
 - `cmake/AutoNegTest.cmake`: gtest wird unter Windows als DLL, unter Linux statisch gelinkt; unterschiedliches Verhalten siehe B-07.
-- `src/image/include/autoneg/image/storage.hpp`: `AlignedAllocator` nutzt `operator new(size, align_val_t)` – auf beiden Systemen getestet (U-IMG-03).
-- `src/base/src/hash.cpp`: plattformunabhängige Prüfsumme (feste Bytereihenfolge); Referenzwert im Test auf beiden Systemen gleich.
-- `src/adapters/libraw/src/libraw_decoder.cpp`: Windows öffnet mit `wstring` (Umlaute im Pfad, z. B. „Marius Götz“), Linux mit UTF-8.
-- `src/adapters/oiio/src/oiio_image_io.cpp`: Umbenennen über vorhandene Datei (`std::filesystem::rename`) – Windows ersetzt per MoveFileEx, Linux per rename(2); Contract-Test K-14 auf beiden Systemen.
+- `src/image/storage.hpp`: `AlignedAllocator` nutzt `operator new(size, align_val_t)` – auf beiden Systemen getestet (U-IMG-03).
+- `src/base/hash.cpp`: plattformunabhängige Prüfsumme (feste Bytereihenfolge); Referenzwert im Test auf beiden Systemen gleich.
+- `src/adapters/libraw/libraw_decoder.cpp`: Windows öffnet mit `wstring` (Umlaute im Pfad, z. B. „Marius Götz“), Linux mit UTF-8.
+- `src/adapters/oiio/oiio_image_io.cpp`: Umbenennen über vorhandene Datei (`std::filesystem::rename`) – Windows ersetzt per MoveFileEx, Linux per rename(2); Contract-Test K-14 auf beiden Systemen.
 - `tests/component/adapters/oiio_test.cpp`: `std::system` mit unterschiedlicher Quotierung (cmd.exe vs. sh).
 - `tests/component/adapters/libraw_test.cpp`: `_dupenv_s` unter Windows statt `getenv`.
-- `src/adapters/json/src/atomic_file_writer.cpp`: Windows CreateFileW/FlushFileBuffers/ReplaceFileW bzw. MoveFileExW, Linux open/fsync/rename/fsync(Ordner) – auf beiden Systemen geprüft (U-DAT-06).
-- `src/adapters/json/src/json_sidecar_store.cpp`: Prozesskennung, Rechnername, Lebenszeichen (OpenProcess/WaitForSingleObject bzw. kill(pid, 0)); Änderungszeit über `clock_cast` (U-DAT-13, U-DAT-10).
-- `src/adapters/tbb/src/tbb_task_executor.cpp`: Arena-Prioritäten und global_control; Verhalten unter TSan geprüft.
+- `src/adapters/json/atomic_file_writer.cpp`: Windows CreateFileW/FlushFileBuffers/ReplaceFileW bzw. MoveFileExW, Linux open/fsync/rename/fsync(Ordner) – auf beiden Systemen geprüft (U-DAT-06).
+- `src/adapters/json/json_sidecar_store.cpp`: Prozesskennung, Rechnername, Lebenszeichen (OpenProcess/WaitForSingleObject bzw. kill(pid, 0)); Änderungszeit über `clock_cast` (U-DAT-13, U-DAT-10).
+- `src/adapters/tbb/tbb_task_executor.cpp`: Arena-Prioritäten und global_control; Verhalten unter TSan geprüft.
 - `tools/visual_check/visual_check.py`: ruft das Linux-Programm aus Windows über `wsl` auf (WSL-Pfade); unter Linux direkt mit dem Programmpfad.
-- `src/model/include/autoneg/model/roll.hpp`: `Frame::path`/`Roll::folder` sind `std::filesystem::path` – Pfadtrennzeichen und Kodierung (Umlaute, z. B. „Marius Götz“) ab M4/M6 auf beiden Systemen prüfen.
-- `src/adapters/qtprint/src/qt_document_renderer.cpp`: `QtGuiSession` setzt nur unter Linux ohne Anzeige `QT_QPA_PLATFORM=offscreen`; Pfade über `fromStdU16String` (B-22).
+- `src/model/roll.hpp`: `Frame::path`/`Roll::folder` sind `std::filesystem::path` – Pfadtrennzeichen und Kodierung (Umlaute, z. B. „Marius Götz“) ab M4/M6 auf beiden Systemen prüfen.
+- `src/adapters/qtprint/qt_document_renderer.cpp`: `QtGuiSession` setzt nur unter Linux ohne Anzeige `QT_QPA_PLATFORM=offscreen`; Pfade über `fromStdU16String` (B-22).
 - `tests/component/adapters/qtprint_test.cpp`, `tests/unit/ui/ui_test.cpp`, `tests/e2e/e2e_test.cpp`: Umgebungsvariablen über `_putenv_s`/`setenv`; Qt-Plugins unter Windows über `QT_PLUGIN_PATH` (Qt als DLL), unter Linux statisch eingebunden (`qt_import_plugins`).
 - `apps/autoneg/CMakeLists.txt`: `qt.conf` nur bei Qt als DLL (Windows); `WIN32_EXECUTABLE`.
-- `src/ui/src/gui_application.cpp`: Benutzerverzeichnisse über `QStandardPaths` (%APPDATA% bzw. ~/.config).
-- `src/adapters/json/src/json_config_store.cpp`: Vorlagennamen als UTF-8-Pfad (`u8path`), Windows-unzulässige Zeichen kodiert.
-- `src/application/src/roll_service.cpp`: Änderungszeit über `clock_cast`, Dateiendungen ohne Beachtung der Groß-/Kleinschreibung.
+- `src/ui/gui_application.cpp`: Benutzerverzeichnisse über `QStandardPaths` (%APPDATA% bzw. ~/.config).
+- `src/adapters/json/json_config_store.cpp`: Vorlagennamen als UTF-8-Pfad (`u8path`), Windows-unzulässige Zeichen kodiert.
+- `src/application/roll_service.cpp`: Änderungszeit über `clock_cast`, Dateiendungen ohne Beachtung der Groß-/Kleinschreibung.
 - `apps/shared/composition.cpp`: Benutzerverzeichnisse über `%APPDATA%`/`%LOCALAPPDATA%` (UTF-16, `_wdupenv_s`) bzw. `XDG_*`/`HOME`.
 - `apps/shared/utf8.manifest`: nur Windows (Codepage UTF-8 für argv); unter Linux sind Argumente ohnehin UTF-8.
-- `src/adapters/spdlog/src/spd_logger.cpp`: Datei über `std::ofstream(std::filesystem::path)`; Zeilenende CR LF unter Windows.
-- `src/adapters/json/src/atomic_file_writer.cpp`: Wiederholversuch nur unter Windows (B-29).
+- `src/adapters/spdlog/spd_logger.cpp`: Datei über `std::ofstream(std::filesystem::path)`; Zeilenende CR LF unter Windows.
+- `src/adapters/json/atomic_file_writer.cpp`: Wiederholversuch nur unter Windows (B-29).
 - `tests/tools/bench/bench.cpp`: Spitzenspeicher über `GetProcessMemoryInfo` bzw. `getrusage`.
 - `vcpkg.json` Feature `raw-parallel`: OpenMP-Laufzeit vcomp (Windows) bzw. libgomp/libomp (Linux).
-- `src/adapters/tbb/src/system_memory.cpp`: Arbeitsspeicher über `GlobalMemoryStatusEx` bzw. `sysconf(_SC_PHYS_PAGES)` (Standard-Speicherbudget).
+- `src/adapters/tbb/system_memory.cpp`: Arbeitsspeicher über `GlobalMemoryStatusEx` bzw. `sysconf(_SC_PHYS_PAGES)` (Standard-Speicherbudget).
 - `tests/tools/bench/bench.cpp`: aktueller Speicher über `WorkingSetSize` bzw. `/proc/self/statm`.
 - `cmake/AutoNegInstall.cmake`, `installer/windows/*`: nur Windows (Linux-Pakete folgen).

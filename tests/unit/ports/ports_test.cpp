@@ -1,7 +1,7 @@
 // Die Ports sind reine Schnittstellen (Architektur 9.9-9.11). Der Test stellt sicher, dass
 // jede Schnittstelle vollständig durch eine Attrappe ersetzbar ist (NF-ARC-12).
 
-#include "autoneg/mocks/ports.hpp"
+#include "mocks/ports.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

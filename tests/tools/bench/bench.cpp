@@ -8,9 +8,9 @@
 // unberührt). --big erzeugt zusätzlich ein künstliches 100-MP-Negativ (TIFF 16 bit).
 // Nur im Release-Bau aussagekräftig.
 
-#include "autoneg/app/composition.hpp"
-#include "autoneg/steps/step_ids.hpp"
-#include "autoneg/testing/synthetic.hpp"
+#include "shared/composition.hpp"
+#include "steps/step_ids.hpp"
+#include "support/synthetic.hpp"
 
 #if defined(_WIN32)
 #ifndef NOMINMAX

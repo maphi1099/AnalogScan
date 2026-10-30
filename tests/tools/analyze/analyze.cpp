@@ -4,12 +4,12 @@
 //
 //   autoneg_analyze <color|bw|slide> <ausgabeordner> <raw-datei> [<raw-datei> ...]
 
-#include "autoneg/adapter/libraw/libraw_decoder.hpp"
-#include "autoneg/adapter/oiio/oiio_image_io.hpp"
-#include "autoneg/adapter/opencv/opencv_vision.hpp"
-#include "autoneg/analysis/base_meter.hpp"
-#include "autoneg/analysis/frame_detector.hpp"
-#include "autoneg/backend/cpu/cpu_backend.hpp"
+#include "adapters/libraw/libraw_decoder.hpp"
+#include "adapters/oiio/oiio_image_io.hpp"
+#include "adapters/opencv/opencv_vision.hpp"
+#include "analysis/base_meter.hpp"
+#include "analysis/frame_detector.hpp"
+#include "backends/cpu/cpu_backend.hpp"
 
 #include <chrono>
 #include <cmath>

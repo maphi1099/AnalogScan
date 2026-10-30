@@ -8,12 +8,12 @@
 // film: color | bw | slide. Werte: Zahl, true/false, Text oder Komma-Liste (Vec3, Rechteck).
 // Beispiel: crop.rect=0.1,0.1,0.8,0.8 filmbase.base=0.7,0.4,0.3 gradation.grade=3
 
-#include "autoneg/backend/cpu/cpu_backend.hpp"
-#include "autoneg/pipeline/pipeline_compiler.hpp"
-#include "autoneg/pipeline/pipeline_executor.hpp"
-#include "autoneg/steps/other_steps.hpp"
-#include "autoneg/steps/registry.hpp"
-#include "autoneg/steps/step_ids.hpp"
+#include "backends/cpu/cpu_backend.hpp"
+#include "pipeline/pipeline_compiler.hpp"
+#include "pipeline/pipeline_executor.hpp"
+#include "steps/other_steps.hpp"
+#include "steps/registry.hpp"
+#include "steps/step_ids.hpp"
 
 #include <bit>
 #include <chrono>

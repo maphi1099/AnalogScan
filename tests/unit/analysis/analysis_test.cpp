@@ -2,12 +2,12 @@
 // Tonwertgrenzen, Neutralisierung, Histogramm. IVision ist durch FakeVision ersetzt,
 // Testbilder sind synthetisch (tests/support/synthetic.hpp).
 
-#include "autoneg/analysis/base_meter.hpp"
-#include "autoneg/analysis/frame_detector.hpp"
-#include "autoneg/analysis/tone.hpp"
-#include "autoneg/mocks/fake_vision.hpp"
-#include "autoneg/testing/color_metrics.hpp"
-#include "autoneg/testing/synthetic.hpp"
+#include "analysis/base_meter.hpp"
+#include "analysis/frame_detector.hpp"
+#include "analysis/tone.hpp"
+#include "mocks/fake_vision.hpp"
+#include "support/color_metrics.hpp"
+#include "support/synthetic.hpp"
 
 #include <gtest/gtest.h>
 

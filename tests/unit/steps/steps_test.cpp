@@ -1,17 +1,17 @@
 // Unit-Tests der Verarbeitungsschritte (Architektur 5, 9.5, 9.6). Rechen-Backend: skalare
 // Referenz; Testbilder: synthetisch (tests/support/synthetic.hpp).
 
-#include "autoneg/mocks/ports.hpp"
-#include "autoneg/pipeline/pipeline_compiler.hpp"
-#include "autoneg/pipeline/pipeline_executor.hpp"
-#include "autoneg/reference/reference_backend.hpp"
-#include "autoneg/steps/multigrade.hpp"
-#include "autoneg/steps/other_steps.hpp"
-#include "autoneg/steps/pointwise_steps.hpp"
-#include "autoneg/steps/registry.hpp"
-#include "autoneg/steps/step_ids.hpp"
-#include "autoneg/testing/color_metrics.hpp"
-#include "autoneg/testing/synthetic.hpp"
+#include "mocks/ports.hpp"
+#include "pipeline/pipeline_compiler.hpp"
+#include "pipeline/pipeline_executor.hpp"
+#include "reference/reference_backend.hpp"
+#include "steps/multigrade.hpp"
+#include "steps/other_steps.hpp"
+#include "steps/pointwise_steps.hpp"
+#include "steps/registry.hpp"
+#include "steps/step_ids.hpp"
+#include "support/color_metrics.hpp"
+#include "support/synthetic.hpp"
 
 #include <gtest/gtest.h>
 

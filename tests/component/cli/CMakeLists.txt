@@ -6,7 +6,7 @@ autoneg_add_test(cli
          adapter_lcms adapter_opencv adapter_json adapter_xxhash adapter_spdlog adapter_tbb backend_cpu
          test_synthetic
 )
-target_include_directories(autoneg_test_cli PRIVATE ${PROJECT_SOURCE_DIR}/apps/shared/include)
+target_include_directories(autoneg_test_cli PRIVATE ${PROJECT_SOURCE_DIR}/apps)
 target_compile_definitions(autoneg_test_cli PRIVATE AUTONEG_CLI="$<TARGET_FILE:autoneg-cli>")
 add_dependencies(autoneg_test_cli autoneg-cli)
 
@@ -18,4 +18,4 @@ autoneg_add_test(stress
          adapter_lcms adapter_opencv adapter_json adapter_xxhash adapter_spdlog adapter_tbb backend_cpu
          test_synthetic
 )
-target_include_directories(autoneg_test_stress PRIVATE ${PROJECT_SOURCE_DIR}/apps/shared/include)
+target_include_directories(autoneg_test_stress PRIVATE ${PROJECT_SOURCE_DIR}/apps)

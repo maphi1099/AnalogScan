@@ -2,13 +2,13 @@
 // Fakes im Arbeitsspeicher (tests/mocks/fake_repositories.hpp) und gegen die echten Adapter
 // JsonSidecarStore (mit XxHasher) und FileThumbnailCache auf einem temporären Ordner.
 
-#include "autoneg/adapter/json/atomic_file_writer.hpp"
-#include "autoneg/adapter/json/file_thumbnail_cache.hpp"
-#include "autoneg/adapter/json/json_sidecar_store.hpp"
-#include "autoneg/adapter/json/schema_migrator.hpp"
-#include "autoneg/adapter/xxhash/xx_hasher.hpp"
-#include "autoneg/mocks/fake_repositories.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "adapters/json/atomic_file_writer.hpp"
+#include "adapters/json/file_thumbnail_cache.hpp"
+#include "adapters/json/json_sidecar_store.hpp"
+#include "adapters/json/schema_migrator.hpp"
+#include "adapters/xxhash/xx_hasher.hpp"
+#include "mocks/fake_repositories.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

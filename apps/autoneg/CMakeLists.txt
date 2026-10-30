@@ -4,7 +4,7 @@ autoneg_add_program(autoneg
         $<$<BOOL:${WIN32}>:${PROJECT_SOURCE_DIR}/apps/shared/utf8.manifest>
     DEPS ui base model image layout ports pipeline steps analysis application adapter_libraw adapter_oiio adapter_lcms adapter_opencv adapter_json adapter_xxhash adapter_qtprint adapter_spdlog adapter_tbb backend_cpu
 )
-target_include_directories(autoneg PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${PROJECT_SOURCE_DIR}/apps/shared/include)
+target_include_directories(autoneg PRIVATE ${PROJECT_SOURCE_DIR}/apps)
 if(WIN32)
     set_target_properties(autoneg PROPERTIES WIN32_EXECUTABLE ON) # kein Konsolenfenster
 endif()

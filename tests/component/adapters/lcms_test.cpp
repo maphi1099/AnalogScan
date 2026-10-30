@@ -2,11 +2,10 @@
 // (Lab D50) aus dem Arbeitsfarbraum nach sRGB, Adobe RGB, ProPhoto und in ein Monitorprofil.
 // Die Sollwerte im Zielraum rechnet der Test unabhängig (Bradford, Primärvalenzen, Kennlinie).
 
+#include "adapters/lcms/lcms_color_engine.hpp"
+#include "support/color_metrics.hpp"
+#include "support/synthetic.hpp"
 #include "test_files.hpp"
-
-#include "autoneg/adapter/lcms/lcms_color_engine.hpp"
-#include "autoneg/testing/color_metrics.hpp"
-#include "autoneg/testing/synthetic.hpp"
 
 #include <gtest/gtest.h>
 

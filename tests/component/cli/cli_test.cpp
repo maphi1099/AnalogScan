@@ -2,10 +2,10 @@
 // wird einmal über die Dienstschicht der Anwendung (ExportService der gemeinsamen Komposition)
 // und einmal mit dem Programm autoneg-cli exportiert; die Pixel müssen bitgleich sein.
 
-#include "autoneg/adapter/oiio/oiio_image_io.hpp"
-#include "autoneg/app/composition.hpp"
-#include "autoneg/testing/synthetic.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "adapters/oiio/oiio_image_io.hpp"
+#include "shared/composition.hpp"
+#include "support/synthetic.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

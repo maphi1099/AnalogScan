@@ -1,8 +1,8 @@
 // Unit-Tests autoneg::image (Architektur 9.2).
 
-#include "autoneg/image/cancel_token.hpp"
-#include "autoneg/image/image_buffer.hpp"
-#include "autoneg/image/tile_grid.hpp"
+#include "image/cancel_token.hpp"
+#include "image/image_buffer.hpp"
+#include "image/tile_grid.hpp"
 
 #include <gtest/gtest.h>
 

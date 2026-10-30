@@ -1,6 +1,6 @@
 autoneg_add_module(base
     SOURCES
-        src/error.cpp
-        src/geometry.cpp
-        src/hash.cpp
+        error.cpp
+        geometry.cpp
+        hash.cpp
 )

@@ -9,19 +9,17 @@
     {
       "name": "base",
       "hidden": true,
-      "generator": "Ninja Multi-Config",
-      "binaryDir": "${sourceDir}/build/${presetName}",
+      "generator": "Ninja",
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "VCPKG_MANIFEST_FEATURES": "raw;raw-parallel;imageio;color;vision;persistence;hashing;logging;gui",
         "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports"
       }
     },
     {
-      "name": "windows-clang",
-      "displayName": "Windows, clang-cl",
+      "name": "windows-base",
+      "hidden": true,
       "inherits": "base",
       "condition": {
         "type": "equals",
@@ -34,6 +32,20 @@
       }
     },
     {
+      "name": "windows-debug",
+      "displayName": "Windows, clang-cl, Debug",
+      "inherits": "windows-base",
+      "binaryDir": "${sourceDir}/build/Debug_Win",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows, clang-cl, Release",
+      "inherits": "windows-base",
+      "binaryDir": "${sourceDir}/build/Release_Win",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
       "name": "linux-base",
       "hidden": true,
       "inherits": "base",
@@ -43,37 +55,47 @@
         "rhs": "Linux"
       },
       "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
         "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
     },
     {
-      "name": "linux-clang",
-      "displayName": "Linux, clang",
+      "name": "linux-debug",
+      "displayName": "Linux, clang, Debug",
       "inherits": "linux-base",
-      "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++"
-      }
+      "binaryDir": "${sourceDir}/build/Debug_Linux",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux, clang, Release",
+      "inherits": "linux-base",
+      "binaryDir": "${sourceDir}/build/Release_Linux",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-check",
+      "hidden": true,
+      "inherits": "linux-base",
+      "binaryDir": "$env{HOME}/autoneg-checks/${presetName}",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
     },
     {
       "name": "linux-gcc",
-      "displayName": "Linux, GCC (Kompatibilität)",
-      "inherits": "linux-base",
-      "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "g++"
-      }
+      "displayName": "Linux, GCC (Kompatibilität, außerhalb von build/)",
+      "inherits": "linux-check",
+      "cacheVariables": { "CMAKE_CXX_COMPILER": "g++" }
     },
     {
-      "name": "linux-clang-asan",
-      "displayName": "Linux, clang, AddressSanitizer + UBSan",
-      "inherits": "linux-clang",
-      "cacheVariables": {
-        "AUTONEG_SANITIZER": "address"
-      }
+      "name": "linux-asan",
+      "displayName": "Linux, clang, AddressSanitizer + UBSan (außerhalb von build/)",
+      "inherits": "linux-check",
+      "cacheVariables": { "AUTONEG_SANITIZER": "address" }
     },
     {
-      "name": "linux-clang-tsan",
-      "displayName": "Linux, clang, ThreadSanitizer",
-      "inherits": "linux-clang",
+      "name": "linux-tsan",
+      "displayName": "Linux, clang, ThreadSanitizer (außerhalb von build/)",
+      "inherits": "linux-check",
       "cacheVariables": {
         "AUTONEG_SANITIZER": "thread",
         "VCPKG_TARGET_TRIPLET": "x64-linux-tsan",
@@ -84,102 +106,22 @@
     }
   ],
   "buildPresets": [
-    {
-      "name": "windows-clang-debug",
-      "configurePreset": "windows-clang",
-      "configuration": "Debug"
-    },
-    {
-      "name": "windows-clang-release",
-      "configurePreset": "windows-clang",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-clang-debug",
-      "configurePreset": "linux-clang",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-clang-release",
-      "configurePreset": "linux-clang",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-gcc-debug",
-      "configurePreset": "linux-gcc",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-gcc-release",
-      "configurePreset": "linux-gcc",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-clang-asan-debug",
-      "configurePreset": "linux-clang-asan",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-clang-tsan-debug",
-      "configurePreset": "linux-clang-tsan",
-      "configuration": "Debug"
-    }
+    { "name": "windows-debug", "configurePreset": "windows-debug" },
+    { "name": "windows-release", "configurePreset": "windows-release" },
+    { "name": "linux-debug", "configurePreset": "linux-debug" },
+    { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "linux-gcc", "configurePreset": "linux-gcc" },
+    { "name": "linux-asan", "configurePreset": "linux-asan" },
+    { "name": "linux-tsan", "configurePreset": "linux-tsan" }
   ],
   "testPresets": [
-    {
-      "name": "test-base",
-      "hidden": true,
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "name": "windows-clang-debug",
-      "inherits": "test-base",
-      "configurePreset": "windows-clang",
-      "configuration": "Debug"
-    },
-    {
-      "name": "windows-clang-release",
-      "inherits": "test-base",
-      "configurePreset": "windows-clang",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-clang-debug",
-      "inherits": "test-base",
-      "configurePreset": "linux-clang",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-clang-release",
-      "inherits": "test-base",
-      "configurePreset": "linux-clang",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-gcc-debug",
-      "inherits": "test-base",
-      "configurePreset": "linux-gcc",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-gcc-release",
-      "inherits": "test-base",
-      "configurePreset": "linux-gcc",
-      "configuration": "Release"
-    },
-    {
-      "name": "linux-clang-asan-debug",
-      "inherits": "test-base",
-      "configurePreset": "linux-clang-asan",
-      "configuration": "Debug"
-    },
-    {
-      "name": "linux-clang-tsan-debug",
-      "inherits": "test-base",
-      "configurePreset": "linux-clang-tsan",
-      "configuration": "Debug"
-    }
+    { "name": "test-base", "hidden": true, "output": { "outputOnFailure": true } },
+    { "name": "windows-debug", "inherits": "test-base", "configurePreset": "windows-debug" },
+    { "name": "windows-release", "inherits": "test-base", "configurePreset": "windows-release" },
+    { "name": "linux-debug", "inherits": "test-base", "configurePreset": "linux-debug" },
+    { "name": "linux-release", "inherits": "test-base", "configurePreset": "linux-release" },
+    { "name": "linux-gcc", "inherits": "test-base", "configurePreset": "linux-gcc" },
+    { "name": "linux-asan", "inherits": "test-base", "configurePreset": "linux-asan" },
+    { "name": "linux-tsan", "inherits": "test-base", "configurePreset": "linux-tsan" }
   ]
 }

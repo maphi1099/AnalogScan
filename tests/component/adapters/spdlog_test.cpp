@@ -1,8 +1,8 @@
 // Komponententest SpdLogger mit echtem spdlog (K-20, NF-REL-03): Einträge mit Zeit und Ebene,
 // Rotation beim Überschreiten der Größe, Ordner mit Umlauten.
 
-#include "autoneg/adapter/spdlog/spd_logger.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "adapters/spdlog/spd_logger.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

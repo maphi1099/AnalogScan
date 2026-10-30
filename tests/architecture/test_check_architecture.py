@@ -68,9 +68,9 @@ class ArchitectureCheckTest(unittest.TestCase):
     # --- sauberer Baum ---------------------------------------------------------
 
     def test_clean_tree_passes(self) -> None:
-        self.write("src/model/edit_list.cpp", '#include "autoneg/model/module.hpp"\n#include <vector>\n')
+        self.write("src/model/edit_list.cpp", '#include "model/module.hpp"\n#include <vector>\n')
         self.write("src/adapters/opencv/vision.cpp", "#include <opencv2/core.hpp>\n#include <unistd.h>\n")
-        self.write("tests/unit/model/x_test.cpp", "#include <gtest/gtest.h>\n#include \"autoneg/model/module.hpp\"\n")
+        self.write("tests/unit/model/x_test.cpp", "#include <gtest/gtest.h>\n#include \"model/module.hpp\"\n")
         self.assertEqual(self.run_check(), [])
 
     # --- Abhängigkeiten ---------------------------------------------------------
@@ -132,14 +132,14 @@ class ArchitectureCheckTest(unittest.TestCase):
         self.assertViolation(self.run_check(), "[Include]", "unbekannter Header <boost/optional.hpp>")
 
     def test_include_from_non_dependency_module_is_reported(self) -> None:
-        self.write("src/model/bad.cpp", '#include "autoneg/ports/i_raw_decoder.hpp"\n')
-        self.assertViolation(self.run_check(), "[Include]", "model bindet <autoneg/ports/i_raw_decoder.hpp>")
+        self.write("src/model/bad.cpp", '#include "ports/i_raw_decoder.hpp"\n')
+        self.assertViolation(self.run_check(), "[Include]", "model bindet <ports/i_raw_decoder.hpp>")
 
     def test_test_helpers_allowed_in_tests_only(self) -> None:
         self.write("tests/unit/model/y_test.cpp",
-                   '#include "autoneg/mocks/ports.hpp"\n#include "autoneg/testing/edit_fixtures.hpp"\n')
+                   '#include "mocks/ports.hpp"\n#include "support/edit_fixtures.hpp"\n')
         self.assertEqual(self.run_check(), [])
-        self.write("src/model/bad.cpp", '#include "autoneg/mocks/ports.hpp"\n')
+        self.write("src/model/bad.cpp", '#include "mocks/ports.hpp"\n')
         self.assertViolation(self.run_check(), "[Include]", "src/model/bad.cpp:1")
 
     def test_qt_only_in_ui_and_e2e_tests(self) -> None:

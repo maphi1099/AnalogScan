@@ -1,0 +1,63 @@
+#pragma once
+
+#include "base/geometry.hpp"
+#include "image/cancel_token.hpp"
+#include "image/image_spec.hpp"
+#include "model/edit_list.hpp"
+#include "model/film.hpp"
+#include "model/ids.hpp"
+#include "ports/color.hpp"
+#include "ports/task_executor.hpp"
+
+#include <filesystem>
+#include <memory>
+#include <optional>
+
+namespace autoneg::pipeline {
+
+/// Ausführungsprofil (Architektur 5.5).
+enum class RenderMode
+{
+    Preview,
+    Detail,
+    Export,
+    Thumbnail,
+    Analysis
+};
+
+/// Ausgabe: Farbtransformation in den Zielfarbraum (leer = Arbeitsfarbraum bleibt).
+struct OutputSpec
+{
+    std::shared_ptr<const ports::IColorTransform> transform;
+    /// 8 oder 16: Ergebnis ganzzahlig (U8/U16) für den Export (K-M10-03); 0 = F32
+    int bits = 0;
+};
+
+struct RenderProfile
+{
+    RenderMode mode = RenderMode::Preview;
+    /// Zielgröße: Vorschau/Miniatur (Proxy der Quelle) bzw. beim Export Verkleinern des
+    /// Ergebnisses auf diese Box (LF-EXP-06); 0 = volle Auflösung
+    base::Size target;
+    std::optional<image::Roi> roi; ///< Detail: sichtbarer Ausschnitt
+    OutputSpec output;
+    bool useCache = false;
+    ports::Priority priority = ports::Priority::Interactive;
+};
+
+/// Anfrage an den PipelineExecutor (Architektur 9.4).
+///
+/// Ergänzung: path und film, weil SourceProvider und Compiler beides brauchen
+/// (der Filmtyp der Rolle gilt, solange kein Eintrag autoneg.filmmode ihn ändert).
+struct RenderRequest
+{
+    model::FrameId frame;
+    std::filesystem::path path;
+    std::shared_ptr<const model::EditList> list;
+    model::FilmType film = model::FilmType::ColorNegative;
+    RenderProfile profile;
+    std::optional<model::StepId> stopAfter;
+    image::CancelToken cancel;
+};
+
+} // namespace autoneg::pipeline

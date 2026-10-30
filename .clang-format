@@ -40,9 +40,7 @@ SortIncludes: CaseSensitive
 IncludeBlocks: Regroup
 IncludeCategories:
   # eigener Header zuerst (über IncludeIsMainRegex), dann Projekt, Fremdbibliotheken, Standard
-  - Regex: '^"autoneg/'
-    Priority: 2
-  - Regex: '^<autoneg/'
+  - Regex: '^"'
     Priority: 2
   - Regex: '^<[a-z_]+>$'
     Priority: 4

@@ -4,22 +4,22 @@
 // Rollen sind künstliche Negative als 16-bit-TIFF in einem temporären Ordner (schnell, mit
 // bekanntem Bildfeld); Testing/Data wird nicht benutzt, damit dort nichts geschrieben wird.
 
-#include "autoneg/adapter/oiio/oiio_image_io.hpp"
-#include "autoneg/adapter/qtprint/qt_document_renderer.hpp"
-#include "autoneg/app/composition.hpp"
-#include "autoneg/app/gui_services.hpp"
-#include "autoneg/testing/synthetic.hpp"
-#include "autoneg/testing/temp_dir.hpp"
-#include "autoneg/ui/canvas_tools.hpp"
-#include "autoneg/ui/dialogs.hpp"
-#include "autoneg/ui/edit_list_model.hpp"
-#include "autoneg/ui/gui_application.hpp"
-#include "autoneg/ui/image_canvas.hpp"
-#include "autoneg/ui/import_page.hpp"
-#include "autoneg/ui/main_window.hpp"
-#include "autoneg/ui/panels.hpp"
-#include "autoneg/ui/translations.hpp"
-#include "autoneg/ui/views.hpp"
+#include "adapters/oiio/oiio_image_io.hpp"
+#include "adapters/qtprint/qt_document_renderer.hpp"
+#include "autoneg/gui_services.hpp"
+#include "shared/composition.hpp"
+#include "support/synthetic.hpp"
+#include "support/temp_dir.hpp"
+#include "ui/canvas_tools.hpp"
+#include "ui/dialogs.hpp"
+#include "ui/edit_list_model.hpp"
+#include "ui/gui_application.hpp"
+#include "ui/image_canvas.hpp"
+#include "ui/import_page.hpp"
+#include "ui/main_window.hpp"
+#include "ui/panels.hpp"
+#include "ui/translations.hpp"
+#include "ui/views.hpp"
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QMimeData>

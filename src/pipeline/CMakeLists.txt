@@ -1,14 +1,14 @@
 autoneg_add_module(pipeline
     SOURCES
-        src/backend_selector.cpp
-        src/compiled_pipeline.cpp
-        src/pipeline_compiler.cpp
-        src/pipeline_executor.cpp
-        src/pixel_program_builder.cpp
-        src/source_provider.cpp
-        src/stage_cache.cpp
-        src/step.cpp
-        src/step_registry.cpp
-        src/warp_builder.cpp
+        backend_selector.cpp
+        compiled_pipeline.cpp
+        pipeline_compiler.cpp
+        pipeline_executor.cpp
+        pixel_program_builder.cpp
+        source_provider.cpp
+        stage_cache.cpp
+        step.cpp
+        step_registry.cpp
+        warp_builder.cpp
     PUBLIC_DEPS base model image ports
 )

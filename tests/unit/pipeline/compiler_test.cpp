@@ -1,12 +1,12 @@
 // Unit-Tests StepRegistry, PixelProgramBuilder, WarpBuilder, PipelineCompiler (Architektur 5, 9.3, 9.4).
 
-#include "autoneg/mocks/ports.hpp"
-#include "autoneg/pipeline/pipeline_compiler.hpp"
-#include "autoneg/pipeline/pixel_program_builder.hpp"
-#include "autoneg/pipeline/warp_builder.hpp"
-#include "autoneg/reference/kernels.hpp"
-#include "autoneg/testing/edit_fixtures.hpp"
-#include "autoneg/testing/test_steps.hpp"
+#include "mocks/ports.hpp"
+#include "pipeline/pipeline_compiler.hpp"
+#include "pipeline/pixel_program_builder.hpp"
+#include "pipeline/warp_builder.hpp"
+#include "reference/kernels.hpp"
+#include "support/edit_fixtures.hpp"
+#include "support/test_steps.hpp"
 
 #include <gtest/gtest.h>
 

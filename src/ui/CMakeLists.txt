@@ -1,23 +1,23 @@
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Gui GuiPrivate Widgets)
 
 # Header mit Q_OBJECT stehen unter include/: als Quellen angeben, damit AUTOMOC sie findet
-file(GLOB ui_headers CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/include/autoneg/ui/*.hpp)
+file(GLOB ui_headers CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*.hpp)
 autoneg_add_module(ui
     SOURCES
         ${ui_headers}
-        src/canvas_tools.cpp
-        src/dialogs.cpp
-        src/edit_list_model.cpp
-        src/gui_application.cpp
-        src/image_canvas.cpp
-        src/import_page.cpp
-        src/main_window.cpp
-        src/panels.cpp
+        canvas_tools.cpp
+        dialogs.cpp
+        edit_list_model.cpp
+        gui_application.cpp
+        image_canvas.cpp
+        import_page.cpp
+        main_window.cpp
+        panels.cpp
 
-        src/qt_session_bridge.cpp
-        src/translations.cpp
-        src/ui_controller.cpp
-        src/views.cpp
+        qt_session_bridge.cpp
+        translations.cpp
+        ui_controller.cpp
+        views.cpp
     PUBLIC_DEPS application
     PRIVATE_DEPS Qt6::Core Qt6::Gui Qt6::Widgets
 )

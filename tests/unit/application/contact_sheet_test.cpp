@@ -1,10 +1,10 @@
 // Unit-Tests ContactSheetService (Architektur 9.13, LF-KTA-03, LF-KTA-04, LF-KTA-06): Bearbeitungs-
 // liste je Slot, Auflösung der Slots, Ausgabe über IDocumentRenderer. Ports durch Fakes/Attrappen.
 
-#include "autoneg/application/contact_sheet_service.hpp"
-#include "autoneg/mocks/fake_task_executor.hpp"
-#include "autoneg/mocks/fakes.hpp"
-#include "autoneg/mocks/ports.hpp"
+#include "application/contact_sheet_service.hpp"
+#include "mocks/fake_task_executor.hpp"
+#include "mocks/fakes.hpp"
+#include "mocks/ports.hpp"
 
 #include <gtest/gtest.h>
 

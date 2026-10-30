@@ -1,8 +1,8 @@
 // Unit-Tests CpuBackend gegen die skalare Referenz (tests/reference), Architektur 9.10.
 
-#include "autoneg/backend/cpu/cpu_backend.hpp"
-#include "autoneg/mocks/fakes.hpp"
-#include "autoneg/reference/kernels.hpp"
+#include "backends/cpu/cpu_backend.hpp"
+#include "mocks/fakes.hpp"
+#include "reference/kernels.hpp"
 
 #include <gtest/gtest.h>
 

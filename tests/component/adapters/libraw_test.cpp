@@ -1,10 +1,9 @@
 // Komponententests LibRawDecoder mit echter LibRaw und echten Scans (K-01, K-03).
 // Testdaten werden nur gelesen; Dateien zum Verändern entstehen im temporären Ordner.
 
+#include "adapters/libraw/libraw_decoder.hpp"
+#include "support/temp_dir.hpp"
 #include "test_files.hpp"
-
-#include "autoneg/adapter/libraw/libraw_decoder.hpp"
-#include "autoneg/testing/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

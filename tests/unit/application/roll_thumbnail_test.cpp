@@ -2,12 +2,12 @@
 // LF-DAT-06, NF-PERF-06). Ports durch Fakes ersetzt; Scans sind kleine Dateien im
 // temporären Ordner (nur Name, Prüfsumme und Zeitstempel zählen).
 
-#include "autoneg/application/roll_service.hpp"
-#include "autoneg/application/thumbnail_service.hpp"
-#include "autoneg/mocks/fake_repositories.hpp"
-#include "autoneg/mocks/fake_task_executor.hpp"
-#include "autoneg/mocks/fakes.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "application/roll_service.hpp"
+#include "application/thumbnail_service.hpp"
+#include "mocks/fake_repositories.hpp"
+#include "mocks/fake_task_executor.hpp"
+#include "mocks/fakes.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

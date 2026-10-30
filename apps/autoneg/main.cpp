@@ -4,9 +4,9 @@
 // Aufruf: autoneg [--config <ordner>] [--cache <ordner>] [<scan-ordner>]
 //   --config/--cache ersetzen die Benutzerverzeichnisse (Tests, Probeläufe).
 
-#include "autoneg/adapter/qtprint/qt_document_renderer.hpp"
-#include "autoneg/app/composition.hpp"
-#include "autoneg/app/gui_services.hpp"
+#include "adapters/qtprint/qt_document_renderer.hpp"
+#include "autoneg/gui_services.hpp"
+#include "shared/composition.hpp"
 
 #include <optional>
 #include <span>

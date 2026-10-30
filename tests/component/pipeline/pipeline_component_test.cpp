@@ -1,14 +1,14 @@
 // Komponententests der Kern-Pipeline mit allen Verarbeitungsschritten und dem echten
 // CpuBackend (Highway + oneTBB). Bilder synthetisch im Speicher (tests/support/synthetic.hpp).
 
-#include "autoneg/backend/cpu/cpu_backend.hpp"
-#include "autoneg/pipeline/pipeline_compiler.hpp"
-#include "autoneg/pipeline/pipeline_executor.hpp"
-#include "autoneg/steps/other_steps.hpp"
-#include "autoneg/steps/registry.hpp"
-#include "autoneg/steps/step_ids.hpp"
-#include "autoneg/testing/color_metrics.hpp"
-#include "autoneg/testing/synthetic.hpp"
+#include "backends/cpu/cpu_backend.hpp"
+#include "pipeline/pipeline_compiler.hpp"
+#include "pipeline/pipeline_executor.hpp"
+#include "steps/other_steps.hpp"
+#include "steps/registry.hpp"
+#include "steps/step_ids.hpp"
+#include "support/color_metrics.hpp"
+#include "support/synthetic.hpp"
 
 #include <gtest/gtest.h>
 

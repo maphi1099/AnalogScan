@@ -14,7 +14,7 @@ autoneg_add_program(autoneg-cli
     SOURCES ${cli_sources}
     DEPS ${cli_deps}
 )
-target_include_directories(autoneg-cli PRIVATE ${PROJECT_SOURCE_DIR}/apps/shared/include)
+target_include_directories(autoneg-cli PRIVATE ${PROJECT_SOURCE_DIR}/apps)
 if(AUTONEG_WITH_GUI)
     target_compile_definitions(autoneg-cli PRIVATE AUTONEG_WITH_GUI=1)
     find_package(Qt6 CONFIG REQUIRED COMPONENTS Gui)

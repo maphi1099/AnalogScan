@@ -139,19 +139,23 @@ def iter_sources(directory: Path):
             yield path
 
 
-def project_module(header: str, include_roots: dict[str, str]) -> str | None:
+def project_module(header: str, include_roots: dict[str, list[str]]) -> str | None:
+    """Modul zum Include-Pfad (längster passender Ordner, z. B. "adapters/json/")."""
     best = None
-    for module, root in include_roots.items():
-        if header.startswith(root) and (best is None or len(root) > len(include_roots[best])):
-            best = module
+    best_len = 0
+    for module, roots in include_roots.items():
+        for root in roots:
+            if header.startswith(root) and len(root) > best_len:
+                best, best_len = module, len(root)
     return best
 
 
-def classify(header: str, quoted: bool, file_dir: Path, include_roots: dict[str, str],
-             groups: list[HeaderGroup]) -> tuple[str, str | None]:
+def classify(header: str, quoted: bool, file_dir: Path, include_roots: dict[str, list[str]],
+             groups: list[HeaderGroup], test_roots: tuple[str, ...] = ()) -> tuple[str, str | None]:
     """Ergebnis: (Art, Detail) mit Art in project, std, group, local, unknown."""
-    if header.startswith("autoneg/"):
-        return "project", project_module(header, include_roots)
+    module = project_module(header, include_roots)
+    if module is not None or (quoted and header.startswith(test_roots)):
+        return "project", module
     if header in STD_HEADERS:
         return "std", None
     for group in groups:
@@ -164,7 +168,10 @@ def classify(header: str, quoted: bool, file_dir: Path, include_roots: dict[str,
 
 def check_includes(root: Path, rules: dict, targets: list[dict], report: Report) -> None:
     modules = rules["modules"]
-    include_roots = rules.get("includeRoots", {})
+    # Projekt-Header werden relativ zu src/, apps/ bzw. tests/ eingebunden ("model/roll.hpp");
+    # je Modul ein oder mehrere Ordner
+    include_roots = {m: ([r] if isinstance(r, str) else list(r))
+                     for m, r in rules.get("includeRoots", {}).items()}
     groups = load_groups(rules)
 
     test_roots = tuple(rules.get("tests", {}).get("includeRoots", []))
@@ -176,7 +183,7 @@ def check_includes(root: Path, rules: dict, targets: list[dict], report: Report)
         for match in INCLUDE_RE.finditer(text):
             quoted, header = match.group(1) == '"', match.group(2).strip()
             line = text.count("\n", 0, match.start()) + 1
-            kind, detail = classify(header, quoted, path.parent, include_roots, groups)
+            kind, detail = classify(header, quoted, path.parent, include_roots, groups, test_roots)
             where = f"{rel}:{line}"
             if kind == "project":
                 if detail is None and owner == "tests" and header.startswith(test_roots):

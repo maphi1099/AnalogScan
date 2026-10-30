@@ -1,8 +1,8 @@
 // Unit-Tests autoneg::base (A-04).
 
-#include "autoneg/base/error.hpp"
-#include "autoneg/base/geometry.hpp"
-#include "autoneg/base/hash.hpp"
+#include "base/error.hpp"
+#include "base/geometry.hpp"
+#include "base/hash.hpp"
 
 #include <gtest/gtest.h>
 

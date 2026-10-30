@@ -2,9 +2,10 @@
 #
 #   powershell -ExecutionPolicy Bypass -File installer\windows\build_installer.ps1
 #
-# Schritte: Release bauen (windows-clang), mit "cmake --install" nach build\install-windows
-# legen, optional das Handbuch (docs\handbuch\handbuch.pdf) dazulegen, dann ISCC aufrufen.
-# Ergebnis: build\installer\AutoNeg-<Version>-Setup-x64.exe
+# Schritte: Release bauen (Preset windows-release), mit "cmake --install" nach
+# build\Release_Win\install legen, optional das Handbuch (docs\handbuch\handbuch.pdf) dazulegen,
+# dann ISCC aufrufen.
+# Ergebnis: build\Installer\AutoNeg-<Version>-Setup-x64.exe
 #
 # Voraussetzungen: Visual Studio 2022 bzw. Build Tools (vcvars64.bat), LLVM (clang-cl),
 # VCPKG_ROOT, Inno Setup 6 (winget install JRSoftware.InnoSetup).
@@ -15,8 +16,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$stage = Join-Path $repo 'build\install-windows'
-$output = Join-Path $repo 'build\installer'
+$stage = Join-Path $repo 'build\Release_Win\install'
+$output = Join-Path $repo 'build\Installer'
 
 # Version aus CMakeLists.txt (project(... VERSION x.y.z))
 $cmakeLists = Get-Content (Join-Path $repo 'CMakeLists.txt') -Raw
@@ -46,10 +47,10 @@ if (-not $iscc) { throw 'ISCC.exe nicht gefunden: winget install JRSoftware.Inno
 if (Test-Path $stage) { Get-ChildItem -Force $stage | Remove-Item -Recurse -Force }
 $steps = @()
 if (-not $SkipBuild) {
-    $steps += 'cmake --preset windows-clang'
-    $steps += 'cmake --build --preset windows-clang-release --target autoneg autoneg-cli'
+    $steps += 'cmake --preset windows-release'
+    $steps += 'cmake --build --preset windows-release --target autoneg autoneg-cli'
 }
-$steps += "cmake --install build\windows-clang --config Release --prefix `"$stage`""
+$steps += "cmake --install build\Release_Win --prefix `"$stage`""
 $script = "call `"$vcvars`" >nul && set `"PATH=C:\Program Files\LLVM\bin;%PATH%`" && cd /d `"$repo`" && " + ($steps -join ' && ')
 cmd /c $script
 if ($LASTEXITCODE -ne 0) { throw "Bauen bzw. Installieren fehlgeschlagen ($LASTEXITCODE)" }

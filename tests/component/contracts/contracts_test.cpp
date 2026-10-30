@@ -3,16 +3,16 @@
 // mit Fakes dasselbe Verhalten voraussetzen wie die Anwendung.
 // Umfang: IRawDecoder, IImageWriter, IColorEngine, IVision, ITaskExecutor; Repositories folgen.
 
-#include "autoneg/adapter/lcms/lcms_color_engine.hpp"
-#include "autoneg/adapter/libraw/libraw_decoder.hpp"
-#include "autoneg/adapter/oiio/oiio_image_io.hpp"
-#include "autoneg/adapter/opencv/opencv_vision.hpp"
-#include "autoneg/adapter/tbb/tbb_task_executor.hpp"
-#include "autoneg/mocks/fake_task_executor.hpp"
-#include "autoneg/mocks/fake_vision.hpp"
-#include "autoneg/mocks/fakes.hpp"
-#include "autoneg/testing/synthetic.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "adapters/lcms/lcms_color_engine.hpp"
+#include "adapters/libraw/libraw_decoder.hpp"
+#include "adapters/oiio/oiio_image_io.hpp"
+#include "adapters/opencv/opencv_vision.hpp"
+#include "adapters/tbb/tbb_task_executor.hpp"
+#include "mocks/fake_task_executor.hpp"
+#include "mocks/fake_vision.hpp"
+#include "mocks/fakes.hpp"
+#include "support/synthetic.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 #include <tbb/parallel_for.h>

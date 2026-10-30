@@ -8,8 +8,7 @@ autoneg_add_test(e2e
          test_synthetic
 )
 target_link_libraries(autoneg_test_e2e PRIVATE Qt6::Test)
-target_include_directories(autoneg_test_e2e PRIVATE ${PROJECT_SOURCE_DIR}/apps/autoneg/include
-    ${PROJECT_SOURCE_DIR}/apps/shared/include)
+target_include_directories(autoneg_test_e2e PRIVATE ${PROJECT_SOURCE_DIR}/apps)
 get_target_property(_qt_test_type Qt6::Widgets TYPE)
 if(_qt_test_type STREQUAL "STATIC_LIBRARY")
     qt_import_plugins(autoneg_test_e2e INCLUDE Qt6::QOffscreenIntegrationPlugin)

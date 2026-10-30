@@ -1,7 +1,7 @@
 // Unit-Tests EditHistory (Architektur 9.1).
 
-#include "autoneg/model/edit_history.hpp"
-#include "autoneg/testing/edit_fixtures.hpp"
+#include "model/edit_history.hpp"
+#include "support/edit_fixtures.hpp"
 
 #include <gtest/gtest.h>
 

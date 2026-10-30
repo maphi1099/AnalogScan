@@ -1,9 +1,9 @@
 // Unit-Tests Nebenläufigkeit der Anwendung (Architektur 6, 9.13): JobScheduler, MemoryBudget,
 // RenderService. Der Worker-Pool ist der FakeTaskExecutor (tests/mocks).
 
-#include "autoneg/application/jobs.hpp"
-#include "autoneg/application/render_service.hpp"
-#include "autoneg/mocks/fake_task_executor.hpp"
+#include "application/jobs.hpp"
+#include "application/render_service.hpp"
+#include "mocks/fake_task_executor.hpp"
 
 #include <gtest/gtest.h>
 

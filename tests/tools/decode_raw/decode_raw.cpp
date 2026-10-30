@@ -3,7 +3,7 @@
 //
 //   autoneg_decode_raw <ein.raw> <aus.pfm> [half]
 
-#include "autoneg/adapter/libraw/libraw_decoder.hpp"
+#include "adapters/libraw/libraw_decoder.hpp"
 
 #include <bit>
 #include <fstream>

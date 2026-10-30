@@ -1,9 +1,9 @@
 autoneg_add_module(analysis
     SOURCES
-        src/base_meter.cpp
-        src/frame_detector.cpp
-        src/planes.cpp
-        src/region_map.cpp
-        src/tone.cpp
+        base_meter.cpp
+        frame_detector.cpp
+        planes.cpp
+        region_map.cpp
+        tone.cpp
     PUBLIC_DEPS base model image ports
 )

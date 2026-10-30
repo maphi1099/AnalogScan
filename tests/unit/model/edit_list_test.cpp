@@ -1,7 +1,7 @@
 // Unit-Tests EditList (Architektur 9.1).
 
-#include "autoneg/model/edit_list.hpp"
-#include "autoneg/testing/edit_fixtures.hpp"
+#include "model/edit_list.hpp"
+#include "support/edit_fixtures.hpp"
 
 #include <gtest/gtest.h>
 

@@ -1,6 +1,6 @@
 // Unit-Tests Kontaktabzug-Layout (Architektur 9.8, LF-KTA-01…10). Reine Geometrie.
 
-#include "autoneg/layout/contact_sheet.hpp"
+#include "layout/contact_sheet.hpp"
 
 #include <gtest/gtest.h>
 

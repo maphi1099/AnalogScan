@@ -2,7 +2,7 @@
 # Programme kopierten DLLs, die benötigten Qt-Plugins mit relativer qt.conf, die
 # Visual-C++- und OpenMP-Laufzeit sowie die Lizenztexte der Fremdbibliotheken.
 #
-#   cmake --install build/windows-clang --config Release --prefix build/install-windows
+#   cmake --install build/Release_Win --prefix build/Release_Win/install
 #
 # Den Installer baut installer/windows/build_installer.ps1 (Inno Setup). Linux folgt später.
 

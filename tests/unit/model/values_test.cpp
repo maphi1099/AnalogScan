@@ -1,9 +1,9 @@
 // Unit-Tests ParamSet, FrameId, Roll, JsonValue (Architektur 9.1, A-03).
 
-#include "autoneg/model/ids.hpp"
-#include "autoneg/model/json_value.hpp"
-#include "autoneg/model/param_set.hpp"
-#include "autoneg/model/roll.hpp"
+#include "model/ids.hpp"
+#include "model/json_value.hpp"
+#include "model/param_set.hpp"
+#include "model/roll.hpp"
 
 #include <gtest/gtest.h>
 

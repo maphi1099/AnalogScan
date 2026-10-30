@@ -2,9 +2,9 @@
 // mit 36 Bildern als PDF schreiben und mit einem unabhängigen Parser (pypdf, verify_pdf.py)
 // prüfen: Seitengröße, Bildpositionen und -größen ±0,2 mm, Auflösung ≥ 300 dpi, ICC eingebettet.
 
-#include "autoneg/adapter/lcms/lcms_color_engine.hpp"
-#include "autoneg/adapter/qtprint/qt_document_renderer.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "adapters/lcms/lcms_color_engine.hpp"
+#include "adapters/qtprint/qt_document_renderer.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

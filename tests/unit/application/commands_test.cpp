@@ -1,9 +1,9 @@
 // Unit-Tests Befehle, Verlauf und Sofortspeichern (Architektur 9.12, 8.5).
 
-#include "autoneg/application/command_bus.hpp"
-#include "autoneg/application/commands.hpp"
-#include "autoneg/application/persistence_queue.hpp"
-#include "autoneg/steps/registry.hpp"
+#include "application/command_bus.hpp"
+#include "application/commands.hpp"
+#include "application/persistence_queue.hpp"
+#include "steps/registry.hpp"
 
 #include <gtest/gtest.h>
 

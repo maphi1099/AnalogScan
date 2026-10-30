@@ -1,11 +1,11 @@
 // Unit-Tests der Oberfläche (U-UI-01 … U-UI-05, Architektur 9.14). Der UiController ist durch
 // eine Attrappe ersetzt, die Befehle nur aufzeichnet; Widgets laufen ohne Bildschirm.
 
-#include "autoneg/steps/registry.hpp"
-#include "autoneg/ui/canvas_tools.hpp"
-#include "autoneg/ui/edit_list_model.hpp"
-#include "autoneg/ui/panels.hpp"
-#include "autoneg/ui/views.hpp"
+#include "steps/registry.hpp"
+#include "ui/canvas_tools.hpp"
+#include "ui/edit_list_model.hpp"
+#include "ui/panels.hpp"
+#include "ui/views.hpp"
 
 #include <QtGui/QPainter>
 #include <QtWidgets/QAbstractButton>

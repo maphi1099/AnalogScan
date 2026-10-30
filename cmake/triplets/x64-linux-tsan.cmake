@@ -1,4 +1,4 @@
-# vcpkg-Triplet für das Preset linux-clang-tsan: alle Abhängigkeiten (v. a. oneTBB) mit
+# vcpkg-Triplet für das Preset linux-tsan: alle Abhängigkeiten (v. a. oneTBB) mit
 # ThreadSanitizer und clang bauen. Sonst sieht TSan die Synchronisation im TBB-Scheduler
 # nicht und meldet Scheinrennen (BUGS.md B-12).
 set(VCPKG_TARGET_ARCHITECTURE x64)

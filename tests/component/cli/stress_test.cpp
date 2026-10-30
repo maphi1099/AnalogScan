@@ -3,13 +3,13 @@
 // Regleränderungen (CommandBus, sofortiges Speichern), Vorschauanfragen (neueste gewinnt),
 // Miniaturen, Erkennung, Stapelexport und zufällige Abbrüche. Geprüft: keine Verklemmung
 // (Watchdog 60 s), Begleitdateien entsprechen am Ende dem Stand im Speicher; Datenrennen findet
-// der Lauf unter ThreadSanitizer (linux-clang-tsan).
+// der Lauf unter ThreadSanitizer (Preset linux-tsan).
 // Dauer: AUTONEG_STRESS_SECONDS (Standard 10 s; Szenario: 600 s unter TSan).
 
-#include "autoneg/adapter/oiio/oiio_image_io.hpp"
-#include "autoneg/app/composition.hpp"
-#include "autoneg/testing/synthetic.hpp"
-#include "autoneg/testing/temp_dir.hpp"
+#include "adapters/oiio/oiio_image_io.hpp"
+#include "shared/composition.hpp"
+#include "support/synthetic.hpp"
+#include "support/temp_dir.hpp"
 
 #include <gtest/gtest.h>
 

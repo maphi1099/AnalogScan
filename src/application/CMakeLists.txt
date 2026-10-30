@@ -1,14 +1,14 @@
 autoneg_add_module(application
     SOURCES
-        src/command_bus.cpp
-        src/contact_sheet_service.cpp
-        src/commands.cpp
-        src/jobs.cpp
-        src/persistence_queue.cpp
-        src/presets.cpp
-        src/render_service.cpp
-        src/roll_service.cpp
-        src/services.cpp
-        src/thumbnail_service.cpp
+        command_bus.cpp
+        contact_sheet_service.cpp
+        commands.cpp
+        jobs.cpp
+        persistence_queue.cpp
+        presets.cpp
+        render_service.cpp
+        roll_service.cpp
+        services.cpp
+        thumbnail_service.cpp
     PUBLIC_DEPS base model image ports pipeline steps analysis layout
 )

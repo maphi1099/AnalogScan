@@ -1,13 +1,13 @@
 // Unit-Tests PipelineExecutor, StageCache, SourceProvider, Backend-Auswahl (Architektur 6, 9.4).
 // Rechen-Backend ist die skalare Referenz (tests/reference), Quellen kommen aus Attrappen.
 
-#include "autoneg/mocks/ports.hpp"
-#include "autoneg/pipeline/backend_selector.hpp"
-#include "autoneg/pipeline/pipeline_compiler.hpp"
-#include "autoneg/pipeline/pipeline_executor.hpp"
-#include "autoneg/reference/reference_backend.hpp"
-#include "autoneg/testing/edit_fixtures.hpp"
-#include "autoneg/testing/test_steps.hpp"
+#include "mocks/ports.hpp"
+#include "pipeline/backend_selector.hpp"
+#include "pipeline/pipeline_compiler.hpp"
+#include "pipeline/pipeline_executor.hpp"
+#include "reference/reference_backend.hpp"
+#include "support/edit_fixtures.hpp"
+#include "support/test_steps.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
