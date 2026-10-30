@@ -117,6 +117,9 @@ struct StepDescriptor
     bool alwaysActive = false;
     /// Nach dieser Stufe liegt ein Cache-Punkt (C1…C4, Architektur 5.2). Ergänzung zu 9.3.
     bool cacheAfter = false;
+    /// Ein Negativ wird erst umgekehrt, wenn diese Stufe einen Eintrag hat (Filmbasis bekannt);
+    /// sonst bleibt es der unveränderte Scan (K-M10-11).
+    bool neededToInvert = false;
     /// Backends mit eigener Implementierung (NF-ARC-04/-05, L-03). Ergänzung zu 9.3.
     std::vector<std::string> backends{"cpu"};
 };

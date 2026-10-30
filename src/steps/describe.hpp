@@ -17,6 +17,7 @@ struct Options
     bool visible = true;
     bool alwaysActive = false;
     bool cacheAfter = false;
+    bool neededToInvert = false;
 };
 
 inline pipeline::StepDescriptor describe(std::string_view stepId, int stepRank, std::string name,
@@ -35,6 +36,7 @@ inline pipeline::StepDescriptor describe(std::string_view stepId, int stepRank, 
     d.visible = o.visible;
     d.alwaysActive = o.alwaysActive;
     d.cacheAfter = o.cacheAfter;
+    d.neededToInvert = o.neededToInvert;
     return d;
 }
 
