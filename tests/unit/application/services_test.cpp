@@ -162,6 +162,57 @@ TEST(AnalysisServiceTest, U_APP_16_AutomaticsWriteEntries)
     EXPECT_EQ(bus.history(f2.id).current().get(StepId("autoneg.filmbase"))->origin, Origin::Automatic);
 }
 
+// K-M10-08 (Absturz beim Schließen während der Erkennung): ein Ergebnis, das erst nach dem
+// Abbau des Dienstes im UI-Thread ankommt, wird verworfen und schreibt nichts mehr
+TEST(AnalysisServiceTest, M10_ResultAfterShutdownIsDropped)
+{
+    steps::FlatFieldCache flat;
+    pipeline::StepRegistry registry;
+    ASSERT_TRUE(steps::registerStandardSteps(registry, flat).has_value());
+    NullRepository repo;
+    PersistenceQueue queue(repo);
+    CommandBus bus(registry, queue);
+    mocks::FakeTaskExecutor executor(2);
+    JobScheduler jobs(executor);
+    std::deque<std::function<void()>> uiQueue; // UI-Thread: erst nach dem Abbau abgearbeitet
+    std::mutex mutex;
+    const UiDispatcher ui = [&](std::function<void()> f) {
+        const std::scoped_lock lock(mutex);
+        uiQueue.push_back(std::move(f));
+    };
+    AnalysisFunctions fns;
+    fns.image = [](const model::Frame&) {
+        return image::ImageBuffer::fromFloats(
+            {4, 4, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+            std::vector<float>(48, 0.5F));
+    };
+    fns.detect = [](const image::ImageBuffer&, model::FilmType) -> base::Expected<analysis::FrameDetection> {
+        analysis::FrameDetection d;
+        d.frame = {0.1, 0.1, 0.8, 0.8};
+        return d;
+    };
+    fns.measureBase = [](const image::ImageBuffer&,
+                         const analysis::RegionMap&) -> base::Expected<analysis::BaseMeasurement> {
+        analysis::BaseMeasurement m;
+        m.transmission = {0.7, 0.42, 0.27};
+        return m;
+    };
+    const model::Frame f1 = frame(1);
+    bus.open(f1, {});
+    auto roll = std::make_shared<model::Roll>();
+    roll->filmType = model::FilmType::ColorNegative;
+    {
+        AnalysisService service(jobs, bus, ui, fns);
+        ASSERT_TRUE(service.detectFrame(f1, roll, roll->filmType).wait().has_value());
+    }
+    const std::scoped_lock lock(mutex);
+    ASSERT_FALSE(uiQueue.empty());
+    for (auto& task : uiQueue) {
+        task();
+    }
+    EXPECT_TRUE(bus.history(f1.id).current().empty());
+}
+
 // K-M6-01
 TEST(StepCatalogTest, M6_CatalogFromRegistry)
 {

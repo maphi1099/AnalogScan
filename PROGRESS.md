@@ -269,6 +269,12 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - Includes relativ zu `src/`, `apps/` bzw. `tests/`: `#include "model/roll.hpp"`, `"adapters/json/json_codec.hpp"`, `"shared/composition.hpp"`, `"mocks/ports.hpp"`. Die Architekturprüfung ordnet Header über diese Ordner zu (`includeRoots` in `tools/architecture_rules.json`, je Modul auch mehrere).
 - Build-Ordner: `build/Debug_Win`, `build/Release_Win`, `build/Debug_Linux`, `build/Release_Linux`, `build/Installer` (nur die Setup-Datei). Presets `windows-debug`, `windows-release`, `linux-debug`, `linux-release` mit Ninja (eine Konfiguration je Ordner). Die Prüfbauten `linux-gcc`, `linux-asan`, `linux-tsan` liegen außerhalb von `build/` unter `~/autoneg-checks/<preset>` in WSL.
 
+### Erkennung, Leuchttisch und Bewertung (30.10.2026)
+
+- Erkennung an echten Scans 36/36 (K-M10-10), automatische Tonwertgrenzen je Kanal, Negativ ohne Basis bleibt der Scan (K-M10-11).
+- Oberfläche (K-M10-12): Leuchttisch/Entwickeln als Reiter am linken Rand, Export und Kontaktabzug rechts im Leuchttisch, Bildauswahl beim Import, Sterne und Verwerfen am Filmstreifen, Einstellungen mit einem Klick auf Auswahl/alle, Beschnittwarnung entfernt.
+- Tests: `M10_ImportWithoutDeselectedScans`, `M10_LightTableTabsRatingApplyAllAndExport`, `M10_NegativeWithoutBaseStaysScan`, `M10_ResultAfterShutdownIsDropped` (B-42), `M10_StarsAndExcludedScansRoundTrip`, `M10_ExcludedScansAreSkipped`.
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |

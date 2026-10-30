@@ -92,6 +92,8 @@ public:
     /// Bewertung behalten/verwerfen (LF-BAT-10); wird sofort gespeichert, nicht im Verlauf.
     /// false, wenn das Bild nicht offen ist.
     bool setRating(const model::FrameId& f, model::Rating r);
+    /// Sterne 0–5 setzen und speichern.
+    bool setStars(const model::FrameId& f, int stars);
     [[nodiscard]] bool isOpen(const model::FrameId& f) const { return open_.contains(f); }
 
     [[nodiscard]] const model::EditHistory& history(const model::FrameId& f) const;

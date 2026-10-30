@@ -452,6 +452,9 @@ base::Expected<ports::SidecarData> EditCodec::sidecarFromJson(const model::JsonV
         d.frameNo = static_cast<int>(*f->asInt());
     }
     d.rating = ratingOf(stringOr(j, "rating", "none"));
+    if (const JsonValue* s = j.find("stars"); s != nullptr && s->asInt() != nullptr) {
+        d.stars = std::clamp(static_cast<int>(*s->asInt()), 0, 5);
+    }
     Decoded edits;
     if (const JsonValue* e = j.find("edits")) {
         if (!e->isArray()) {
@@ -460,7 +463,7 @@ base::Expected<ports::SidecarData> EditCodec::sidecarFromJson(const model::JsonV
         edits = decode(*e);
     }
     d.edits = std::move(edits.edits);
-    d.extra = withoutKeys(j, {"schema", "app", "source", "frameNo", "rating", "edits"});
+    d.extra = withoutKeys(j, {"schema", "app", "source", "frameNo", "rating", "stars", "edits"});
     if (!edits.unknown.empty()) {
         d.extra.set("edits", JsonValue(std::move(edits.unknown)));
     }
@@ -481,6 +484,9 @@ model::JsonValue EditCodec::sidecarToJson(const ports::SidecarData& d, int schem
     JsonValue::Array unknown;
     if (const JsonValue* u = d.extra.find("edits"); u != nullptr && u->asArray() != nullptr) {
         unknown = *u->asArray();
+    }
+    if (d.stars > 0) {
+        j.set("stars", JsonValue(static_cast<std::int64_t>(d.stars)));
     }
     j.set("edits", encode(d.edits, unknown));
     if (const auto* o = d.extra.asObject()) {
@@ -518,7 +524,14 @@ base::Expected<model::Roll> EditCodec::rollFromJson(const model::JsonValue& j) c
         defaults = decode(*d);
     }
     r.defaults = std::move(defaults.edits);
-    r.extra = withoutKeys(j, {"schema", "app", "name", "filmType", "film", "defaults"});
+    if (const JsonValue* x = j.find("excluded"); x != nullptr && x->asArray() != nullptr) {
+        for (const JsonValue& v : *x->asArray()) {
+            if (const std::string* name = v.asString()) {
+                r.excluded.push_back(*name);
+            }
+        }
+    }
+    r.extra = withoutKeys(j, {"schema", "app", "name", "filmType", "film", "defaults", "excluded"});
     if (!defaults.unknown.empty()) {
         r.extra.set("defaults", JsonValue(std::move(defaults.unknown)));
     }
@@ -550,6 +563,13 @@ model::JsonValue EditCodec::rollToJson(const model::Roll& r, int schema) const
                                      {"filmType", JsonValue(toString(r.filmType))},
                                      {"film", std::move(film)},
                                      {"defaults", encode(r.defaults, unknown)}});
+    if (!r.excluded.empty()) {
+        JsonValue::Array names;
+        for (const std::string& n : r.excluded) {
+            names.emplace_back(n);
+        }
+        j.set("excluded", JsonValue(std::move(names)));
+    }
     if (const auto* o = r.extra.asObject()) {
         for (const auto& m : *o) {
             if (m.key != "film" && m.key != "defaults") {

@@ -55,7 +55,14 @@ public:
     AnalysisService(JobScheduler& jobs, CommandBus& bus, UiDispatcher ui, AnalysisFunctions fns)
         : jobs_(jobs)
         , bus_(bus)
-        , ui_(std::move(ui))
+        , ui_([alive = std::weak_ptr<int>(alive_), ui = std::move(ui)](std::function<void()> f) {
+            // Ergebnisse, die erst nach dem Abbau ankommen (Fenster geschlossen), verwerfen
+            ui([alive, f = std::move(f)] {
+                if (!alive.expired()) {
+                    f();
+                }
+            });
+        })
         , fns_(std::move(fns))
     {}
 
@@ -71,6 +78,7 @@ public:
 private:
     JobScheduler& jobs_;
     CommandBus& bus_;
+    std::shared_ptr<int> alive_ = std::make_shared<int>(0); ///< vor ui_: lebt so lange wie der Dienst
     UiDispatcher ui_;
     AnalysisFunctions fns_;
 };

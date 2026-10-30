@@ -60,6 +60,7 @@ struct SidecarData
     SourceStamp source;
     int frameNo = 0;
     model::Rating rating = model::Rating::None;
+    int stars = 0; ///< 0–5
     model::EditList edits;
     /// Unbekannte Felder und Einträge unbekannter Schritte, unverändert erhalten (NF-ARC-09).
     model::JsonValue extra;

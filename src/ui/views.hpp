@@ -56,6 +56,7 @@ public:
     void setThumbnail(const model::FrameId& f, const QImage& img);
     void setFailed(const model::FrameId& f);
     void setRating(const model::FrameId& f, model::Rating r);
+    void setStars(const model::FrameId& f, int stars);
     /// Filter nach Bewertung (LF-BAT-10); leer = alle.
     void setFilter(std::optional<model::Rating> r);
 
@@ -82,11 +83,15 @@ class ThumbnailDelegate final : public QStyledItemDelegate
 public:
     using QStyledItemDelegate::QStyledItemDelegate;
     void paint(QPainter* p, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+    /// Auswahl als Kästchen mit Haken oben rechts, ausgewählte Bilder hellgrau hinterlegt
+    /// (Import-Bildschirm).
+    void setCheckable(bool on) { checkable_ = on; }
     [[nodiscard]] QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 
 private:
     /// Skalierte Miniaturen je Bild und Zielgröße (Miniaturen ändern sich selten)
     mutable QHash<QString, QPixmap> cache_;
+    bool checkable_ = false;
 };
 
 class FilmstripView final : public QListView

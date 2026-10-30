@@ -167,6 +167,28 @@ TEST_F(DataStore, U_DAT_01_SidecarRoundTrip)
     EXPECT_EQ((*loaded)->edits.hash(), d.edits.hash());
 }
 
+// K-M10-12: Sterne je Bild und beim Import abgewählte Scans der Rolle bleiben erhalten
+TEST_F(DataStore, M10_StarsAndExcludedScansRoundTrip)
+{
+    ports::SidecarData d = dataFor(scan);
+    d.stars = 4;
+    auto s = store();
+    ASSERT_TRUE(s.save(frame, d).has_value());
+    const auto loaded = s.load(frame);
+    ASSERT_TRUE(loaded.has_value() && loaded->has_value());
+    EXPECT_EQ((*loaded)->stars, 4);
+    EXPECT_FALSE((*loaded)->extra.find("stars")); // bekanntes Feld, nicht unter den unbekannten
+
+    const EditCodec codec(catalog());
+    model::Roll r;
+    r.name = "Rolle";
+    r.excluded = {"DSC00002.ARW", "DSC00007.ARW"};
+    const auto back = codec.rollFromJson(codec.rollToJson(r, 1));
+    ASSERT_TRUE(back.has_value());
+    EXPECT_EQ(back->excluded, r.excluded);
+    EXPECT_EQ(back->extra.find("excluded"), nullptr);
+}
+
 // NF-ARC-09
 TEST_F(DataStore, U_DAT_02_UnknownFieldsAndStepsArePreserved)
 {

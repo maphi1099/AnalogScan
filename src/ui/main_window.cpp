@@ -24,6 +24,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QFileDialog>
+#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QHeaderView>
 #include <QtWidgets/QInputDialog>
@@ -35,9 +36,11 @@
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QStatusBar>
+#include <QtWidgets/QTabBar>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QTableView>
 #include <QtWidgets/QToolBar>
+#include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
 #include <algorithm>
@@ -177,6 +180,9 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
 
 MainWindow::~MainWindow()
 {
+    // Beim Abbau melden Filmstreifen und Reiter noch Änderungen; dann gibt es die Panels nicht mehr
+    disconnect(filmstrip_, nullptr, this, nullptr);
+    disconnect(viewTabs_, nullptr, this, nullptr);
     for (const application::JobHandle& h : running_) {
         h.cancel();
     }
@@ -187,7 +193,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::buildUi()
 {
-    // Seiten der Mitte: Start, Import, Übersicht, Bildansicht (K-M10-08)
+    // Seiten der Mitte: Start, Import, Leuchttisch, Entwickeln (K-M10-08); links die Reiter
     stack_ = new QStackedWidget(this);
     stack_->setObjectName(QStringLiteral("views"));
     startPage_ = new QLabel(tr("Ordner mit Scans öffnen (Strg+O) oder hierher ziehen."), stack_);
@@ -202,7 +208,37 @@ void MainWindow::buildUi()
     stack_->addWidget(import_);
     stack_->addWidget(overviewPage_);
     stack_->addWidget(canvas_);
-    setCentralWidget(stack_);
+    emptyPage_ = new QLabel(
+        tr("Keine Ansicht geöffnet.\nÜber das Menü Fenster: Leuchttisch (G) oder Entwickeln (E)."), stack_);
+    static_cast<QLabel*>(emptyPage_)->setAlignment(Qt::AlignCenter);
+    stack_->addWidget(emptyPage_);
+    viewTabs_ = new QTabBar(this);
+    viewTabs_->setObjectName(QStringLiteral("viewTabs"));
+    viewTabs_->setShape(QTabBar::RoundedWest); // senkrechte Namen
+    viewTabs_->setTabsClosable(true);
+    viewTabs_->setExpanding(true); // die Reiter teilen sich den ganzen Rand
+    viewTabs_->setUsesScrollButtons(false);
+    viewTabs_->setDrawBase(false);
+    viewTabs_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    viewTabs_->setStyleSheet(QStringLiteral(
+        "QTabBar::tab { padding: 10px 4px; margin: 2px 0; border: 1px solid palette(mid);"
+        " border-radius: 4px; background: palette(window); color: palette(text); font-weight: bold; }"
+        "QTabBar::tab:selected { background: palette(highlight); color: palette(highlighted-text); }"
+        "QTabBar::tab:hover:!selected { background: palette(midlight); }"));
+    auto* center = new QWidget(this);
+    auto* centerLayout = new QHBoxLayout(center);
+    centerLayout->setContentsMargins(0, 0, 0, 0);
+    centerLayout->setSpacing(0);
+    centerLayout->addWidget(viewTabs_);
+    centerLayout->addWidget(stack_, 1);
+    setCentralWidget(center);
+    connect(viewTabs_, &QTabBar::currentChanged, this, [this](int i) {
+        if (i >= 0) {
+            showView(static_cast<View>(viewTabs_->tabData(i).toInt()));
+        }
+    });
+    connect(viewTabs_, &QTabBar::tabCloseRequested, this,
+            [this](int i) { closeView(static_cast<View>(viewTabs_->tabData(i).toInt())); });
 
     stripModel_ = new FilmstripModel(this);
     filmstrip_ = new FilmstripView(this);
@@ -219,14 +255,66 @@ void MainWindow::buildUi()
     filter_->addItem(tr("Verworfen"));
     filter_->addItem(tr("Unbewertet"));
     filter_->setToolTip(tr("Filmstreifen nach Bewertung filtern (LF-BAT-10)"));
-    stripLayout->addWidget(filter_);
+    // Leiste über dem Filmstreifen: Filter, Sterne, Verwerfen, Einstellungen übernehmen
+    auto* stripBar = new QHBoxLayout;
+    stripBar->addWidget(filter_);
+    stripBar->addSpacing(12);
+    for (int n = 1; n <= 5; ++n) {
+        auto* b = new QToolButton(stripBox);
+        b->setObjectName(QStringLiteral("stars%1").arg(n));
+        b->setText(QString(QChar(0x2605))); // ★
+        b->setCheckable(true);
+        b->setAutoRaise(true);
+        b->setToolTip(tr("%n Stern(e) (Taste %n); nochmal klicken entfernt die Sterne", nullptr, n));
+        connect(b, &QToolButton::clicked, this, [this, n] {
+            const model::Frame* f = frame(s_.session.current);
+            setStars(f != nullptr && f->stars == n ? 0 : n);
+        });
+        stripBar->addWidget(b);
+        starButtons_.push_back(b);
+    }
+    stripBar->addSpacing(8);
+    rejectButton_ = new QToolButton(stripBox);
+    rejectButton_->setObjectName(QStringLiteral("rejectButton"));
+    rejectButton_->setText(tr("✗ Verwerfen"));
+    rejectButton_->setCheckable(true);
+    rejectButton_->setToolTip(tr("Ausgewählte Bilder verwerfen bzw. wieder aufnehmen (X)"));
+    connect(rejectButton_, &QToolButton::clicked, this,
+            [this](bool on) { rate(on ? model::Rating::Reject : model::Rating::None); });
+    stripBar->addWidget(rejectButton_);
+    stripBar->addStretch(1);
+    stripBar->addWidget(new QLabel(tr("Einstellungen übernehmen:"), stripBox));
+    const QString nonFrame =
+        QStringLiteral(" (") + tr("ohne Zuschnitt, Basis und Retusche") + QLatin1Char(')');
+    auto* toSelection = new QPushButton(tr("auf Auswahl"), stripBox);
+    toSelection->setObjectName(QStringLiteral("applyToSelection"));
+    toSelection->setToolTip(tr("Bearbeitung des aktiven Bilds auf die markierten Bilder übernehmen") +
+                            nonFrame);
+    auto* toAll = new QPushButton(tr("auf alle"), stripBox);
+    toAll->setObjectName(QStringLiteral("applyToAll"));
+    toAll->setToolTip(tr("Bearbeitung des aktiven Bilds auf alle Bilder der Rolle übernehmen") + nonFrame);
+    connect(toSelection, &QPushButton::clicked, this,
+            [this] { applySettingsTo(filmstrip_->selectedFrames()); });
+    connect(toAll, &QPushButton::clicked, this, [this] {
+        std::vector<model::FrameId> all;
+        for (const model::Frame& f : frames_) {
+            all.push_back(f.id);
+        }
+        applySettingsTo(all);
+    });
+    stripBar->addWidget(toSelection);
+    stripBar->addWidget(toAll);
+    stripLayout->addLayout(stripBar);
     stripLayout->addWidget(filmstrip_);
     stripDock->setWidget(stripBox);
     addDockWidget(Qt::BottomDockWidgetArea, stripDock);
     editorDocks_.push_back(stripDock);
 
-    // Übersicht: Kopf mit Rolle und Filmtyp der Rolle, darunter alle Bilder im aktuellen Stand
-    auto* overviewLayout = new QVBoxLayout(overviewPage_);
+    // Leuchttisch: Kopf mit Rolle und Filmtyp der Rolle, darunter alle Bilder im aktuellen Stand,
+    // rechts Export und Kontaktabzug
+    auto* overviewOuter = new QHBoxLayout(overviewPage_);
+    auto* overviewLayout = new QVBoxLayout;
+    overviewOuter->addLayout(overviewLayout, 1);
     auto* head = new QHBoxLayout;
     overviewTitle_ = new QLabel(overviewPage_);
     QFont big = overviewTitle_->font();
@@ -247,6 +335,87 @@ void MainWindow::buildUi()
     overview_ = new OverviewView(overviewPage_);
     overview_->share(filmstrip_);
     overviewLayout->addWidget(overview_, 1);
+
+    auto* side = new QWidget(overviewPage_);
+    side->setObjectName(QStringLiteral("lightTableSide"));
+    side->setFixedWidth(260);
+    auto* sideLayout = new QVBoxLayout(side);
+    sideLayout->setContentsMargins(4, 0, 0, 0);
+    selectionInfo_ = new QLabel(side);
+    selectionInfo_->setObjectName(QStringLiteral("selectionInfo"));
+    sideLayout->addWidget(selectionInfo_);
+    auto* exportBox = new QGroupBox(tr("Exportieren"), side);
+    auto* exportLayout = new QVBoxLayout(exportBox);
+    exportFolder_ = new QLabel(exportBox);
+    exportFolder_->setObjectName(QStringLiteral("exportFolder"));
+    exportFolder_->setWordWrap(true);
+    auto* folderButton = new QPushButton(tr("Zielordner …"), exportBox);
+    folderButton->setObjectName(QStringLiteral("exportFolderButton"));
+    exportFormat_ = new QComboBox(exportBox);
+    exportFormat_->setObjectName(QStringLiteral("exportFormat"));
+    exportFormat_->addItem(tr("JPEG (8 Bit)"));
+    exportFormat_->addItem(tr("TIFF (16 Bit)"));
+    exportFormat_->addItem(tr("PNG (16 Bit)"));
+    auto* exportSelected = new QPushButton(tr("Auswahl exportieren"), exportBox);
+    exportSelected->setObjectName(QStringLiteral("exportSelected"));
+    auto* exportAll = new QPushButton(tr("Alle exportieren"), exportBox);
+    exportAll->setObjectName(QStringLiteral("exportAll"));
+    auto* exportMore = new QPushButton(tr("Weitere Einstellungen …"), exportBox);
+    exportMore->setObjectName(QStringLiteral("exportMore"));
+    exportMore->setFlat(true);
+    exportLayout->addWidget(exportFolder_);
+    exportLayout->addWidget(folderButton);
+    exportLayout->addWidget(exportFormat_);
+    exportLayout->addWidget(exportSelected);
+    exportLayout->addWidget(exportAll);
+    exportLayout->addWidget(exportMore);
+    sideLayout->addWidget(exportBox);
+    auto* sheetBox = new QGroupBox(tr("Kontaktabzug"), side);
+    auto* sheetLayout = new QVBoxLayout(sheetBox);
+    auto* sheetPdf = new QPushButton(tr("Als PDF speichern …"), sheetBox);
+    sheetPdf->setObjectName(QStringLiteral("sheetPdf"));
+    auto* sheetSetup = new QPushButton(tr("Einrichten und drucken …"), sheetBox);
+    sheetSetup->setObjectName(QStringLiteral("sheetSetup"));
+    sheetLayout->addWidget(sheetPdf);
+    sheetLayout->addWidget(sheetSetup);
+    sideLayout->addWidget(sheetBox);
+    sideLayout->addStretch(1);
+    overviewOuter->addWidget(side);
+    connect(folderButton, &QPushButton::clicked, this, [this] {
+        const QString d = QFileDialog::getExistingDirectory(this, tr("Zielordner für den Export"),
+                                                            qs(exportSettings_.folder));
+        if (!d.isEmpty()) {
+            exportSettings_.folder = std::filesystem::path(d.toStdU16String());
+            updateExportPanel();
+        }
+    });
+    connect(exportFormat_, &QComboBox::activated, this, [this](int i) {
+        static const std::array<std::pair<ports::FileFormat, int>, 3> f{
+            std::pair{ports::FileFormat::Jpeg, 8}, std::pair{ports::FileFormat::Tiff, 16},
+            std::pair{ports::FileFormat::Png, 16}};
+        exportSettings_.write.format = f[static_cast<std::size_t>(i)].first;
+        exportSettings_.write.bitDepth = f[static_cast<std::size_t>(i)].second;
+    });
+    connect(exportSelected, &QPushButton::clicked, this,
+            [this] { exportFrames(filmstrip_->selectedFrames()); });
+    connect(exportAll, &QPushButton::clicked, this, [this] {
+        std::vector<model::FrameId> all;
+        for (const model::Frame& f : frames_) {
+            all.push_back(f.id);
+        }
+        exportFrames(all);
+    });
+    connect(exportMore, &QPushButton::clicked, this, [this] {
+        ExportDialog d(this);
+        d.setPresets(&s_.presets);
+        d.setSettings(exportSettings_);
+        if (d.exec() == QDialog::Accepted) {
+            exportSettings_ = d.settings();
+            updateExportPanel();
+        }
+    });
+    connect(sheetPdf, &QPushButton::clicked, this, [this] { contactSheetPdf(); });
+    connect(sheetSetup, &QPushButton::clicked, this, [this] { doContactSheet(); });
     import_->setPreviewModel(stripModel_);
     connect(overview_, &OverviewView::openFrame, this, [this](const model::FrameId& f) {
         selectFrame(f);
@@ -255,6 +424,7 @@ void MainWindow::buildUi()
     connect(rollFilm_, &QComboBox::activated, this,
             [this](int i) { setRollFilm(static_cast<model::FilmType>(rollFilm_->itemData(i).toInt())); });
     connect(import_, &ImportPage::accepted, this, [this](model::FilmType film, bool detectNow) {
+        excludeFrames(import_->excludedFrames());
         setRollFilm(film);
         showView(View::Image);
         if (detectNow) {
@@ -267,8 +437,10 @@ void MainWindow::buildUi()
     });
     connect(import_, &ImportPage::cancelled, this, [this] { closeRoll(); });
     connect(filmstrip_, &FilmstripView::currentFrameChanged, this, &MainWindow::selectFrame);
-    connect(filmstrip_, &FilmstripView::selectionChangedFrames, this,
-            [this] { s_.session.selection = filmstrip_->selectedFrames(); });
+    connect(filmstrip_, &FilmstripView::selectionChangedFrames, this, [this] {
+        s_.session.selection = filmstrip_->selectedFrames();
+        updateExportPanel();
+    });
     connect(filter_, &QComboBox::activated, this, [this](int i) {
         static const std::array<std::optional<model::Rating>, 4> f{
             std::nullopt, model::Rating::Keep, model::Rating::Reject, model::Rating::None};
@@ -464,6 +636,24 @@ void MainWindow::buildActions()
         [this] { rate(model::Rating::Reject); });
     add(edit, QStringLiteral("rateNone"), tr("Bewertung entfernen"), QKeySequence(Qt::Key_U),
         [this] { rate(model::Rating::None); });
+    QMenu* stars = edit->addMenu(tr("Sterne"));
+    for (int n = 0; n <= 5; ++n) {
+        add(stars, QStringLiteral("stars%1Action").arg(n),
+            n == 0 ? tr("Keine Sterne") : QString(n, QChar(0x2605)), QKeySequence(Qt::Key_0 + n),
+            [this, n] { setStars(n); });
+    }
+    edit->addSeparator();
+    add(edit, QStringLiteral("applyToSelection"), tr("Einstellungen auf Auswahl übernehmen"),
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V),
+        [this] { applySettingsTo(filmstrip_->selectedFrames()); });
+    add(edit, QStringLiteral("applyToAll"), tr("Einstellungen auf alle übernehmen"),
+        QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_V), [this] {
+            std::vector<model::FrameId> all;
+            for (const model::Frame& f : frames_) {
+                all.push_back(f.id);
+            }
+            applySettingsTo(all);
+        });
 
     QMenu* view = menuBar()->addMenu(tr("&Ansicht"));
     add(view, QStringLiteral("zoomFit"), tr("Einpassen"), QKeySequence(Qt::CTRL | Qt::Key_0), [this] {
@@ -484,13 +674,6 @@ void MainWindow::buildActions()
                             requestPreview(ui_->currentList());
                         });
     compare->setCheckable(true);
-    auto* clip = add(view, QStringLiteral("clipping"), tr("Beschnittwarnung"), QKeySequence(Qt::Key_J),
-                     [this](bool on) {
-                         clipping_ = on;
-                         canvas_->setClipping({}, false);
-                         requestPreview(ui_->currentList());
-                     });
-    clip->setCheckable(true);
     view->addSeparator();
     auto* crop = add(view, QStringLiteral("toolCrop"), tr("Zuschneiden und Drehen"), QKeySequence(Qt::Key_C),
                      [this](bool on) { setTool(on ? 1 : 0); });
@@ -534,31 +717,27 @@ void MainWindow::buildActions()
     }
     QToolBar* bar = addToolBar(tr("Werkzeuge"));
     bar->setObjectName(QStringLiteral("toolbar"));
-    for (const char* n : {"openFolder", "undo", "redo", "toolCrop", "toolRetouch", "compare", "clipping",
-                          "export", "contactSheet"}) {
+    for (const char* n :
+         {"openFolder", "undo", "redo", "toolCrop", "toolRetouch", "compare", "export", "contactSheet"}) {
         bar->addAction(action(QString::fromLatin1(n)));
     }
 
-    // Umschalten Übersicht / Bildansicht: Leiste am linken Rand (K-M10-08)
+    // Leuchttisch / Entwickeln: Reiter am linken Rand, schließbar, hier wieder zu öffnen (K-M10-08)
     QMenu* views = menuBar()->addMenu(tr("&Fenster"));
-    auto* overviewAction = add(views, QStringLiteral("viewOverview"), tr("Übersicht"),
+    auto* overviewAction = add(views, QStringLiteral("viewOverview"), tr("Leuchttisch"),
                                QKeySequence(Qt::Key_G), [this] { showView(View::Overview); });
-    auto* imageAction = add(views, QStringLiteral("viewImage"), tr("Bildansicht"), QKeySequence(Qt::Key_E),
+    auto* imageAction = add(views, QStringLiteral("viewImage"), tr("Entwickeln"), QKeySequence(Qt::Key_E),
                             [this] { showView(View::Image); });
     overviewAction->setCheckable(true);
     imageAction->setCheckable(true);
-    overviewAction->setToolTip(tr("Alle Bilder der Rolle im aktuellen Stand (G)"));
+    overviewAction->setToolTip(tr("Alle Bilder der Rolle: auswählen, bewerten, exportieren (G)"));
     imageAction->setToolTip(tr("Ein Bild bearbeiten (E)"));
     auto* group = new QActionGroup(this);
     group->addAction(overviewAction);
     group->addAction(imageAction);
-    viewBar_ = new QToolBar(tr("Ansicht"), this);
-    viewBar_->setObjectName(QStringLiteral("viewBar"));
-    viewBar_->setMovable(false);
-    viewBar_->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    viewBar_->addAction(overviewAction);
-    viewBar_->addAction(imageAction);
-    addToolBar(Qt::LeftToolBarArea, viewBar_);
+    views->addSeparator();
+    add(views, QStringLiteral("closeView"), tr("Ansicht schließen"), QKeySequence(Qt::CTRL | Qt::Key_W),
+        [this] { closeView(view_); });
     showView(View::Start);
 }
 
@@ -569,9 +748,29 @@ void MainWindow::showView(View v)
         v = View::Start;
     }
     view_ = v;
+    // Reiter am linken Rand: geschlossene Ansicht wieder öffnen, die aktive markieren
+    if (v == View::Overview || v == View::Image) {
+        int tab = -1;
+        for (int i = 0; i < viewTabs_->count(); ++i) {
+            if (viewTabs_->tabData(i).toInt() == static_cast<int>(v)) {
+                tab = i;
+            }
+        }
+        const QSignalBlocker block(viewTabs_);
+        if (tab < 0) {
+            // feste Reihenfolge: Leuchttisch oben, Entwickeln darunter
+            tab = viewTabs_->insertTab(v == View::Overview ? 0 : viewTabs_->count(),
+                                       v == View::Overview ? tr("Leuchttisch") : tr("Entwickeln"));
+            viewTabs_->setTabData(tab, static_cast<int>(v));
+            viewTabs_->setTabToolTip(tab, v == View::Overview ? tr("Alle Bilder der Rolle (G)")
+                                                              : tr("Ein Bild bearbeiten (E)"));
+        }
+        viewTabs_->setCurrentIndex(tab);
+    }
     QWidget* page = v == View::Start      ? startPage_
                     : v == View::Import   ? static_cast<QWidget*>(import_)
                     : v == View::Overview ? overviewPage_
+                    : v == View::None     ? emptyPage_
                                           : static_cast<QWidget*>(canvas_);
     stack_->setCurrentWidget(page);
     for (QDockWidget* d : editorDocks_) {
@@ -582,16 +781,17 @@ void MainWindow::showView(View v)
     action(QStringLiteral("viewImage"))->setEnabled(navigable);
     action(QStringLiteral("viewOverview"))->setChecked(v == View::Overview);
     action(QStringLiteral("viewImage"))->setChecked(v == View::Image);
-    viewBar_->setVisible(navigable);
+    viewTabs_->setVisible(navigable);
     // Bildwerkzeuge nur in der Bildansicht; Befehle für die Rolle nicht während des Imports
-    for (const char* n : {"toolCrop", "toolRetouch", "compare", "clipping", "zoomFit", "zoom100", "zoom200",
-                          "rotateLeft", "rotateRight", "flipH"}) {
+    for (const char* n : {"toolCrop", "toolRetouch", "compare", "zoomFit", "zoom100", "zoom200", "rotateLeft",
+                          "rotateRight", "flipH"}) {
         if (QAction* a = action(QString::fromLatin1(n))) {
             a->setEnabled(v == View::Image);
         }
     }
-    for (const char* n : {"export", "contactSheet", "undo", "redo", "copy", "paste", "resetAll",
-                          "saveEditPreset", "sync", "rateKeep", "rateReject", "rateNone"}) {
+    for (const char* n :
+         {"export", "contactSheet", "undo", "redo", "copy", "paste", "resetAll", "saveEditPreset", "sync",
+          "rateKeep", "rateReject", "rateNone", "applyToSelection", "applyToAll", "closeView"}) {
         if (QAction* a = action(QString::fromLatin1(n))) {
             a->setEnabled(navigable);
         }
@@ -600,10 +800,30 @@ void MainWindow::showView(View v)
         overviewTitle_->setText(tr("%1 – %n Bild(er)", nullptr, static_cast<int>(frames_.size()))
                                     .arg(QString::fromStdString(roll_->name)));
         rollFilm_->setCurrentIndex(std::max(0, rollFilm_->findData(static_cast<int>(roll_->filmType))));
+        updateExportPanel();
     }
     if (v == View::Image) {
         refreshCurrent();
         requestPreview(ui_->currentList());
+    }
+}
+
+void MainWindow::closeView(View v)
+{
+    if (v != View::Overview && v != View::Image) {
+        return;
+    }
+    for (int i = 0; i < viewTabs_->count(); ++i) {
+        if (viewTabs_->tabData(i).toInt() == static_cast<int>(v)) {
+            const QSignalBlocker block(viewTabs_);
+            viewTabs_->removeTab(i);
+            break;
+        }
+    }
+    if (view_ == v) {
+        showView(viewTabs_->count() > 0
+                     ? static_cast<View>(viewTabs_->tabData(viewTabs_->currentIndex()).toInt())
+                     : View::None);
     }
 }
 
@@ -764,6 +984,8 @@ void MainWindow::onRollOpened(application::OpenedRoll r)
         filmstrip_->selectFrame(frames_.front().id);
     }
     report(tr("%n Bild(er) geöffnet", nullptr, static_cast<int>(frames_.size())));
+    // beide Ansichten als Reiter; Entwickeln ist danach aktiv
+    showView(View::Overview);
     // Neue Rolle: erst der Import-Bildschirm (Filmtyp festlegen), sonst gleich die Bildansicht
     if (roll_->filmType == model::FilmType::Unconverted && !readOnly_) {
         import_->setRoll(qs(roll_->folder), QString::fromStdString(roll_->name),
@@ -907,6 +1129,7 @@ void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString
 void MainWindow::refreshCurrent()
 {
     const model::EditList l = ui_->currentList();
+    updateRatingButtons();
     editModel_->setList(l);
     conversion_->bindList(l);
     gradation_->bindList(l);
@@ -985,7 +1208,7 @@ void MainWindow::onPreview(const PreviewFrame& p)
         canvas_->setSourceSize(p.image.size()); // bis die Kopfdaten da sind
     }
     canvas_->setImage(p.image, canvas_->mapping().imageRect);
-    canvas_->setClipping(p.clipping, clipping_);
+    canvas_->setClipping(p.clipping, false);
     histogram_->setHistogram(p.histogram);
     ++previewsShown_;
     Q_EMIT previewShown(p.seq);
@@ -1019,6 +1242,96 @@ void MainWindow::rate(model::Rating r)
             }
         }
     }
+    updateRatingButtons();
+}
+
+void MainWindow::setStars(int stars)
+{
+    for (const model::FrameId& f : targets()) {
+        if (s_.bus.setStars(f, stars)) {
+            stripModel_->setStars(f, stars);
+            for (model::Frame& fr : frames_) {
+                if (fr.id == f) {
+                    fr.stars = stars;
+                }
+            }
+        }
+    }
+    updateRatingButtons();
+}
+
+void MainWindow::updateRatingButtons()
+{
+    const model::Frame* f = frame(s_.session.current);
+    const int stars = f != nullptr ? f->stars : 0;
+    for (std::size_t i = 0; i < starButtons_.size(); ++i) {
+        starButtons_[i]->setChecked(static_cast<int>(i) < stars);
+    }
+    rejectButton_->setChecked(f != nullptr && f->rating == model::Rating::Reject);
+}
+
+void MainWindow::applySettingsTo(std::vector<model::FrameId> frames)
+{
+    if (!roll_ || s_.session.current == model::FrameId{}) {
+        return;
+    }
+    std::erase(frames, s_.session.current);
+    if (frames.empty()) {
+        report(tr("Keine anderen Bilder ausgewählt."));
+        return;
+    }
+    // eigene Zwischenablage: die des Anwenders (Strg+C) bleibt unberührt
+    application::EditClipboard clip;
+    clip.copy(ui_->currentList(), s_.session.current);
+    s_.bus.execute(clip.paste(clip.defaultSelection(), application::PasteMode::Values), frames, *roll_);
+    const model::Frame* src = frame(s_.session.current);
+    report(
+        tr("Einstellungen von Bild %1 auf %n Bild(er) übernommen", nullptr, static_cast<int>(frames.size()))
+            .arg(src != nullptr ? src->frameNo : 0));
+}
+
+void MainWindow::excludeFrames(const std::vector<model::FrameId>& frames)
+{
+    if (!roll_ || frames.empty()) {
+        return;
+    }
+    model::Roll r = *roll_;
+    for (const model::FrameId& id : frames) {
+        const auto it = std::ranges::find(frames_, id, &model::Frame::id);
+        if (it == frames_.end()) {
+            continue;
+        }
+        r.excluded.push_back(it->path.filename().string());
+        std::erase(r.frames, id);
+        s_.bus.close(id);
+        frames_.erase(it);
+    }
+    roll_ = std::make_shared<const model::Roll>(std::move(r)); // gespeichert mit dem Filmtyp
+    s_.session.roll = roll_;
+    s_.session.current = {};
+    s_.session.selection.clear();
+    stripModel_->setFrames(frames_);
+    if (!frames_.empty()) {
+        selectFrame(frames_.front().id);
+    }
+    report(tr("%n Bild(er) nicht importiert", nullptr, static_cast<int>(frames.size())));
+}
+
+void MainWindow::updateExportPanel()
+{
+    if (!roll_) {
+        return;
+    }
+    if (exportSettings_.folder.empty()) {
+        exportSettings_.folder = roll_->folder / "export";
+    }
+    exportFolder_->setText(tr("Ziel: %1").arg(qs(exportSettings_.folder)));
+    const int format = exportSettings_.write.format == ports::FileFormat::Jpeg  ? 0
+                       : exportSettings_.write.format == ports::FileFormat::Png ? 2
+                                                                                : 1;
+    exportFormat_->setCurrentIndex(format);
+    selectionInfo_->setText(
+        tr("%1 von %2 Bildern ausgewählt").arg(filmstrip_->selectedFrames().size()).arg(frames_.size()));
 }
 
 void MainWindow::trackJob(application::JobHandle h, const QString& what)
@@ -1067,16 +1380,64 @@ void MainWindow::doExport()
         return;
     }
     exportSettings_ = d.settings();
+    exportFrames(targets());
+}
+
+void MainWindow::exportFrames(const std::vector<model::FrameId>& frames)
+{
+    if (!roll_ || frames.empty()) {
+        report(tr("Keine Bilder zum Exportieren ausgewählt."));
+        return;
+    }
+    if (exportSettings_.folder.empty()) {
+        exportSettings_.folder = roll_->folder / "export";
+    }
     std::error_code ec;
     std::filesystem::create_directories(exportSettings_.folder, ec);
     std::vector<application::ExportService::Item> items;
-    for (const model::FrameId& f : targets()) {
+    for (const model::FrameId& f : frames) {
         if (const model::Frame* fr = frame(f)) {
             items.push_back({*fr, s_.bus.history(f).current()});
         }
     }
     auto h = s_.exports.exportFrames(items, roll_, exportSettings_);
     trackJob(h, tr("Export"));
+}
+
+std::vector<application::ContactSheetService::Item> MainWindow::sheetItems() const
+{
+    std::vector<application::ContactSheetService::Item> out;
+    for (const model::Frame& f : frames_) {
+        application::ContactSheetService::Item i;
+        i.source = f;
+        i.edits = s_.bus.history(f.id).current();
+        double aspect = 1.5;
+        if (const auto it = sources_.find(f.id); it != sources_.end() && it->second.height > 0) {
+            aspect = static_cast<double>(it->second.width) / it->second.height;
+        }
+        i.frame = {f.id, f.frameNo, aspect};
+        out.push_back(std::move(i));
+    }
+    return out;
+}
+
+void MainWindow::contactSheetPdf()
+{
+    if (!roll_) {
+        return;
+    }
+    const QString p = QFileDialog::getSaveFileName(this, tr("Kontaktabzug speichern"),
+                                                   qs(roll_->folder / "kontaktabzug.pdf"), tr("PDF (*.pdf)"));
+    if (p.isEmpty()) {
+        return;
+    }
+    sheetSpec_.header.rollNo = sheetSpec_.header.rollNo.empty() ? roll_->name : sheetSpec_.header.rollNo;
+    sheetSpec_.header.film = roll_->film;
+    const layout::FilmFormat* fmt = layout::FilmFormat::find(sheetFormat_);
+    trackJob(s_.contactSheet.exportPdf(sheetItems(), roll_, sheetSpec_,
+                                       fmt ? *fmt : layout::FilmFormat::catalog()[0],
+                                       std::filesystem::path(p.toStdU16String())),
+             tr("Kontaktabzug"));
 }
 
 void MainWindow::doContactSheet()
@@ -1089,21 +1450,7 @@ void MainWindow::doContactSheet()
     sheetSpec_.header.rollNo = sheetSpec_.header.rollNo.empty() ? roll_->name : sheetSpec_.header.rollNo;
     sheetSpec_.header.film = roll_->film;
     d.setSpec(sheetSpec_, sheetFormat_);
-    const auto items = [this] {
-        std::vector<application::ContactSheetService::Item> out;
-        for (const model::Frame& f : frames_) {
-            application::ContactSheetService::Item i;
-            i.source = f;
-            i.edits = s_.bus.history(f.id).current();
-            double aspect = 1.5;
-            if (const auto it = sources_.find(f.id); it != sources_.end() && it->second.height > 0) {
-                aspect = static_cast<double>(it->second.width) / it->second.height;
-            }
-            i.frame = {f.id, f.frameNo, aspect};
-            out.push_back(std::move(i));
-        }
-        return out;
-    };
+    const auto items = [this] { return sheetItems(); };
     connect(&d, &ContactSheetDialog::exportPdfRequested, this, [this, &d, items] {
         sheetSpec_ = d.spec();
         sheetFormat_ = d.format();

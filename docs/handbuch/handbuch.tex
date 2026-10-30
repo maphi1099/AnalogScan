@@ -88,41 +88,48 @@ Begleitdateien neben den Scans bleiben dabei bewusst erhalten.
         Scans einer Rolle wählen. Alternativ einen Ordner oder eine Datei auf das Fenster ziehen.
   \item Bei einer neuen Rolle erscheint der \emph{Import-Bildschirm}: Er zeigt die Scans
         unverändert (als Negativ) und fragt, um welchen Film es sich handelt
-        (\menu{Farbnegativ}, \menu{S/W-Negativ} oder \menu{Dia}). Filmtyp wählen, optional
-        \menu{Bildfeld und Filmbasis gleich erkennen} ankreuzen, dann \menu{Importieren}.
-  \item Ohne die Erkennung beim Import: im Filmstreifen alle Bilder markieren (in den
-        Filmstreifen klicken, dann \taste{Strg+A}) und \menu{Auto-Bildfeld} klicken. AutoNeg
-        erkennt Bildfeld, Schräglage und Filmbasis jedes Bilds; erst mit der Filmbasis wird ein
-        Farbnegativ farbrichtig.
+        (\menu{Farbnegativ}, \menu{S/W-Negativ} oder \menu{Dia}). Alle Scans sind gewählt
+        (hellgrau hinterlegt, Haken oben rechts); ein Klick wählt einen Scan ab, etwa einen
+        Fehlscan. Abgewählte Scans gehören nicht zur Rolle, die Datei bleibt unberührt.
+        \menu{Automatisch konvertieren} ist angekreuzt: AutoNeg erkennt dann Bildfeld,
+        Schräglage, Filmbasis und Tonwerte jedes Bilds. Dann \menu{Importieren}.
+  \item Ohne \menu{Automatisch konvertieren} bleiben Negative der unveränderte Scan, bis die
+        Filmbasis bekannt ist: im Filmstreifen alle Bilder markieren (in den Filmstreifen
+        klicken, dann \taste{Strg+A}) und \menu{Auto-Bildfeld} klicken.
   \item Ein Bild anklicken und im Reiter \menu{Anpassen} Belichtung, Farbe und Kontrast
         einstellen. Bei Schwarzweiß im Reiter \menu{Gradation} die Filterstufe wählen.
-  \item Gelungene Einstellungen mit \menu{Bearbeiten \textrightarrow{} Bearbeitung kopieren}
-        (\taste{Strg+C}) und \menu{Einfügen …} (\taste{Strg+V}) auf weitere Bilder übertragen.
-  \item Bilder markieren und \menu{Datei \textrightarrow{} Exportieren …} (\taste{Strg+E}).
-  \item Optional: \menu{Datei \textrightarrow{} Kontaktabzug …} (\taste{Strg+K}) für einen
-        druckfertigen Kontaktabzug der ganzen Rolle.
+  \item Gelungene Einstellungen mit einem Klick übernehmen: am Filmstreifen
+        \menu{Einstellungen übernehmen: auf Auswahl} oder \menu{auf alle}.
+  \item Im \menu{Leuchttisch} (\taste{G}) rechts \menu{Alle exportieren} oder
+        \menu{Auswahl exportieren}; darunter der Kontaktabzug als PDF.
 \end{enumerate}
 
 % ---------------------------------------------------------------------------------------------
 \section{Das Hauptfenster}
 
-Am linken Rand wechselt man zwischen zwei Ansichten:
+Der linke Rand ist in zwei Reiter geteilt, je einer für eine Ansicht. Ein Reiter lässt sich
+mit seinem Kreuz schließen und über das Menü \menu{Fenster} wieder öffnen; \taste{Strg+W}
+schließt die aktive Ansicht.
 \begin{description}
-  \item[Übersicht] (\taste{G}) alle Bilder der Rolle im aktuellen Stand als Raster, wie ein
-        Leuchttisch. Oben steht der \menu{Filmtyp der Rolle}, der sich hier jederzeit ändern
-        lässt. Ein Doppelklick öffnet ein Bild in der Bildansicht. Markierungen gelten in beiden
-        Ansichten.
-  \item[Bildansicht] (\taste{E}) ein Bild bearbeiten, mit diesen Bereichen:
+  \item[Leuchttisch] (\taste{G}) alle Bilder der Rolle im aktuellen Stand als Raster. Oben steht
+        der \menu{Filmtyp der Rolle}, der sich hier jederzeit ändern lässt. Rechts:
+        \menu{Exportieren} (Zielordner, Format, \menu{Auswahl exportieren}, \menu{Alle
+        exportieren}, \menu{Weitere Einstellungen …}) und \menu{Kontaktabzug} (\menu{Als PDF
+        speichern …}, \menu{Einrichten und drucken …}). Ein Doppelklick öffnet ein Bild zum
+        Entwickeln. Markierungen gelten in beiden Ansichten.
+  \item[Entwickeln] (\taste{E}) ein Bild bearbeiten, mit diesen Bereichen:
 \end{description}
 
 \begin{description}
   \item[Bildfläche] In der Mitte: das aktuelle Bild als Positiv. Bei 100\,\% oder 200\,\%
         verschiebt man den Ausschnitt mit gedrückter linker Maustaste.
-  \item[Filmstreifen] Unten: alle Bilder der Rolle mit Bildnummer. \ok{} bedeutet
+  \item[Filmstreifen] Unten: alle Bilder der Rolle mit Bildnummer und Sternen. \ok{} bedeutet
         \enquote{behalten}, \nein{} \enquote{verworfen}. Mit \taste{Strg} und \taste{Umschalt}
-        markiert man mehrere Bilder. Das Auswahlfeld darüber filtert nach Bewertung
-        (\menu{Alle Bilder}, \menu{Behalten}, \menu{Verworfen}, \menu{Unbewertet}). Nicht lesbare
-        Dateien erscheinen rot.
+        markiert man mehrere Bilder. Die Leiste darüber: Filter nach Bewertung (\menu{Alle
+        Bilder}, \menu{Behalten}, \menu{Verworfen}, \menu{Unbewertet}), fünf Sterne
+        (\taste{1}–\taste{5}, \taste{0} entfernt sie), \menu{Verwerfen} (\taste{X}) und
+        \menu{Einstellungen übernehmen: auf Auswahl} bzw. \menu{auf alle}. Nicht lesbare Dateien
+        erscheinen rot.
   \item[Werkzeuge] Rechts, mit den Reitern \menu{Konvertierung}, \menu{Gradation} und
         \menu{Anpassen}.
   \item[Histogramm] Rot, Grün, Blau und Helligkeit. Ein blaues Dreieck oben links zeigt
@@ -133,7 +140,7 @@ Am linken Rand wechselt man zwischen zwei Ansichten:
 \end{description}
 
 Die Werkzeugleiste enthält die häufigsten Befehle: Ordner öffnen, Rückgängig, Wiederholen,
-Zuschneiden und Drehen, Staubretusche, Vorher/Nachher, Beschnittwarnung, Exportieren und
+Zuschneiden und Drehen, Staubretusche, Vorher/Nachher, Exportieren und
 Kontaktabzug. Alle Docks lassen sich verschieben, abdocken und über ihr Kontextmenü ein- und
 ausblenden.
 
@@ -166,19 +173,22 @@ Der Filmtyp legt fest, wie das Negativ bzw. Dia umgerechnet wird: \menu{Farbnega
 \menu{S/W-Negativ} oder \menu{Dia} (E-6). Solange keiner gewählt ist, zeigt AutoNeg den Scan
 unverändert. Festgelegt wird er beim Import für die ganze Rolle; ändern lässt er sich
 \begin{itemize}
-  \item für die ganze Rolle in der Übersicht (\menu{Filmtyp der Rolle}) und
+  \item für die ganze Rolle auf dem Leuchttisch (\menu{Filmtyp der Rolle}) und
   \item für einzelne Bilder im Reiter \menu{Konvertierung}: die Wahl gilt für alle markierten
         Bilder und erscheint als Eintrag \enquote{Filmtyp} in der Bearbeitungsliste.
 \end{itemize}
 Die Bedienelemente richten sich nach dem Filmtyp: Die \menu{Gradation} nach Ilford Multigrade
 gibt es nur bei S/W-Negativ; Weißabgleich und Sättigung sind bei S/W gesperrt, die Filmbasis bei
 Dias. Ohne Filmtyp sind Regler und Automatiken gesperrt; Zuschnitt, Drehen und Retusche gehen
-immer.
+immer. Ein Negativ wird erst umgekehrt, wenn seine Filmbasis bekannt ist; bis dahin zeigt
+AutoNeg den Scan.
 
 \subsection{Bildfeld und Filmbasis}
 \begin{description}
-  \item[Auto-Bildfeld] erkennt für alle markierten Bilder das Bildfeld (Zuschnitt), die
-        Schräglage und die Filmbasis. Ein vorhandener eigener Zuschnitt bleibt erhalten.
+  \item[Auto-Bildfeld] erkennt für alle markierten Bilder das Bildfeld (Zuschnitt, knapp
+        innerhalb der Bildkanten), die Schräglage, die Filmbasis und die Tonwertgrenzen je
+        Farbkanal. Bei Kleinbild hilft die Perforation, das Bildfeld auch bei sehr dünnen oder
+        sehr dichten Negativen zu finden. Ein vorhandener eigener Zuschnitt bleibt erhalten.
   \item[Auto-Basis] misst die Filmbasis (den unbelichteten Filmrand) automatisch.
   \item[Basis messen] für schwierige Fälle: Schaltfläche klicken und auf dem Bild ein Rechteck
         in den unbelichteten Filmrand ziehen (gelb gestrichelt). Nach dem Loslassen misst
@@ -249,8 +259,7 @@ Stellen eines Bilds bilden einen Eintrag \enquote{Staubretusche} in der Bearbeit
   \item \menu{Einpassen} (\taste{Strg+0}), \menu{100\,\%} (\taste{Strg+1}),
         \menu{200\,\%} (\taste{Strg+2}).
   \item \menu{Vorher/Nachher} (\taste{\textbackslash}) zeigt den unkonvertierten Scan.
-  \item \menu{Beschnittwarnung} (\taste{J}) markiert Bereiche, in denen Tiefen oder Lichter
-        beschnitten werden.
+  \item Beschnittene Tiefen und Lichter zeigt das Histogramm (Dreiecke oben links und rechts).
 \end{itemize}
 
 % ---------------------------------------------------------------------------------------------
@@ -277,6 +286,11 @@ Programms. Gespeichert ist jede Änderung sofort.
 Befehle wie Auto-Bildfeld, Einfügen, Bewerten, Vorlagen und Export wirken auf die im
 Filmstreifen markierten Bilder, ohne Markierung auf das aktuelle Bild.
 
+\paragraph{Mit einem Klick übernehmen} Am Filmstreifen überträgt \menu{Einstellungen
+übernehmen: auf Auswahl} (\taste{Strg+Umschalt+V}) die Bearbeitung des aktiven Bilds auf die
+markierten Bilder, \menu{auf alle} (\taste{Strg+Alt+V}) auf die ganze Rolle. Bildbezogene Werte
+(Zuschnitt, Feindrehung, Filmbasis, Tonwertgrenzen, Retusche) bleiben bei jedem Bild.
+
 \paragraph{Kopieren und Einfügen} \menu{Bearbeitung kopieren} (\taste{Strg+C}) übernimmt die
 Liste des aktuellen Bilds. \menu{Einfügen …} (\taste{Strg+V}) öffnet einen Dialog: Dort wählt
 man die zu übertragenden Änderungen. Bildbezogene Werte (Zuschnitt, Filmbasis, Retusche) sind
@@ -291,14 +305,17 @@ Bilder gleichzeitig.
 bildbezogene Werte unter einem Namen; \menu{Vorlage anwenden} überträgt sie auf die markierten
 Bilder.
 
-\paragraph{Bewerten} \menu{Behalten} (\taste{P}), \menu{Verwerfen} (\taste{X}),
-\menu{Bewertung entfernen} (\taste{U}). Der Filmstreifen lässt sich danach filtern; der Export
-über die Kommandozeile kann sich auf behaltene Bilder beschränken.
+\paragraph{Bewerten} Sterne \taste{1}–\taste{5} (\taste{0} entfernt sie), \menu{Behalten}
+(\taste{P}), \menu{Verwerfen} (\taste{X}), \menu{Bewertung entfernen} (\taste{U}); die Sterne
+und \menu{Verwerfen} auch als Schaltflächen am Filmstreifen. Der Filmstreifen lässt sich danach
+filtern; der Export über die Kommandozeile kann sich auf behaltene Bilder beschränken.
 
 % ---------------------------------------------------------------------------------------------
 \section{Exportieren}
 
-Bilder markieren und \menu{Datei \textrightarrow{} Exportieren …} (\taste{Strg+E}) wählen.
+Am schnellsten auf dem \menu{Leuchttisch}: rechts Zielordner und Format wählen, dann
+\menu{Auswahl exportieren} oder \menu{Alle exportieren}. \menu{Weitere Einstellungen …} und
+\menu{Datei \textrightarrow{} Exportieren …} (\taste{Strg+E}) öffnen den Dialog mit allen Feldern:
 
 \begin{center}
 \begin{tabularx}{\textwidth}{@{}lX@{}}
@@ -335,8 +352,10 @@ Zielordner oder ein anderes Namensmuster wählen.
 % ---------------------------------------------------------------------------------------------
 \section{Kontaktabzug}
 
-\menu{Datei \textrightarrow{} Kontaktabzug …} (\taste{Strg+K}) setzt alle Bilder der Rolle
-wie auf einem klassischen Kontaktbogen in Streifen auf eine Seite.
+\menu{Datei \textrightarrow{} Kontaktabzug …} (\taste{Strg+K}) oder auf dem Leuchttisch
+\menu{Einrichten und drucken …} setzt alle Bilder der Rolle wie auf einem klassischen
+Kontaktbogen in Streifen auf eine Seite. \menu{Als PDF speichern …} auf dem Leuchttisch
+speichert ihn direkt mit den zuletzt gewählten Einstellungen.
 
 \begin{center}
 \begin{tabularx}{\textwidth}{@{}lX@{}}
@@ -442,7 +461,7 @@ weiter; nichts wird stillschweigend überschrieben.
   \taste{Strg+O} & Ordner öffnen          & \taste{C}              & Zuschneiden und Drehen \\
   \taste{Strg+E} & Exportieren            & \taste{R}              & Staubretusche \\
   \taste{Strg+K} & Kontaktabzug           & \taste{\textbackslash} & Vorher/Nachher \\
-  \taste{Strg+Z} & Rückgängig             & \taste{J}              & Beschnittwarnung \\
+  \taste{Strg+Z} & Rückgängig             & \taste{1}–\taste{5}    & Sterne (\taste{0}: keine) \\
   \taste{Strg+Y} & Wiederholen            & \taste{Strg+0}         & Einpassen \\
   \taste{Strg+C} & Bearbeitung kopieren   & \taste{Strg+1}         & 100\,\% \\
   \taste{Strg+V} & Einfügen               & \taste{Strg+2}         & 200\,\% \\
@@ -450,7 +469,9 @@ weiter; nichts wird stillschweigend überschrieben.
   \taste{Strg+Umschalt+R} & Bild zurücksetzen & \taste{Strg+]}      & 90\textdegree{} nach rechts \\
   \taste{P} & Behalten                    & \taste{Strg+H}         & waagerecht spiegeln \\
   \taste{X} & Verwerfen                   & \taste{U}              & Bewertung entfernen \\
-  \taste{G} & Übersicht                   & \taste{E}              & Bildansicht \\
+  \taste{G} & Leuchttisch                 & \taste{E}              & Entwickeln \\
+  \taste{Strg+W} & Ansicht schließen      & \taste{Strg+Umschalt+V} & Einstellungen auf Auswahl \\
+  & & \taste{Strg+Alt+V}     & Einstellungen auf alle \\
   \bottomrule
 \end{tabular}
 \end{center}

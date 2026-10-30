@@ -134,6 +134,26 @@ TEST_F(RollServiceTest, M8_OpenRestoresSidecarsAndRollData)
     EXPECT_EQ(two.frame.rating, model::Rating::Reject);
 }
 
+// K-M10-12: beim Import abgewählte Scans gehören nicht zur Rolle; die Bildnummern der übrigen
+// bleiben ihre Position im Film
+TEST_F(RollServiceTest, M10_ExcludedScansAreSkipped)
+{
+    model::Roll stored;
+    stored.folder = dir.path();
+    stored.filmType = model::FilmType::ColorNegative;
+    stored.excluded = {"DSC00002.jpg"};
+    ASSERT_TRUE(rolls.save(stored).has_value());
+    const auto r = service.open(dir.path());
+    ASSERT_TRUE(r.has_value());
+    std::vector<std::string> names;
+    for (const OpenedFrame& f : r->frames) {
+        names.push_back(f.frame.path.filename().string());
+    }
+    EXPECT_EQ(names, (std::vector<std::string>{"DSC00001.ARW", "DSC00003.ARW", "scan.TIF"}));
+    EXPECT_EQ(r->frames[1].frame.frameNo, 3);
+    EXPECT_EQ(r->roll.frames.size(), 3U);
+}
+
 // Architektur 8.8: Rolle einer anderen laufenden Instanz nur lesend
 TEST_F(RollServiceTest, M8_LockedElsewhereOpensReadOnly)
 {

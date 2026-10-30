@@ -80,6 +80,21 @@ bool CommandBus::setRating(const model::FrameId& f, model::Rating r)
     return true;
 }
 
+bool CommandBus::setStars(const model::FrameId& f, int stars)
+{
+    const auto it = open_.find(f);
+    if (it == open_.end()) {
+        return false;
+    }
+    stars = std::clamp(stars, 0, 5);
+    if (it->second.data.stars != stars) {
+        it->second.data.stars = stars;
+        it->second.frame.stars = stars;
+        persist(it->second);
+    }
+    return true;
+}
+
 void CommandBus::persist(Open& o)
 {
     o.data.edits = o.history.current();

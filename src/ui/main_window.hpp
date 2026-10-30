@@ -29,7 +29,9 @@ class QLabel;
 class QProgressBar;
 class QPushButton;
 class QStackedWidget;
+class QTabBar;
 class QTableView;
+class QToolButton;
 class QTabWidget;
 class QToolBar;
 
@@ -108,17 +110,22 @@ public:
     [[nodiscard]] ImportPage* importPage() const { return import_; }
     [[nodiscard]] OverviewView* overview() const { return overview_; }
     [[nodiscard]] QComboBox* rollFilmCombo() const { return rollFilm_; }
+    [[nodiscard]] QTabBar* viewTabs() const { return viewTabs_; }
 
-    /// Ansichten (K-M10-08): Import einer neuen Rolle, Übersicht (alle Bilder), Bildansicht.
+    /// Ansichten (K-M10-08): Import einer neuen Rolle, Leuchttisch (alle Bilder, Overview),
+    /// Entwickeln (ein Bild, Image). None: alle Ansichten geschlossen.
     enum class View
     {
         Start,
         Import,
         Overview,
-        Image
+        Image,
+        None
     };
     [[nodiscard]] View view() const { return view_; }
     void showView(View v);
+    /// Ansicht schließen (Reiter am linken Rand); über das Menü Fenster wieder zu öffnen.
+    void closeView(View v);
     [[nodiscard]] UiController& controller() { return *ui_; }
     [[nodiscard]] QAction* action(const QString& name) const;
     [[nodiscard]] bool rollOpen() const { return roll_ != nullptr; }
@@ -157,7 +164,19 @@ private:
     void report(const QString& msg);
     void trackJob(application::JobHandle h, const QString& what);
     void doExport();
+    /// Export ohne Dialog mit den aktuellen Exporteinstellungen (Leuchttisch).
+    void exportFrames(const std::vector<model::FrameId>& frames);
     void doContactSheet();
+    void contactSheetPdf();
+    [[nodiscard]] std::vector<application::ContactSheetService::Item> sheetItems() const;
+    /// Bearbeitung des aktiven Bilds mit einem Klick auf andere Bilder übernehmen (ohne
+    /// Zuschnitt, Drehung, Basis, Tonwertgrenzen und Retusche, die gehören zum einzelnen Bild).
+    void applySettingsTo(std::vector<model::FrameId> frames);
+    /// Beim Import abgewählte Scans aus der Rolle nehmen.
+    void excludeFrames(const std::vector<model::FrameId>& frames);
+    void setStars(int stars);
+    void updateRatingButtons();
+    void updateExportPanel();
     void doPaste();
     void doSettings();
     void rate(model::Rating r);
@@ -185,7 +204,13 @@ private:
     OverviewView* overview_ = nullptr;
     QLabel* overviewTitle_ = nullptr;
     QComboBox* rollFilm_ = nullptr;
-    QToolBar* viewBar_ = nullptr;
+    QTabBar* viewTabs_ = nullptr;
+    QWidget* emptyPage_ = nullptr;
+    QLabel* exportFolder_ = nullptr;
+    QComboBox* exportFormat_ = nullptr;
+    QLabel* selectionInfo_ = nullptr;
+    std::vector<QToolButton*> starButtons_;
+    QToolButton* rejectButton_ = nullptr;
     std::vector<QDockWidget*> editorDocks_; ///< nur in der Bildansicht sichtbar
     View view_ = View::Start;
     QProgressBar* progress_ = nullptr;
@@ -203,7 +228,6 @@ private:
     std::map<model::FrameId, model::SourceInfo> sources_;
     bool readOnly_ = false;
     bool compare_ = false;
-    bool clipping_ = false;
     std::uint64_t lastSeq_ = 0;
     std::uint64_t previewsShown_ = 0;
     QStringList messages_;

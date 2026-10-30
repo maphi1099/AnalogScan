@@ -349,3 +349,11 @@ Format je Eintrag:
 - Abhilfe: ThumbnailDelegate passt jede Miniatur mit erhaltenem Seitenverhältnis mittig in die Zelle ein (Filmstreifen, Übersicht, Import). Test `ThumbnailDelegateTest.M10_ThumbnailFitsIntoCell`.
 - Status: behoben
 
+## B-42: Absturz, wenn ein Erkennungsergebnis nach dem Schließen ankommt
+- Erstmals: 30.10.2026, zuletzt: 30.10.2026, Häufigkeit: 1 (E-28, E-39 nach "Automatisch konvertieren" als Standard)
+- Plattform: alle
+- Symptom: Zugriffsverletzung in `CommandBus::execute` aus einem Lambda des `AnalysisService`, wenn Fenster und Komposition während laufender Erkennung abgebaut werden (Neustart im Test, Rolle schließen).
+- Ursache: Der Erkennungsjob stellt sein Ergebnis per UI-Dispatcher in die Ereignisschleife; das Lambda hielt den `CommandBus` per Referenz und lief nach dessen Abbau.
+- Abhilfe: `AnalysisService` verpackt den Dispatcher; ein `weak_ptr` auf ein Lebenszeichen des Dienstes verwirft verspätete Ergebnisse. Test `AnalysisServiceTest.M10_ResultAfterShutdownIsDropped`.
+- Status: behoben
+

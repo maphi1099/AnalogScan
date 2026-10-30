@@ -19,6 +19,7 @@ struct Frame
     std::filesystem::path path;
     int frameNo = 0;
     Rating rating = Rating::None;
+    int stars = 0; ///< Bewertung mit 0–5 Sternen
     SourceInfo source;
 
     friend bool operator==(const Frame&, const Frame&) = default;
@@ -34,6 +35,8 @@ struct Roll
     FilmInfo film;
     EditList defaults; ///< Rollen-Standard (LF-BAT-01)
     std::vector<FrameId> frames;
+    /// Beim Import abgewählte Scans (Dateinamen); sie gehören nicht zur Rolle.
+    std::vector<std::string> excluded;
     /// Unbekannte Felder der Rollendatei (z. B. Kontaktabzug bis M7), unverändert erhalten
     /// (NF-ARC-09). Ergänzung K-M6-02.
     JsonValue extra;

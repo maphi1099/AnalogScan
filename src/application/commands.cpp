@@ -21,7 +21,8 @@ model::EditEntry normalized(model::EditEntry e, const pipeline::StepRegistry& re
 
 bool isFrameSpecific(const model::StepId& step)
 {
-    static const std::array<std::string_view, 3> ids{"autoneg.crop", "autoneg.filmbase", "autoneg.retouch"};
+    static const std::array<std::string_view, 5> ids{"autoneg.crop", "autoneg.rotation", "autoneg.filmbase",
+                                                     "autoneg.densityrange", "autoneg.retouch"};
     return std::ranges::find(ids, step.value()) != ids.end();
 }
 

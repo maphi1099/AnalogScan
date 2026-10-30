@@ -1,7 +1,9 @@
 #include "ui/import_page.hpp"
 
+#include "ui/qt_session_bridge.hpp"
 #include "ui/views.hpp"
 
+#include <QtCore/QItemSelectionModel>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QGroupBox>
@@ -61,9 +63,11 @@ ImportPage::ImportPage(QWidget* parent)
         tr("Schwarzweißnegative; Gradation nach Ilford-Multigrade-Filterstufen."));
     add(model::FilmType::Slide, QStringLiteral("filmSlide"), tr("Dia (E-6)"),
         tr("Diapositive; keine Umkehrung, nur Farbe und Tonwerte."));
-    detect_ = new QCheckBox(tr("Bildfeld und Filmbasis gleich erkennen"), group);
+    detect_ = new QCheckBox(tr("Automatisch konvertieren"), group);
     detect_->setObjectName(QStringLiteral("detectNow"));
-    detect_->setToolTip(tr("Nach dem Import für alle Bilder Zuschnitt, Schräglage und Filmbasis erkennen"));
+    detect_->setToolTip(
+        tr("Nach dem Import Bildfeld, Schräglage, Filmbasis und Tonwerte aller Bilder erkennen.") +
+        QLatin1Char(' ') + tr("Ohne Haken bleiben Negative unverändert, bis die Filmbasis gemessen ist."));
     groupLayout->addSpacing(8);
     groupLayout->addWidget(detect_);
     groupLayout->addStretch(1);
@@ -78,10 +82,27 @@ ImportPage::ImportPage(QWidget* parent)
     preview_->setIconSize(QSize(160, 120));
     preview_->setGridSize(QSize(176, 150));
     preview_->setUniformItemSizes(true);
-    preview_->setSelectionMode(QAbstractItemView::NoSelection);
-    preview_->setItemDelegate(new ThumbnailDelegate(preview_));
-    preview_->setToolTip(tr("Die Scans so, wie sie aufgenommen wurden"));
-    row->addWidget(preview_, 1);
+    preview_->setSelectionMode(QAbstractItemView::MultiSelection); // Klick schaltet um
+    auto* delegate = new ThumbnailDelegate(preview_);
+    delegate->setCheckable(true);
+    preview_->setItemDelegate(delegate);
+    preview_->setToolTip(tr("Die Scans so, wie sie aufgenommen wurden. Klick wählt ab bzw. wieder an."));
+    auto* right = new QVBoxLayout;
+    count_ = new QLabel(this);
+    count_->setObjectName(QStringLiteral("importCount"));
+    auto* all = new QPushButton(tr("Alle"), this);
+    all->setObjectName(QStringLiteral("importAll"));
+    auto* none = new QPushButton(tr("Keine"), this);
+    none->setObjectName(QStringLiteral("importNone"));
+    auto* selRow = new QHBoxLayout;
+    selRow->addWidget(count_, 1);
+    selRow->addWidget(all);
+    selRow->addWidget(none);
+    right->addLayout(selRow);
+    right->addWidget(preview_, 1);
+    row->addLayout(right, 1);
+    connect(all, &QPushButton::clicked, preview_, &QListView::selectAll);
+    connect(none, &QPushButton::clicked, preview_, &QListView::clearSelection);
     layout->addLayout(row, 1);
 
     auto* buttons = new QHBoxLayout;
@@ -97,10 +118,7 @@ ImportPage::ImportPage(QWidget* parent)
     buttons->addWidget(import_);
     layout->addLayout(buttons);
 
-    connect(films_, &QButtonGroup::idClicked, this, [this](int) {
-        import_->setEnabled(true);
-        import_->setToolTip(QString());
-    });
+    connect(films_, &QButtonGroup::idClicked, this, [this](int) { updateState(); });
     connect(import_, &QPushButton::clicked, this, [this] {
         if (const auto f = film()) {
             Q_EMIT accepted(*f, detect_->isChecked());
@@ -113,19 +131,51 @@ void ImportPage::setRoll(const QString& folder, const QString& name, int frames)
 {
     title_->setText(tr("Rolle importieren: %1").arg(name));
     info_->setText(tr("%n Scan(s) in %1, zunächst unverändert gezeigt.", nullptr, frames).arg(folder) +
-                   QLatin1Char(' ') + tr("Den Filmtyp kann man später in der Übersicht ändern."));
+                   QLatin1Char(' ') + tr("Den Filmtyp kann man später auf dem Leuchttisch ändern."));
     films_->setExclusive(false);
     for (QAbstractButton* b : films_->buttons()) {
         b->setChecked(false);
     }
     films_->setExclusive(true);
-    detect_->setChecked(false);
-    import_->setEnabled(false);
+    detect_->setChecked(true);
+    preview_->selectAll();
+    updateState();
 }
 
 void ImportPage::setPreviewModel(QAbstractItemModel* m)
 {
     preview_->setModel(m);
+    connect(preview_->selectionModel(), &QItemSelectionModel::selectionChanged, this,
+            [this] { updateState(); });
+}
+
+void ImportPage::updateState()
+{
+    const int total = preview_->model() != nullptr ? preview_->model()->rowCount() : 0;
+    const auto chosen = static_cast<int>(
+        preview_->selectionModel() != nullptr ? preview_->selectionModel()->selectedIndexes().size() : 0);
+    count_->setText(tr("%1 von %2 Bildern ausgewählt").arg(chosen).arg(total));
+    const bool ok = film().has_value() && chosen > 0;
+    import_->setEnabled(ok);
+    import_->setToolTip(!film()       ? tr("Zuerst den Filmtyp wählen")
+                        : chosen == 0 ? tr("Kein Bild ausgewählt")
+                                      : QString());
+}
+
+std::vector<model::FrameId> ImportPage::excludedFrames() const
+{
+    std::vector<model::FrameId> out;
+    const QAbstractItemModel* m = preview_->model();
+    if (m == nullptr) {
+        return out;
+    }
+    for (int r = 0; r < m->rowCount(); ++r) {
+        const QModelIndex i = m->index(r, 0);
+        if (!preview_->selectionModel()->isSelected(i)) {
+            out.push_back(i.data(FilmstripModel::FrameIdRole).value<model::FrameId>());
+        }
+    }
+    return out;
 }
 
 std::optional<model::FilmType> ImportPage::film() const

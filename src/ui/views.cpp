@@ -147,6 +147,18 @@ void FilmstripModel::setFailed(const model::FrameId& f)
     }
 }
 
+void FilmstripModel::setStars(const model::FrameId& f, int stars)
+{
+    for (Item& it : all_) {
+        if (it.frame.id == f) {
+            it.frame.stars = stars;
+        }
+    }
+    if (const int r = rowOf(f); r >= 0) {
+        Q_EMIT dataChanged(index(r), index(r));
+    }
+}
+
 void FilmstripModel::setRating(const model::FrameId& f, model::Rating rating)
 {
     for (Item& it : all_) {
@@ -180,6 +192,9 @@ QVariant FilmstripModel::data(const QModelIndex& index, int role) const
     switch (role) {
     case Qt::DisplayRole: {
         QString text = QString::number(it->frame.frameNo);
+        if (it->frame.stars > 0) {
+            text += QLatin1Char(' ') + QString(it->frame.stars, QChar(0x2605)); // ★
+        }
         if (it->frame.rating == model::Rating::Keep) {
             text += QStringLiteral(" ✓");
         } else if (it->frame.rating == model::Rating::Reject) {
@@ -272,7 +287,15 @@ void ThumbnailDelegate::paint(QPainter* p, const QStyleOptionViewItem& option, c
     o.text.clear();
     o.icon = QIcon();
     o.features &= ~QStyleOptionViewItem::HasDecoration;
-    style->drawPrimitive(QStyle::PE_PanelItemViewItem, &o, p, w);
+    const bool selected = (option.state & QStyle::State_Selected) != 0;
+    if (checkable_) {
+        // ausgewählt: hellgrau hinterlegt (dunkle Oberfläche), sonst nur der Hintergrund
+        if (selected) {
+            p->fillRect(option.rect.adjusted(1, 1, -1, -1), option.palette.color(QPalette::Mid).lighter(150));
+        }
+    } else {
+        style->drawPrimitive(QStyle::PE_PanelItemViewItem, &o, p, w);
+    }
 
     const auto* view = qobject_cast<const QListView*>(w);
     const QSize box = view != nullptr ? view->iconSize() : QSize(160, 120);
@@ -303,13 +326,30 @@ void ThumbnailDelegate::paint(QPainter* p, const QStyleOptionViewItem& option, c
                          imageArea.top() + (imageArea.height() - logical.height()) / 2.0);
         p->drawPixmap(at, *it);
     }
+    if (checkable_) {
+        // Kästchen oben rechts, mit Haken wenn ausgewählt
+        const QRect checkBox(cell.right() - 20, cell.top() + 4, 16, 16);
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing);
+        p->setPen(QPen(option.palette.color(QPalette::Light), 1.5));
+        p->setBrush(selected ? option.palette.color(QPalette::Highlight)
+                             : option.palette.color(QPalette::Base));
+        p->drawRoundedRect(checkBox, 3, 3);
+        if (selected) {
+            p->setPen(QPen(option.palette.color(QPalette::HighlightedText), 2.2));
+            p->drawPolyline(QPolygonF({QPointF(checkBox.left() + 3.5, checkBox.center().y() + 0.5),
+                                       QPointF(checkBox.left() + 6.5, checkBox.bottom() - 3.5),
+                                       QPointF(checkBox.right() - 3, checkBox.top() + 4)}));
+        }
+        p->restore();
+    }
     const QRect textRect(cell.left(), imageArea.bottom() + 2, cell.width(), textHeight);
     const QVariant fg = index.data(Qt::ForegroundRole);
     p->save();
-    p->setPen(fg.canConvert<QColor>() ? fg.value<QColor>()
-                                      : option.palette.color((option.state & QStyle::State_Selected) != 0
-                                                                 ? QPalette::HighlightedText
-                                                                 : QPalette::Text));
+    p->setPen(
+        fg.canConvert<QColor>()
+            ? fg.value<QColor>()
+            : option.palette.color(selected && !checkable_ ? QPalette::HighlightedText : QPalette::Text));
     p->drawText(textRect, Qt::AlignHCenter | Qt::AlignTop, index.data(Qt::DisplayRole).toString());
     p->restore();
 }

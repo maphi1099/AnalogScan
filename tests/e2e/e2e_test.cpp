@@ -22,6 +22,7 @@
 #include "ui/views.hpp"
 
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QItemSelectionModel>
 #include <QtCore/QMimeData>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
@@ -39,6 +40,7 @@
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QListView>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QPlainTextEdit>
@@ -46,8 +48,10 @@
 #include <QtWidgets/QRadioButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QTabBar>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QTableView>
+#include <QtWidgets/QToolButton>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -175,6 +179,8 @@ protected:
     {
         ASSERT_TRUE(waitFor([this] { return window->view() == ui::MainWindow::View::Import; }));
         window->importPage()->choose(film);
+        // ohne „Automatisch konvertieren“: die Tests setzen ihre Einträge selbst (T-22)
+        window->importPage()->findChild<QCheckBox*>(QStringLiteral("detectNow"))->setChecked(false);
         ASSERT_TRUE(window->importPage()->importButton()->isEnabled());
         window->importPage()->importButton()->click();
         ASSERT_EQ(window->view(), ui::MainWindow::View::Image);
@@ -432,8 +438,9 @@ TEST_F(E2E, E_23_HistogramAndClippingWarning)
         const auto& h = window->histogram()->histogram();
         return h.clipHigh.x > 0.01 || h.clipHigh.y > 0.01 || h.clipHigh.z > 0.01;
     })) << "starke Belichtung muss Lichter beschneiden";
-    action("clipping")->trigger();
-    EXPECT_TRUE(action("clipping")->isChecked());
+    // Die Beschnittwarnung im Bild entfällt auf Wunsch des Nutzers (K-M10-12); der Beschnitt
+    // bleibt im Histogramm sichtbar
+    EXPECT_EQ(action("clipping"), nullptr);
 }
 
 // E-25: LF-BAT-02, LF-BAT-03, LF-BAT-06, LF-LST-07
@@ -1050,6 +1057,88 @@ TEST_F(E2E, M10_ImportScreenThenViewsAndFilmTypes)
     window->openFolder(rollDir);
     ASSERT_TRUE(waitFor([this] { return window->rollOpen(); }));
     EXPECT_EQ(window->view(), ui::MainWindow::View::Image);
+}
+
+// K-M10-12 (Wunsch des Nutzers): beim Import einzelne Scans abwählen; sie gehören danach nicht
+// zur Rolle, auch nicht nach dem Wiederöffnen
+TEST_F(E2E, M10_ImportWithoutDeselectedScans)
+{
+    rollDir = tmp.path() / "rolle";
+    writeRoll(rollDir, 4);
+    launch();
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->view() == ui::MainWindow::View::Import; }));
+    QListView* preview = window->importPage()->preview();
+    EXPECT_EQ(preview->selectionModel()->selectedIndexes().size(), 4); // anfangs alle gewählt
+    preview->selectionModel()->select(preview->model()->index(1, 0), QItemSelectionModel::Deselect);
+    importAs(model::FilmType::ColorNegative);
+    EXPECT_EQ(window->filmstrip()->model()->rowCount(), 3);
+    std::ifstream rollFile(rollDir / "roll.autoneg.json");
+    const std::string rollJson((std::istreambuf_iterator<char>(rollFile)), std::istreambuf_iterator<char>());
+    EXPECT_NE(rollJson.find("SCAN0002.tif"), std::string::npos) << rollJson;
+    restart();
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->rollOpen(); }));
+    EXPECT_EQ(window->filmstrip()->model()->rowCount(), 3);
+    EXPECT_TRUE(fs::exists(rollDir / "SCAN0002.tif")); // der Scan selbst bleibt unberührt
+}
+
+// K-M10-12 (Wunsch des Nutzers): Reiter Leuchttisch/Entwickeln schließen und über Fenster wieder
+// öffnen; Sterne und Verwerfen am Filmstreifen; Einstellungen mit einem Klick auf alle
+// übernehmen (ohne Zuschnitt); Export aller Bilder vom Leuchttisch
+TEST_F(E2E, M10_LightTableTabsRatingApplyAllAndExport)
+{
+    start(3);
+    QTabBar* tabs = window->viewTabs();
+    ASSERT_EQ(tabs->count(), 2);
+    EXPECT_EQ(tabs->tabText(0), QStringLiteral("Leuchttisch"));
+    EXPECT_EQ(tabs->tabText(1), QStringLiteral("Entwickeln"));
+    window->closeView(ui::MainWindow::View::Image);
+    EXPECT_EQ(tabs->count(), 1);
+    EXPECT_EQ(window->view(), ui::MainWindow::View::Overview);
+    window->closeView(ui::MainWindow::View::Overview);
+    EXPECT_EQ(window->view(), ui::MainWindow::View::None);
+    action("viewImage")->trigger();
+    EXPECT_EQ(tabs->count(), 1);
+    EXPECT_EQ(window->view(), ui::MainWindow::View::Image);
+    action("viewOverview")->trigger();
+    EXPECT_EQ(tabs->count(), 2);
+    EXPECT_EQ(tabs->tabText(0), QStringLiteral("Leuchttisch"));
+    action("viewImage")->trigger();
+
+    // Sterne und Verwerfen für das aktive Bild
+    const model::FrameId first = window->filmstrip()->stripModel()->itemAt(0)->frame.id;
+    window->filmstrip()->selectFrame(first);
+    window->findChild<QToolButton*>(QStringLiteral("stars3"))->click();
+    EXPECT_EQ(window->filmstrip()->stripModel()->itemAt(0)->frame.stars, 3);
+    window->findChild<QToolButton*>(QStringLiteral("rejectButton"))->click();
+    EXPECT_EQ(window->filmstrip()->stripModel()->itemAt(0)->frame.rating, model::Rating::Reject);
+
+    // Belichtung und Zuschnitt am ersten Bild, dann auf alle übernehmen
+    Q_EMIT window->adjustPanel()->slider("autoneg.exposure", "ev")->committed(0.7);
+    model::EditEntry crop;
+    crop.step = model::StepId("autoneg.crop");
+    crop.params = model::ParamSet{}.with("rect", model::NormRect{0.1, 0.1, 0.8, 0.8});
+    window->controller().apply(std::make_unique<application::SetEntryCommand>(crop));
+    window->findChild<QPushButton*>(QStringLiteral("applyToAll"))->click();
+    for (int r = 1; r < 3; ++r) {
+        window->selectFrame(window->filmstrip()->stripModel()->itemAt(r)->frame.id);
+        ASSERT_NE(entry("autoneg.exposure"), nullptr) << r;
+        EXPECT_EQ(entry("autoneg.exposure")->origin, model::Origin::Copied);
+        EXPECT_EQ(entry("autoneg.crop"), nullptr) << "Zuschnitt gehört zum einzelnen Bild";
+    }
+
+    // Leuchttisch: alle exportieren, ohne Dialog
+    action("viewOverview")->trigger();
+    const fs::path target = rollDir / "export";
+    window->findChild<QPushButton*>(QStringLiteral("exportAll"))->click();
+    ASSERT_TRUE(waitFor(
+        [&] {
+            std::error_code ec;
+            return fs::exists(target, ec) &&
+                   std::distance(fs::directory_iterator(target), fs::directory_iterator()) == 3;
+        },
+        60000));
 }
 
 // K-M10-08: Abbrechen auf dem Import-Bildschirm schließt die Rolle wieder

@@ -96,6 +96,9 @@ base::Expected<OpenedRoll> RollService::open(const fs::path& folder, const image
             return base::makeError(base::ErrorCode::Cancelled, "Öffnen abgebrochen");
         }
         const fs::path& p = files[static_cast<std::size_t>(i)];
+        if (std::ranges::find(out.roll.excluded, p.filename().string()) != out.roll.excluded.end()) {
+            continue; // beim Import abgewählt
+        }
         OpenedFrame of;
         of.frame.path = p;
         of.frame.roll = out.roll.id;
@@ -116,6 +119,7 @@ base::Expected<OpenedRoll> RollService::open(const fs::path& folder, const image
                 of.data = **loaded;
                 of.stored = true;
                 of.frame.rating = of.data.rating;
+                of.frame.stars = of.data.stars;
                 if (of.data.frameNo > 0) {
                     of.frame.frameNo = of.data.frameNo;
                 }
