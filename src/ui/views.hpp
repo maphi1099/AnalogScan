@@ -142,9 +142,6 @@ public:
 Q_SIGNALS:
     void openFrame(const autoneg::model::FrameId& f);
 
-protected:
-    void mousePressEvent(QMouseEvent* e) override;
-
 private:
     FilmstripModel* model_ = nullptr;
 };

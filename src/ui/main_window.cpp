@@ -577,25 +577,28 @@ void MainWindow::buildUi()
     // jede Automatik macht nur ihren Schritt
     // Schalter: an = Automatik für die markierten Bilder, aus = Schritt wieder entfernen
     connect(conversion_, &ConversionPanel::autoFrameToggled, this, [this](bool on) {
+        removeSteps({id::crop, id::rotation}); // auch einen eigenen Zuschnitt ersetzen
         if (on) {
             showFrameAfterDetect_ = s_.session.current; // erkannten Rahmen zeigen, ziehbar
             detect(targets(), tr("Bildfeld erkennen"), application::AnalysisService::Frame);
-        } else {
-            removeSteps({id::crop, id::rotation});
         }
     });
     connect(conversion_, &ConversionPanel::autoBaseToggled, this, [this](bool on) {
+        conversion_->setPickActive(false);
         setTool(0); // zurück zum zugeschnittenen Bild
+        // vorhandene Basis (auch die gemessene) entfernen: die Automatik überschreibt keine
+        // Einträge des Anwenders, sonst bliebe die alte Basis stehen
+        removeSteps({id::filmbase});
         if (on) {
-            detect(targets(), tr("Basis messen"), application::AnalysisService::Base); // ersetzt Basis messen
-        } else {
-            removeSteps({id::filmbase});
+            detect(targets(), tr("Basis messen"), application::AnalysisService::Base);
         }
     });
     connect(conversion_, &ConversionPanel::pickBaseToggled, this, [this](bool on) {
         if (on) {
+            removeSteps({id::filmbase}); // ersetzt die automatische Basis: nie beide zugleich
             conversion_->setPickActive(true);
-            setTool(2); // ganzes Bild, Rechteck ziehen; ersetzt die automatische Basis
+            conversion_->bindList(ui_->currentList());
+            setTool(2); // ganzes Bild, Rechteck ziehen
         } else {
             conversion_->setPickActive(false);
             setTool(0);
@@ -1786,6 +1789,7 @@ void MainWindow::trackJob(application::JobHandle h, const QString& what)
         }
         timer->stop();
         timer->deleteLater();
+        refreshCurrent(); // Schalter zeigen, was tatsächlich eingetragen ist
         std::erase_if(running_, [](const application::JobHandle& j) { return j.done(); });
         if (std::ranges::none_of(running_, [](const application::JobHandle& j) { return !j.done(); })) {
             progress_->hide();

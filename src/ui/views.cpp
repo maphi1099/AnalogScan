@@ -343,7 +343,7 @@ void ThumbnailDelegate::paint(QPainter* p, const QStyleOptionViewItem& option, c
                          imageArea.top() + (imageArea.height() - logical.height()) / 2.0);
         p->drawPixmap(at, *it);
     }
-    if (index.data(FilmstripModel::ActiveRole).toBool()) {
+    if (checkable_ && index.data(FilmstripModel::ActiveRole).toBool()) { // nur im Filmstreifen
         // geöffnetes Bild: farbiger Rahmen
         p->save();
         p->setPen(QPen(option.palette.color(QPalette::Highlight), 3));
@@ -394,9 +394,7 @@ OverviewView::OverviewView(QWidget* parent)
     setUniformItemSizes(true);
     setSelectionMode(QAbstractItemView::ExtendedSelection);
     setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    auto* delegate = new ThumbnailDelegate(this);
-    delegate->setCheckable(true);
-    setItemDelegate(delegate);
+    setItemDelegate(new ThumbnailDelegate(this)); // Leuchttisch: normale Auswahl, keine Kästchen
     setObjectName(QStringLiteral("overview"));
     connect(this, &QListView::doubleClicked, this, [this](const QModelIndex& i) {
         if (model_ != nullptr) {
@@ -446,13 +444,6 @@ bool toggleByCheckBox(QListView* view, QMouseEvent* e)
 } // namespace
 
 void FilmstripView::mousePressEvent(QMouseEvent* e)
-{
-    if (!toggleByCheckBox(this, e)) {
-        QListView::mousePressEvent(e);
-    }
-}
-
-void OverviewView::mousePressEvent(QMouseEvent* e)
 {
     if (!toggleByCheckBox(this, e)) {
         QListView::mousePressEvent(e);

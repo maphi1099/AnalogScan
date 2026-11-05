@@ -1166,6 +1166,40 @@ TEST_F(E2E, M10_FilmstripSelectsLikeExplorer)
     EXPECT_EQ(window->controller().session().current, strip->stripModel()->itemAt(2)->frame.id);
 }
 
+// K-M10-15 (Fehler des Nutzers: Auto-Basis ging nicht, beide Basis-Schalter gleichzeitig an):
+// Auto-Basis und Basis messen schließen sich aus; Auto-Basis ersetzt auch eine gemessene Basis
+TEST_F(E2E, M10_AutoBaseAndPickBaseExclusive)
+{
+    start(2);
+    auto* autoBase = window->findChild<QPushButton*>(QStringLiteral("autoBase"));
+    auto* pickBase = window->findChild<QPushButton*>(QStringLiteral("pickBase"));
+    // gemessene Basis wie nach "Basis messen"
+    model::EditEntry manual;
+    manual.step = model::StepId("autoneg.filmbase");
+    manual.params =
+        model::ParamSet{}.with("base", base::Vec3{0.5, 0.3, 0.2}).with("source", std::string("manual"));
+    window->controller().apply(std::make_unique<application::SetEntryCommand>(manual));
+    ASSERT_TRUE(pickBase->isChecked());
+    EXPECT_FALSE(autoBase->isChecked());
+    autoBase->click();
+    ASSERT_TRUE(waitFor(
+        [&] {
+            const model::EditEntry* e = entry("autoneg.filmbase");
+            return e != nullptr && e->origin == model::Origin::Automatic;
+        },
+        30000))
+        << "Auto-Basis ersetzt die gemessene Basis";
+    EXPECT_TRUE(autoBase->isChecked());
+    EXPECT_FALSE(pickBase->isChecked());
+    pickBase->click(); // Basis messen: automatische Basis weg, nur dieser Schalter an
+    EXPECT_EQ(entry("autoneg.filmbase"), nullptr);
+    EXPECT_TRUE(pickBase->isChecked());
+    EXPECT_FALSE(autoBase->isChecked());
+    pickBase->click(); // abwählen
+    EXPECT_FALSE(pickBase->isChecked());
+    EXPECT_FALSE(autoBase->isChecked());
+}
+
 // K-M10-08: Abbrechen auf dem Import-Bildschirm schließt die Rolle wieder
 TEST_F(E2E, M10_ImportCancelClosesRoll)
 {

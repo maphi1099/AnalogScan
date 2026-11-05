@@ -459,7 +459,7 @@ void ConversionPanel::bindList(const model::EditList& l)
         base != nullptr && base->params.get<std::string>("source").value_or("") == "manual";
     autoFrame_->setChecked(crop != nullptr && crop->origin == model::Origin::Automatic);
     autoBase_->setChecked(base != nullptr && !manualBase);
-    pickBase_->setChecked(manualBase || pickActive_);
+    pickBase_->setChecked(!autoBase_->isChecked() && (manualBase || pickActive_));
     convert_->setChecked(conv != nullptr && conv->enabled && conv->params.get<bool>("on").value_or(false));
     // Der Filmtyp hängt auch vom Rollen-Standard ab und kommt über setFilm
 }
