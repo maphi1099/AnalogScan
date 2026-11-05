@@ -290,7 +290,7 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 
 - K-M10-18: `autoneg-cli` entfernt (Komposition jetzt `apps/autoneg/composition.*`, Lasttest K-16 in `tests/component/stress`), Build-Struktur `build/<Bau>/autoneg` + `installer`, Installer als CMake-Ziel, entfernt: `build_installer.ps1`, `tools/visual_check`, `tests/tools/render_pfm`, `prototypes/oe01-benchmark`.
 - K-M10-17 (Basis je Kanal/Farbton, Vorschau nach Zuschnitt), K-M10-19 (Pipette, Modus der Autokonvertierung, Messbereich, Grenzen beim Laden).
-- Tests neu: T-26, T-28. Windows: alle Tests grün. Linux: siehe unten.
+- Tests neu: T-26, T-28. Windows Debug: 343/343. Linux Debug, Release, GCC, ASan: je 343/343, TSan (ohne GUI) 289/289. Installer Windows und Linux gebaut; die Linux-Oberfläche wurde nicht von Hand bedient.
 - Planung: Lastenheft 0.6, Architektur 0.4 und Handbuch als `.tex` aktualisiert (nicht gesetzt, kein LaTeX installiert).
 - Reflexion: `../Planning/reflexion_autoneg.tex` (Fehler, Schwächen, Testbewertung, Verbesserungsliste zum Ankreuzen).
 
