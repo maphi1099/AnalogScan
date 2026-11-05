@@ -17,13 +17,13 @@ using pipeline::Phase;
 // --- Filmtyp ---------------------------------------------------------------------------------
 
 FilmModeStep::FilmModeStep()
-    : d_(describe(id::filmmode, rank::filmmode, "Filmtyp", Phase::Conversion, {stringParam("type", "color")},
-                  pipeline::FilmTypeMask::any()))
+    : d_(describe(id::filmmode, rank::filmmode, "Filmtyp", Phase::Conversion,
+                  {stringParam(key::type, "color")}, pipeline::FilmTypeMask::any()))
 {}
 
 base::Expected<void> FilmModeStep::validate(const model::ParamSet& p) const
 {
-    const std::string t = param(p, "type", std::string("color"));
+    const std::string t = param(p, key::type, std::string("color"));
     if (t != "color" && t != "bw" && t != "slide") {
         return base::makeError(base::ErrorCode::InvalidArgument, "Unbekannter Filmtyp '" + t + "'");
     }
@@ -32,13 +32,13 @@ base::Expected<void> FilmModeStep::validate(const model::ParamSet& p) const
 
 void FilmModeStep::configure(pipeline::StepContext& ctx, const model::ParamSet& p) const
 {
-    ctx.film = fromString(param(p, "type", std::string("color")));
+    ctx.film = fromString(param(p, key::type, std::string("color")));
 }
 
 ConvertStep::ConvertStep()
     : d_(describe(id::convert, rank::convert, "Konvertierung", Phase::Conversion,
-                  {boolParam("on", false), boolParam("auto", false)}, pipeline::FilmTypeMask::any(),
-                  Options{.neededToInvert = true}))
+                  {boolParam(key::on, false), boolParam(key::automatic, false)},
+                  pipeline::FilmTypeMask::any(), Options{.neededToInvert = true}))
 {}
 
 model::FilmType FilmModeStep::fromString(std::string_view t) noexcept
@@ -54,7 +54,7 @@ model::FilmType FilmModeStep::effective(const model::EditList& l, model::FilmTyp
     if (e == nullptr || !e->enabled) {
         return rollDefault;
     }
-    return fromString(e->params.get<std::string>("type").value_or("color"));
+    return fromString(e->params.get<std::string>(key::type).value_or("color"));
 }
 
 const char* FilmModeStep::toString(model::FilmType t) noexcept
@@ -75,27 +75,28 @@ const char* FilmModeStep::toString(model::FilmType t) noexcept
 // --- Geometrie -------------------------------------------------------------------------------
 
 OrientationStep::OrientationStep()
-    : DescribedGeometric(
-          describe(id::orientation, rank::orientation, "Orientierung", Phase::Geometry,
-                   {intParam("quarterTurns", 0, 0, 3), boolParam("flipH", false), boolParam("flipV", false)},
-                   pipeline::FilmTypeMask::any()))
+    : DescribedGeometric(describe(
+          id::orientation, rank::orientation, "Orientierung", Phase::Geometry,
+          {intParam(key::quarterTurns, 0, 0, 3), boolParam(key::flipH, false), boolParam(key::flipV, false)},
+          pipeline::FilmTypeMask::any()))
 {}
 
 void OrientationStep::emit(pipeline::WarpBuilder& b, const model::ParamSet& p,
                            const pipeline::StepContext& /*ctx*/) const
 {
-    b.orient(param(p, "quarterTurns", 0), param(p, "flipH", false), param(p, "flipV", false));
+    b.orient(param(p, key::quarterTurns, 0), param(p, key::flipH, false), param(p, key::flipV, false));
 }
 
 RotationStep::RotationStep()
-    : DescribedGeometric(describe(id::rotation, rank::rotation, "Feindrehung", Phase::Geometry,
-                                  {doubleParam("angle", 0.0, -45.0, 45.0, "°"), boolParam("autoFill", true)},
-                                  pipeline::FilmTypeMask::any()))
+    : DescribedGeometric(
+          describe(id::rotation, rank::rotation, "Feindrehung", Phase::Geometry,
+                   {doubleParam(key::angle, 0.0, -45.0, 45.0, "°"), boolParam(key::autoFill, true)},
+                   pipeline::FilmTypeMask::any()))
 {}
 
 bool RotationStep::isNeutral(const model::ParamSet& p) const
 {
-    return param(p, "angle", 0.0) == 0.0;
+    return param(p, key::angle, 0.0) == 0.0;
 }
 
 double RotationStep::fillScale(double width, double height, double degrees)
@@ -109,9 +110,9 @@ double RotationStep::fillScale(double width, double height, double degrees)
 void RotationStep::emit(pipeline::WarpBuilder& b, const model::ParamSet& p,
                         const pipeline::StepContext& /*ctx*/) const
 {
-    const double angle = param(p, "angle", 0.0);
+    const double angle = param(p, key::angle, 0.0);
     b.rotate(angle);
-    if (param(p, "autoFill", true)) {
+    if (param(p, key::autoFill, true)) {
         const base::Point2 c = b.canvas();
         const double s = fillScale(c.x, c.y, angle);
         b.crop({(1.0 - s) / 2.0, (1.0 - s) / 2.0, s, s});
@@ -119,16 +120,16 @@ void RotationStep::emit(pipeline::WarpBuilder& b, const model::ParamSet& p,
 }
 
 CropStep::CropStep()
-    : DescribedGeometric(
-          describe(id::crop, rank::crop, "Zuschnitt", Phase::Geometry,
-                   {rectParam("rect"), stringParam("aspect", ""), doubleParam("inset", 0.0, 0.0, 0.1, "")},
-                   pipeline::FilmTypeMask::any()))
+    : DescribedGeometric(describe(
+          id::crop, rank::crop, "Zuschnitt", Phase::Geometry,
+          {rectParam(key::rect), stringParam(key::aspect, ""), doubleParam(key::inset, 0.0, 0.0, 0.1, "")},
+          pipeline::FilmTypeMask::any()))
 {}
 
 bool CropStep::isNeutral(const model::ParamSet& p) const
 {
-    return param(p, "rect", model::NormRect::full()) == model::NormRect::full() &&
-           param(p, "inset", 0.0) == 0.0;
+    return param(p, key::rect, model::NormRect::full()) == model::NormRect::full() &&
+           param(p, key::inset, 0.0) == 0.0;
 }
 
 model::NormRect CropStep::applyInset(const model::NormRect& rect, double inset, base::Point2 canvas)
@@ -159,8 +160,8 @@ model::NormRect CropStep::fitAspect(const model::NormRect& rect, double aw, doub
 void CropStep::emit(pipeline::WarpBuilder& b, const model::ParamSet& p,
                     const pipeline::StepContext& /*ctx*/) const
 {
-    const model::NormRect rect = param(p, "rect", model::NormRect::full());
-    b.crop(applyInset(rect, param(p, "inset", 0.0), b.canvas()));
+    const model::NormRect rect = param(p, key::rect, model::NormRect::full());
+    b.crop(applyInset(rect, param(p, key::inset, 0.0), b.canvas()));
 }
 
 // --- Leuchtfläche ------------------------------------------------------------------------------
@@ -246,7 +247,7 @@ FlatFieldCache::gainMap(const std::string& id, base::Size size, ports::IComputeB
 
 FlatFieldStep::FlatFieldStep(FlatFieldCache& cache)
     : DescribedRegion(describe(id::flatfield, rank::flatfield, "Leuchtflächenkorrektur", Phase::Source,
-                               {stringParam("profile", "")}, pipeline::FilmTypeMask::any(),
+                               {stringParam(key::profile, "")}, pipeline::FilmTypeMask::any(),
                                Options{.cacheAfter = true}))
     , cache_(cache)
 {}
@@ -259,7 +260,7 @@ int FlatFieldStep::halo(const model::ParamSet& /*p*/, double /*scale*/, base::Si
 base::Expected<image::ImageBuffer>
 FlatFieldStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, const model::ParamSet& p) const
 {
-    const std::string profile = param(p, "profile", std::string());
+    const std::string profile = param(p, key::profile, std::string());
     auto gain = cache_.gainMap(profile, x.imageSize, x.backend, x.kernel());
     if (!gain) {
         return std::unexpected(gain.error());
@@ -278,14 +279,14 @@ FlatFieldStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, c
 
 RetouchStep::RetouchStep()
     : DescribedRegion(describe(id::retouch, rank::retouch, "Staubretusche", Phase::Geometry,
-                               {spotsParam("spots")}, pipeline::FilmTypeMask::any(),
+                               {spotsParam(key::spots)}, pipeline::FilmTypeMask::any(),
                                Options{.cacheAfter = true}))
 {}
 
 int RetouchStep::halo(const model::ParamSet& p, double /*scale*/, base::Size image) const
 {
     int h = 0;
-    for (const model::Spot& s : param(p, "spots", model::SpotList{})) {
+    for (const model::Spot& s : param(p, key::spots, model::SpotList{})) {
         const double r = s.radius * image.width;
         const double reach =
             r + std::max(std::abs(s.offset.x) * image.width, std::abs(s.offset.y) * image.height);
@@ -314,7 +315,7 @@ model::SpotList RetouchStep::toTile(const model::SpotList& spots, base::Size ima
 base::Expected<image::ImageBuffer>
 RetouchStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, const model::ParamSet& p) const
 {
-    const model::SpotList spots = param(p, "spots", model::SpotList{});
+    const model::SpotList spots = param(p, key::spots, model::SpotList{});
     if (x.tile) {
         return x.backend.inpaint(x.kernel(), in, toTile(spots, x.imageSize, x.tile->padded));
     }
@@ -324,20 +325,20 @@ RetouchStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, con
 // --- Lichter und Tiefen, Rauschen, Schärfen ----------------------------------------------
 
 ShadowsHighlightsStep::ShadowsHighlightsStep()
-    : DescribedRegion(
-          describe(id::shadowshighlights, rank::shadowshighlights, "Lichter und Tiefen", Phase::Finishing,
-                   {doubleParam("shadows", 0.0, 0.0, 1.0, ""), doubleParam("highlights", 0.0, 0.0, 1.0, ""),
-                    doubleParam("radius", 30.0, 1.0, 200.0, "px")}))
+    : DescribedRegion(describe(
+          id::shadowshighlights, rank::shadowshighlights, "Lichter und Tiefen", Phase::Finishing,
+          {doubleParam(key::shadows, 0.0, 0.0, 1.0, ""), doubleParam(key::highlights, 0.0, 0.0, 1.0, ""),
+           doubleParam(key::radius, 30.0, 1.0, 200.0, "px")}))
 {}
 
 bool ShadowsHighlightsStep::isNeutral(const model::ParamSet& p) const
 {
-    return param(p, "shadows", 0.0) == 0.0 && param(p, "highlights", 0.0) == 0.0;
+    return param(p, key::shadows, 0.0) == 0.0 && param(p, key::highlights, 0.0) == 0.0;
 }
 
 int ShadowsHighlightsStep::halo(const model::ParamSet& p, double scale, base::Size /*image*/) const
 {
-    const int q = std::max(1, static_cast<int>(std::lround(param(p, "radius", 30.0) * scale)));
+    const int q = std::max(1, static_cast<int>(std::lround(param(p, key::radius, 30.0) * scale)));
     return 2 * q + 1; // Guided Filter: zweimal Box mit Radius q
 }
 
@@ -345,14 +346,14 @@ base::Expected<image::ImageBuffer> ShadowsHighlightsStep::process(pipeline::Exec
                                                                   const image::ImageBuffer& in,
                                                                   const model::ParamSet& p) const
 {
-    return x.backend.localTone(x.kernel(), in, static_cast<float>(param(p, "shadows", 0.0)),
-                               static_cast<float>(param(p, "highlights", 0.0)),
-                               static_cast<float>(param(p, "radius", 30.0) * x.scale));
+    return x.backend.localTone(x.kernel(), in, static_cast<float>(param(p, key::shadows, 0.0)),
+                               static_cast<float>(param(p, key::highlights, 0.0)),
+                               static_cast<float>(param(p, key::radius, 30.0) * x.scale));
 }
 
 DenoiseStep::DenoiseStep()
     : DescribedRegion(describe(id::denoise, rank::denoise, "Rauschminderung", Phase::Output,
-                               {doubleParam("strength", 0.0, 0.0, 1.0, "")}))
+                               {doubleParam(key::strength, 0.0, 0.0, 1.0, "")}))
 {}
 
 int DenoiseStep::halo(const model::ParamSet& /*p*/, double /*scale*/, base::Size /*image*/) const
@@ -363,32 +364,32 @@ int DenoiseStep::halo(const model::ParamSet& /*p*/, double /*scale*/, base::Size
 base::Expected<image::ImageBuffer>
 DenoiseStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, const model::ParamSet& p) const
 {
-    return x.backend.denoise(x.kernel(), in, static_cast<float>(param(p, "strength", 0.0)));
+    return x.backend.denoise(x.kernel(), in, static_cast<float>(param(p, key::strength, 0.0)));
 }
 
 SharpenStep::SharpenStep()
-    : DescribedRegion(
-          describe(id::sharpen, rank::sharpen, "Schärfen", Phase::Output,
-                   {doubleParam("amount", 0.0, 0.0, 3.0, ""), doubleParam("radius", 1.0, 0.3, 5.0, "px"),
-                    doubleParam("threshold", 0.0, 0.0, 0.1, "")}))
+    : DescribedRegion(describe(id::sharpen, rank::sharpen, "Schärfen", Phase::Output,
+                               {doubleParam(key::amount, 0.0, 0.0, 3.0, ""),
+                                doubleParam(key::radius, 1.0, 0.3, 5.0, "px"),
+                                doubleParam(key::threshold, 0.0, 0.0, 0.1, "")}))
 {}
 
 bool SharpenStep::isNeutral(const model::ParamSet& p) const
 {
-    return param(p, "amount", 0.0) == 0.0;
+    return param(p, key::amount, 0.0) == 0.0;
 }
 
 int SharpenStep::halo(const model::ParamSet& p, double scale, base::Size /*image*/) const
 {
-    return std::max(1, static_cast<int>(std::ceil(3.0 * param(p, "radius", 1.0) * scale)));
+    return std::max(1, static_cast<int>(std::ceil(3.0 * param(p, key::radius, 1.0) * scale)));
 }
 
 base::Expected<image::ImageBuffer>
 SharpenStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, const model::ParamSet& p) const
 {
-    return x.backend.unsharp(x.kernel(), in, static_cast<float>(param(p, "amount", 0.0)),
-                             static_cast<float>(param(p, "radius", 1.0) * x.scale),
-                             static_cast<float>(param(p, "threshold", 0.0)));
+    return x.backend.unsharp(x.kernel(), in, static_cast<float>(param(p, key::amount, 0.0)),
+                             static_cast<float>(param(p, key::radius, 1.0) * x.scale),
+                             static_cast<float>(param(p, key::threshold, 0.0)));
 }
 
 } // namespace autoneg::steps

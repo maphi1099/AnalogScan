@@ -1,9 +1,13 @@
 #include "application/commands.hpp"
 
+#include "steps/step_ids.hpp"
+
 #include <algorithm>
 #include <array>
 
 namespace autoneg::application {
+
+namespace id = steps::id;
 
 namespace {
 
@@ -21,8 +25,8 @@ model::EditEntry normalized(model::EditEntry e, const pipeline::StepRegistry& re
 
 bool isFrameSpecific(const model::StepId& step)
 {
-    static const std::array<std::string_view, 5> ids{"autoneg.crop", "autoneg.rotation", "autoneg.filmbase",
-                                                     "autoneg.densityrange", "autoneg.retouch"};
+    static const std::array<std::string_view, 5> ids{id::crop, id::rotation, id::filmbase, id::densityrange,
+                                                     id::retouch};
     return std::ranges::find(ids, step.value()) != ids.end();
 }
 
@@ -74,7 +78,7 @@ std::set<model::StepId> PasteCommand::redetect() const
     std::set<model::StepId> out;
     if (mode_ == PasteMode::Redetect) {
         for (const model::StepId& s : selection_) {
-            if (s.value() == "autoneg.crop" || s.value() == "autoneg.filmbase") {
+            if (s.value() == id::crop || s.value() == id::filmbase) {
                 out.insert(s);
             }
         }

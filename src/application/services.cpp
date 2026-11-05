@@ -2,6 +2,7 @@
 
 #include "analysis/tone.hpp"
 #include "steps/other_steps.hpp"
+#include "steps/step_ids.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,6 +16,9 @@
 #include <vector>
 
 namespace autoneg::application {
+
+namespace id = steps::id;
+namespace key = steps::key;
 
 namespace {
 
@@ -41,10 +45,10 @@ ports::ParamKind kindOf(pipeline::ParamType t)
     return ports::ParamKind::Double;
 }
 
-model::EditEntry automatic(const char* step, model::ParamSet p)
+model::EditEntry automatic(std::string_view step, model::ParamSet p)
 {
     model::EditEntry e;
-    e.step = model::StepId(step);
+    e.step = steps::stepId(step);
     e.params = std::move(p);
     e.origin = model::Origin::Automatic;
     return e;
@@ -203,19 +207,19 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
             const model::NormRect& r = d->frame;
             const model::NormRect crop{r.x + 0.01 * r.w, r.y + 0.01 * r.h, 0.98 * r.w, 0.98 * r.h};
             if ((parts_ & Frame) != 0) {
-                entries.push_back(automatic("autoneg.crop", model::ParamSet{}.with("rect", crop)));
+                entries.push_back(automatic(id::crop, model::ParamSet{}.with(key::rect, crop)));
                 if (std::abs(d->angleDeg) >= 0.01) {
-                    entries.push_back(
-                        automatic("autoneg.rotation",
-                                  model::ParamSet{}.with("angle", d->angleDeg).with("autoFill", false)));
+                    entries.push_back(automatic(
+                        id::rotation,
+                        model::ParamSet{}.with(key::angle, d->angleDeg).with(key::autoFill, false)));
                 }
             }
             if (film != model::FilmType::Slide && (parts_ & (Base | Levels)) != 0) {
                 // Basis: neu messen oder die vorhandene des Bilds
                 std::optional<base::Vec3> base;
-                const model::EditEntry* own = current_.get(model::StepId("autoneg.filmbase"));
+                const model::EditEntry* own = current_.get(steps::stepId(id::filmbase));
                 if ((parts_ & Base) == 0 && own != nullptr) {
-                    if (auto v = own->params.get<base::Vec3>("base")) {
+                    if (auto v = own->params.get<base::Vec3>(key::base)) {
                         base = *v;
                     }
                 }
@@ -232,32 +236,32 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                             hints.emplace_back("Filmrand ungleichmäßig (Fehlfarben), Basis prüfen");
                         }
                         if ((parts_ & Base) != 0) {
-                            model::ParamSet p = model::ParamSet{}.with("base", b->transmission);
+                            model::ParamSet p = model::ParamSet{}.with(key::base, b->transmission);
                             if (!d->regions.rebate().empty()) {
-                                p = p.with("area", d->regions.rebate().front()); // Messbereich
+                                p = p.with(key::area, d->regions.rebate().front()); // Messbereich
                             }
-                            entries.push_back(automatic("autoneg.filmbase", std::move(p)));
+                            entries.push_back(automatic(id::filmbase, std::move(p)));
                         }
                     }
                 }
                 // Tonwerte im Bildfeld: vorhandener Zuschnitt des Bilds, sonst der erkannte
                 model::NormRect area = crop;
-                if (const model::EditEntry* c2 = current_.get(model::StepId("autoneg.crop"));
+                if (const model::EditEntry* c2 = current_.get(steps::stepId(id::crop));
                     c2 != nullptr && (parts_ & Frame) == 0) {
-                    area = c2->params.get<model::NormRect>("rect").value_or(crop);
+                    area = c2->params.get<model::NormRect>(key::rect).value_or(crop);
                 }
                 if ((parts_ & Levels) != 0 && base) {
                     if (auto levels = negativeLevels(*img, area, *base)) {
                         entries.push_back(automatic(
-                            "autoneg.densityrange",
-                            model::ParamSet{}.with("dMin", levels->dMin).with("dMax", levels->dMax)));
+                            id::densityrange,
+                            model::ParamSet{}.with(key::dMin, levels->dMin).with(key::dMax, levels->dMax)));
                     }
                 }
             }
             if ((parts_ & Convert) != 0) {
                 // "auto": aus der Autokonvertierung, nicht vom Schalter Konvertieren
-                entries.push_back(automatic("autoneg.convert",
-                                            model::ParamSet{}.with("on", true).with("auto", parts_ == All)));
+                entries.push_back(automatic(
+                    id::convert, model::ParamSet{}.with(key::on, true).with(key::automatic, parts_ == All)));
             }
             c.progress(1, 1);
             // Ergebnis im UI-Thread über den CommandBus eintragen
@@ -320,11 +324,11 @@ JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<co
             }
             c.progress(1, 1);
             model::EditEntry e;
-            e.step = model::StepId("autoneg.filmbase");
+            e.step = steps::stepId(id::filmbase);
             e.params = model::ParamSet{}
-                           .with("base", b->transmission)
-                           .with("source", std::string("manual"))
-                           .with("area", rect_); // Messbereich
+                           .with(key::base, b->transmission)
+                           .with(key::source, std::string("manual"))
+                           .with(key::area, rect_); // Messbereich
             ui_([&bus = bus_, id = f_.id, roll = roll_, e = std::move(e)] {
                 const std::vector<model::FrameId> target{id};
                 bus.execute(SetEntryCommand(e), target, roll ? *roll : model::Roll{});

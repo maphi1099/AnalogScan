@@ -9,8 +9,8 @@
 #include "ui/edit_list_model.hpp"
 #include "ui/image_canvas.hpp"
 #include "ui/import_page.hpp"
-#include "ui/translations.hpp"
 #include "ui/panels.hpp"
+#include "ui/translations.hpp"
 #include "ui/views.hpp"
 
 #include <QtCore/QMimeData>
@@ -54,6 +54,7 @@
 namespace autoneg::ui {
 
 namespace id = steps::id;
+namespace key = steps::key;
 
 namespace {
 
@@ -97,7 +98,7 @@ private:
     std::function<base::Expected<void>()> f_;
 };
 
-model::EditEntry entryWith(const model::EditList& l, std::string_view step, const std::string& name,
+model::EditEntry entryWith(const model::EditList& l, std::string_view step, std::string_view name,
                            model::ParamValue v)
 {
     model::EditEntry e;
@@ -153,12 +154,12 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
     defaultLayout_ = saveState();
     applyFrameHint();
     // QPointer: Meldungen können nach dem Schließen des Fensters ankommen
-    s_.analysis.setReport(
-        [self = QPointer<MainWindow>(this)](const model::FrameId& f, application::AnalysisService::FrameReport r) {
-            if (self) {
-                self->onFrameReport(f, r);
-            }
-        });
+    s_.analysis.setReport([self = QPointer<MainWindow>(this)](const model::FrameId& f,
+                                                              application::AnalysisService::FrameReport r) {
+        if (self) {
+            self->onFrameReport(f, r);
+        }
+    });
     s_.bus.subscribe(&s_.bridge);
 
     connect(&s_.bridge, &QtSessionBridge::previewReady, this, &MainWindow::onPreview);
@@ -187,9 +188,9 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
     cropTool_->setCommit([this](const model::NormRect& r, double angle) {
         const model::EditList cur = ui_->currentList();
         ui_->apply(std::make_unique<SetEntriesCommand>(std::vector<model::EditEntry>{
-            entryWith(cur, id::crop, "rect", r), [&] {
-                model::EditEntry e = entryWith(cur, id::rotation, "angle", angle);
-                e.params = e.params.with("autoFill", false); // der Rahmen bestimmt den Ausschnitt
+            entryWith(cur, id::crop, key::rect, r), [&] {
+                model::EditEntry e = entryWith(cur, id::rotation, key::angle, angle);
+                e.params = e.params.with(key::autoFill, false); // der Rahmen bestimmt den Ausschnitt
                 return e;
             }()}));
     });
@@ -197,11 +198,11 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
         const model::EditList cur = ui_->currentList();
         model::SpotList spots;
         if (const model::EditEntry* e = cur.get(model::StepId(std::string(id::retouch)))) {
-            spots = e->params.get<model::SpotList>("spots").value_or(model::SpotList{});
+            spots = e->params.get<model::SpotList>(key::spots).value_or(model::SpotList{});
         }
         spots.push_back(spot);
         ui_->apply(
-            std::make_unique<application::SetEntryCommand>(entryWith(cur, id::retouch, "spots", spots)));
+            std::make_unique<application::SetEntryCommand>(entryWith(cur, id::retouch, key::spots, spots)));
     });
     baseTool_->setPicked([this](const model::NormRect& r) {
         // Messrechteck im Filmrand (LF-BAS-04); die Fläche zeigt das ungeschnittene Bild
@@ -609,7 +610,8 @@ void MainWindow::buildUi()
         // Einträge des Anwenders, sonst bliebe die alte Basis stehen
         removeSteps({id::filmbase});
         if (on) {
-            detect(targets(), tr("Basis messen"), application::AnalysisService::Base, QStringLiteral("autoBase"));
+            detect(targets(), tr("Basis messen"), application::AnalysisService::Base,
+                   QStringLiteral("autoBase"));
         }
     });
     connect(conversion_, &ConversionPanel::pickBaseToggled, this, [this](bool on) {
@@ -874,14 +876,14 @@ void MainWindow::buildActions()
         bool fh = false;
         bool fv = false;
         if (const model::EditEntry* e = cur.get(model::StepId(std::string(id::orientation)))) {
-            q = e->params.get<int>("quarterTurns").value_or(0);
-            fh = e->params.get<bool>("flipH").value_or(false);
-            fv = e->params.get<bool>("flipV").value_or(false);
+            q = e->params.get<int>(key::quarterTurns).value_or(0);
+            fh = e->params.get<bool>(key::flipH).value_or(false);
+            fv = e->params.get<bool>(key::flipV).value_or(false);
         }
         q = ((q + turns) % 4 + 4) % 4;
         fh = flipH ? !fh : fh;
-        model::EditEntry e = entryWith(cur, id::orientation, "quarterTurns", q);
-        e.params = e.params.with("flipH", fh).with("flipV", fv);
+        model::EditEntry e = entryWith(cur, id::orientation, key::quarterTurns, q);
+        e.params = e.params.with(key::flipH, fh).with(key::flipV, fv);
         if (q == 0 && !fh && !fv) {
             ui_->apply(std::make_unique<application::RemoveEntryCommand>(e.step)); // neutral: kein Eintrag
         } else {
@@ -1171,10 +1173,10 @@ void MainWindow::setTool(int which)
         model::NormRect r;
         double angle = 0.0;
         if (const model::EditEntry* e = l.get(model::StepId(std::string(id::crop)))) {
-            r = e->params.get<model::NormRect>("rect").value_or(model::NormRect{});
+            r = e->params.get<model::NormRect>(key::rect).value_or(model::NormRect{});
         }
         if (const model::EditEntry* e = l.get(model::StepId(std::string(id::rotation)))) {
-            angle = e->params.get<double>("angle").value_or(0.0);
+            angle = e->params.get<double>(key::angle).value_or(0.0);
         }
         cropTool_->setState(r, angle);
         if (const auto it = sources_.find(s_.session.current); it != sources_.end()) {
@@ -1190,7 +1192,7 @@ void MainWindow::setTool(int which)
         // Messbereich der Basis auf dem ganzen, ungeschnittenen Bild
         std::optional<model::NormRect> area;
         if (const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::filmbase)))) {
-            if (auto a = e->params.get<model::NormRect>("area")) {
+            if (auto a = e->params.get<model::NormRect>(key::area)) {
                 area = *a;
             }
         }
@@ -1206,7 +1208,7 @@ void MainWindow::setTool(int which)
     case 3: {
         model::SpotList spots;
         if (const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::retouch)))) {
-            spots = e->params.get<model::SpotList>("spots").value_or(model::SpotList{});
+            spots = e->params.get<model::SpotList>(key::spots).value_or(model::SpotList{});
         }
         retouchTool_->setSpots(spots);
         canvas_->setTool(retouchTool_.get());
@@ -1406,7 +1408,7 @@ void MainWindow::chooseFilm(const std::string& type)
     } else {
         model::EditEntry e;
         e.step = model::StepId(std::string(id::filmmode));
-        e.params = model::ParamSet{}.with("type", type);
+        e.params = model::ParamSet{}.with(key::type, type);
         s_.bus.execute(application::SetEntryCommand(e), t, *roll_);
     }
     refreshCurrent();
@@ -1427,7 +1429,8 @@ void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString
             ++skipped;
             continue;
         }
-        application::JobHandle h = s_.analysis.detectFrame(*fr, roll_, film, parts, s_.bus.history(f).current());
+        application::JobHandle h =
+            s_.analysis.detectFrame(*fr, roll_, film, parts, s_.bus.history(f).current());
         if (!button.isEmpty()) {
             busy_[button].push_back(h);
             conversion_->setBusy(button, true);
@@ -1465,13 +1468,13 @@ void MainWindow::refreshCurrent()
         double h = it->second.height;
         if (canvas_->tool() != cropTool_.get()) {
             if (const model::EditEntry* e = l.get(model::StepId(std::string(id::crop))); e && e->enabled) {
-                const auto r = e->params.get<model::NormRect>("rect").value_or(model::NormRect{});
+                const auto r = e->params.get<model::NormRect>(key::rect).value_or(model::NormRect{});
                 w *= r.w;
                 h *= r.h;
             }
         }
         if (const model::EditEntry* e = l.get(model::StepId(std::string(id::orientation))); e && e->enabled) {
-            if (e->params.get<int>("quarterTurns").value_or(0) % 2 == 1) {
+            if (e->params.get<int>(key::quarterTurns).value_or(0) % 2 == 1) {
                 std::swap(w, h);
             }
         }
@@ -1513,7 +1516,7 @@ void MainWindow::requestPreview(const model::EditList& l)
         double fw = 1.0;
         double fh = 1.0;
         if (const model::EditEntry* e = r.list->get(model::StepId(std::string(id::crop))); e && e->enabled) {
-            const auto c = e->params.get<model::NormRect>("rect").value_or(model::NormRect{0, 0, 1, 1});
+            const auto c = e->params.get<model::NormRect>(key::rect).value_or(model::NormRect{0, 0, 1, 1});
             fw = std::clamp(c.w, 0.05, 1.0);
             fh = std::clamp(c.h, 0.05, 1.0);
         }
@@ -1688,7 +1691,7 @@ bool MainWindow::autoConverted(const model::FrameId& f) const
     // Nur die Autokonvertierung markiert ihren Eintrag; dieselben Schritte von Hand bleiben manuell
     const model::EditEntry* e = l.get(model::StepId(std::string(id::convert)));
     return e != nullptr && e->origin == model::Origin::Automatic &&
-           e->params.get<bool>("auto").value_or(false);
+           e->params.get<bool>(key::automatic).value_or(false);
 }
 
 void MainWindow::setAutoConvert(bool on)
@@ -1773,8 +1776,8 @@ void MainWindow::pickWhite(QPointF norm)
     double t = 0.0;
     double u = 0.0;
     if (const model::EditEntry* old = cur.get(model::StepId(std::string(id::whitebalance)))) {
-        t = old->params.get<double>("temperature").value_or(0.0) / 100.0;
-        u = old->params.get<double>("tint").value_or(0.0) / 100.0;
+        t = old->params.get<double>(key::temperature).value_or(0.0) / 100.0;
+        u = old->params.get<double>(key::tint).value_or(0.0) / 100.0;
     }
     // Vorschau in sRGB, gerechnet wird in Rec. 2020 (linear)
     const base::Vec3 w{0.6274 * sum.x + 0.3293 * sum.y + 0.0433 * sum.z,
@@ -1782,8 +1785,8 @@ void MainWindow::pickWhite(QPointF norm)
                        0.0164 * sum.x + 0.0880 * sum.y + 0.8956 * sum.z};
     const base::Vec3 before{w.x / std::exp2(t), w.y / std::exp2(-u), w.z / std::exp2(-t)};
     const auto [nt, nu] = steps::WhiteBalanceStep::fromNeutral(before);
-    model::EditEntry e = entryWith(cur, id::whitebalance, "temperature", std::clamp(nt, -300.0, 300.0));
-    e.params = e.params.with("tint", std::clamp(nu, -300.0, 300.0));
+    model::EditEntry e = entryWith(cur, id::whitebalance, key::temperature, std::clamp(nt, -300.0, 300.0));
+    e.params = e.params.with(key::tint, std::clamp(nu, -300.0, 300.0));
     ui_->apply(std::make_unique<application::SetEntryCommand>(e));
     refreshCurrent();
 }
@@ -1923,7 +1926,8 @@ void MainWindow::updateExportPanel()
     }
     const QString folder = qs(exportSettings_.folder);
     const QFontMetrics fm = exportFolder_->fontMetrics();
-    const int width = std::max(exportFolder_->width(), 200) - fm.horizontalAdvance(tr("Ziel: %1").arg(QString()));
+    const int width =
+        std::max(exportFolder_->width(), 200) - fm.horizontalAdvance(tr("Ziel: %1").arg(QString()));
     exportFolder_->setText(tr("Ziel: %1").arg(fm.elidedText(folder, Qt::ElideLeft, width)));
     exportFolder_->setToolTip(folder);
     const int format = exportSettings_.write.format == ports::FileFormat::Jpeg  ? 0
@@ -2120,7 +2124,8 @@ void MainWindow::doSettings()
     model::JsonValue keys = model::JsonValue::object({});
     for (const SettingsDialog::Shortcut& sc : v.shortcuts) {
         if (sc.key != sc.standard) {
-            keys.set(sc.action.toStdString(), model::JsonValue(sc.key.toString(QKeySequence::PortableText).toStdString()));
+            keys.set(sc.action.toStdString(),
+                     model::JsonValue(sc.key.toString(QKeySequence::PortableText).toStdString()));
         }
     }
     s_.settings.set("shortcuts", keys);

@@ -40,47 +40,48 @@ inline pipeline::StepDescriptor describe(std::string_view stepId, int stepRank, 
     return d;
 }
 
-inline pipeline::ParamSpec doubleParam(std::string name, double neutral, double min, double max,
+inline pipeline::ParamSpec doubleParam(std::string_view name, double neutral, double min, double max,
                                        std::string unit)
 {
-    return pipeline::ParamSpec{std::move(name), pipeline::ParamType::Double, neutral, min, max,
+    return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Double, neutral, min, max,
                                std::move(unit)};
 }
 
-inline pipeline::ParamSpec intParam(std::string name, int neutral, int min, int max)
+inline pipeline::ParamSpec intParam(std::string_view name, int neutral, int min, int max)
 {
-    return pipeline::ParamSpec{std::move(name),          pipeline::ParamType::Int, neutral,
+    return pipeline::ParamSpec{std::string(name),        pipeline::ParamType::Int, neutral,
                                static_cast<double>(min), static_cast<double>(max), ""};
 }
 
-inline pipeline::ParamSpec boolParam(std::string name, bool neutral)
+inline pipeline::ParamSpec boolParam(std::string_view name, bool neutral)
 {
-    return pipeline::ParamSpec{std::move(name), pipeline::ParamType::Bool, neutral, 0, 0, ""};
+    return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Bool, neutral, 0, 0, ""};
 }
 
-inline pipeline::ParamSpec stringParam(std::string name, std::string neutral)
+inline pipeline::ParamSpec stringParam(std::string_view name, std::string neutral)
 {
-    return pipeline::ParamSpec{std::move(name), pipeline::ParamType::String, std::move(neutral), 0, 0, ""};
+    return pipeline::ParamSpec{std::string(name), pipeline::ParamType::String, std::move(neutral), 0, 0, ""};
 }
 
-inline pipeline::ParamSpec vec3Param(std::string name, base::Vec3 neutral)
+inline pipeline::ParamSpec vec3Param(std::string_view name, base::Vec3 neutral)
 {
-    return pipeline::ParamSpec{std::move(name), pipeline::ParamType::Vec3, neutral, 0, 0, ""};
+    return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Vec3, neutral, 0, 0, ""};
 }
 
-inline pipeline::ParamSpec rectParam(std::string name)
+inline pipeline::ParamSpec rectParam(std::string_view name)
 {
-    return pipeline::ParamSpec{std::move(name), pipeline::ParamType::Rect, model::NormRect::full(), 0, 0, ""};
+    return pipeline::ParamSpec{
+        std::string(name), pipeline::ParamType::Rect, model::NormRect::full(), 0, 0, ""};
 }
 
-inline pipeline::ParamSpec curveParam(std::string name)
+inline pipeline::ParamSpec curveParam(std::string_view name)
 {
-    return pipeline::ParamSpec{std::move(name), pipeline::ParamType::Curve, model::Curve{}, 0, 0, ""};
+    return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Curve, model::Curve{}, 0, 0, ""};
 }
 
-inline pipeline::ParamSpec spotsParam(std::string name)
+inline pipeline::ParamSpec spotsParam(std::string_view name)
 {
-    return pipeline::ParamSpec{std::move(name), pipeline::ParamType::Spots, model::SpotList{}, 0, 0, ""};
+    return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Spots, model::SpotList{}, 0, 0, ""};
 }
 
 } // namespace autoneg::steps

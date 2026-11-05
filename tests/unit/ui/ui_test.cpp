@@ -165,7 +165,8 @@ TEST(EditListModelTest, M10_ReadableValues)
     EXPECT_EQ(value("autoneg.convert", model::ParamSet{}.with("on", true).with("auto", false)), "an");
     EXPECT_EQ(value("autoneg.saturation", model::ParamSet{}.with("saturation", 0.1).with("vibrance", -0.2)),
               "Sättigung +10 %, Dynamik -20 %");
-    EXPECT_EQ(value("autoneg.orientation", model::ParamSet{}.with("quarterTurns", 1).with("flipH", true).with("flipV", false)),
+    EXPECT_EQ(value("autoneg.orientation",
+                    model::ParamSet{}.with("quarterTurns", 1).with("flipH", true).with("flipV", false)),
               "horizontal gespiegelt, Drehung 90°");
 }
 

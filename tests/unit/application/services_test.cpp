@@ -368,8 +368,8 @@ TEST(AnalysisServiceTest, M10_BaseWithoutRebateIsEstimated)
             px[i + 1] = 0.5F;
             px[i + 2] = 0.3F;
         }
-        return image::ImageBuffer::fromFloats({32, 32, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
-                                              std::move(px));
+        return image::ImageBuffer::fromFloats(
+            {32, 32, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, std::move(px));
     };
     fns.detect = [](const image::ImageBuffer&, model::FilmType,
                     const analysis::FrameHint&) -> base::Expected<analysis::FrameDetection> {
@@ -383,7 +383,8 @@ TEST(AnalysisServiceTest, M10_BaseWithoutRebateIsEstimated)
     };
     AnalysisService service(jobs, bus, ui, fns);
     std::vector<std::string> notes;
-    service.setReport([&](const model::FrameId&, AnalysisService::FrameReport r) { notes = std::move(r.hints); });
+    service.setReport(
+        [&](const model::FrameId&, AnalysisService::FrameReport r) { notes = std::move(r.hints); });
     auto roll = std::make_shared<model::Roll>();
     roll->filmType = model::FilmType::ColorNegative;
     const model::Frame f1 = frame(1);

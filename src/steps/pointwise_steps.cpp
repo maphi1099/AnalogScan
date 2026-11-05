@@ -32,14 +32,14 @@ double safe(double v)
 
 BwMixStep::BwMixStep()
     : DescribedPointwise(describe(id::bwmix, rank::bwmix, "S/W-Kanalmischung", Phase::Conversion,
-                                  {vec3Param("weights", luminanceWeights)}, bwOnly,
+                                  {vec3Param(key::weights, luminanceWeights)}, bwOnly,
                                   Options{.alwaysActive = true}))
 {}
 
 void BwMixStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                      const pipeline::StepContext& /*ctx*/) const
 {
-    base::Vec3 w = param(p, "weights", luminanceWeights);
+    base::Vec3 w = param(p, key::weights, luminanceWeights);
     const double sum = w.x + w.y + w.z;
     if (std::abs(sum) > 1e-9) {
         w = {w.x / sum, w.y / sum, w.z / sum};
@@ -48,15 +48,15 @@ void BwMixStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
 }
 
 FilmBaseStep::FilmBaseStep()
-    : DescribedPointwise(
-          describe(id::filmbase, rank::filmbase, "Basiskorrektur", Phase::Conversion,
-                   {vec3Param("base", {1, 1, 1}), stringParam("source", ""), rectParam("area")}, negatives))
+    : DescribedPointwise(describe(
+          id::filmbase, rank::filmbase, "Basiskorrektur", Phase::Conversion,
+          {vec3Param(key::base, {1, 1, 1}), stringParam(key::source, ""), rectParam(key::area)}, negatives))
 {}
 
 void FilmBaseStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                         const pipeline::StepContext& /*ctx*/) const
 {
-    const base::Vec3 base = param(p, "base", base::Vec3{1, 1, 1});
+    const base::Vec3 base = param(p, key::base, base::Vec3{1, 1, 1});
     b.scale({1.0 / safe(base.x), 1.0 / safe(base.y), 1.0 / safe(base.z)});
 }
 
@@ -73,16 +73,16 @@ void DensityStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& 
 
 DensityRangeStep::DensityRangeStep()
     : DescribedPointwise(describe(id::densityrange, rank::densityrange, "Tonwertgrenzen", Phase::Conversion,
-                                  {vec3Param("dMin", {0, 0, 0}), vec3Param("dMax", {1, 1, 1}),
-                                   doubleParam("clip", 0.001, 0.0, 0.02, "")},
+                                  {vec3Param(key::dMin, {0, 0, 0}), vec3Param(key::dMax, {1, 1, 1}),
+                                   doubleParam(key::clip, 0.001, 0.0, 0.02, "")},
                                   pipeline::FilmTypeMask::all(), Options{.alwaysActive = true}))
 {}
 
 void DensityRangeStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                             const pipeline::StepContext& ctx) const
 {
-    const base::Vec3 lo = param(p, "dMin", base::Vec3{0, 0, 0});
-    const base::Vec3 hi = param(p, "dMax", base::Vec3{1, 1, 1});
+    const base::Vec3 lo = param(p, key::dMin, base::Vec3{0, 0, 0});
+    const base::Vec3 hi = param(p, key::dMax, base::Vec3{1, 1, 1});
     const auto span = [](double l, double h) { return std::max(h - l, 1e-4); };
     const base::Vec3 inv{1.0 / span(lo.x, hi.x), 1.0 / span(lo.y, hi.y), 1.0 / span(lo.z, hi.z)};
     b.offset({-lo.x, -lo.y, -lo.z});
@@ -102,28 +102,28 @@ void DensityRangeStep::emit(pipeline::PixelProgramBuilder& b, const model::Param
 
 ExposureStep::ExposureStep()
     : DescribedPointwise(describe(id::exposure, rank::exposure, "Belichtung", Phase::Print,
-                                  {doubleParam("ev", 0.0, -5.0, 5.0, "EV")}))
+                                  {doubleParam(key::ev, 0.0, -5.0, 5.0, "EV")}))
 {}
 
 void ExposureStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                         const pipeline::StepContext& /*ctx*/) const
 {
-    const double f = std::exp2(param(p, "ev", 0.0));
+    const double f = std::exp2(param(p, key::ev, 0.0));
     b.scale({f, f, f});
 }
 
 WhiteBalanceStep::WhiteBalanceStep()
-    : DescribedPointwise(describe(
-          id::whitebalance, rank::whitebalance, "Weißabgleich", Phase::Print,
-          {doubleParam("temperature", 0.0, -300.0, 300.0, ""), doubleParam("tint", 0.0, -300.0, 300.0, "")},
-          colorAndSlide))
+    : DescribedPointwise(describe(id::whitebalance, rank::whitebalance, "Weißabgleich", Phase::Print,
+                                  {doubleParam(key::temperature, 0.0, -300.0, 300.0, ""),
+                                   doubleParam(key::tint, 0.0, -300.0, 300.0, "")},
+                                  colorAndSlide))
 {}
 
 void WhiteBalanceStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                             const pipeline::StepContext& /*ctx*/) const
 {
-    const double t = param(p, "temperature", 0.0) / 100.0;
-    const double u = param(p, "tint", 0.0) / 100.0;
+    const double t = param(p, key::temperature, 0.0) / 100.0;
+    const double u = param(p, key::tint, 0.0) / 100.0;
     b.scale({std::exp2(t), std::exp2(-u), std::exp2(-t)});
 }
 
@@ -139,20 +139,20 @@ std::pair<double, double> WhiteBalanceStep::fromNeutral(const base::Vec3& rgb)
 }
 
 GradationStep::GradationStep()
-    : DescribedPointwise(
-          describe(id::gradation, rank::gradation, "Gradation", Phase::Print,
-                   {doubleParam("grade", 2.0, -1.0, 5.0, ""), doubleParam("splitSoft", 0.0, 0.0, 1.0, ""),
-                    doubleParam("splitHard", 0.0, 0.0, 1.0, ""), boolParam("compensate", true)},
-                   bwOnly))
+    : DescribedPointwise(describe(
+          id::gradation, rank::gradation, "Gradation", Phase::Print,
+          {doubleParam(key::grade, 2.0, -1.0, 5.0, ""), doubleParam(key::splitSoft, 0.0, 0.0, 1.0, ""),
+           doubleParam(key::splitHard, 0.0, 0.0, 1.0, ""), boolParam(key::compensate, true)},
+          bwOnly))
 {}
 
 PaperCurve GradationStep::curve(const model::ParamSet& p) const
 {
-    const SplitGrade split{param(p, "splitSoft", 0.0), param(p, "splitHard", 0.0)};
+    const SplitGrade split{param(p, key::splitSoft, 0.0), param(p, key::splitHard, 0.0)};
     if (split.soft > 0.0 || split.hard > 0.0) {
         return model_.split(split);
     }
-    return model_.curve(param(p, "grade", 2.0), param(p, "compensate", true));
+    return model_.curve(param(p, key::grade, 2.0), param(p, key::compensate, true));
 }
 
 void GradationStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
@@ -163,13 +163,13 @@ void GradationStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet
 
 ColorGradeStep::ColorGradeStep()
     : DescribedPointwise(describe(id::colorgrade, rank::colorgrade, "Gradation Farbe", Phase::Print,
-                                  {intParam("level", 0, 0, 3)}, colorOnly, Options{.cacheAfter = true}))
+                                  {intParam(key::level, 0, 0, 3)}, colorOnly, Options{.cacheAfter = true}))
 {}
 
 void ColorGradeStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                           const pipeline::StepContext& /*ctx*/) const
 {
-    const int level = param(p, "level", 0);
+    const int level = param(p, key::level, 0);
     if (level <= 0) {
         return;
     }
@@ -178,23 +178,23 @@ void ColorGradeStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSe
 }
 
 ContrastStep::ContrastStep()
-    : DescribedPointwise(
-          describe(id::contrast, rank::contrast, "Kontrast", Phase::Finishing,
-                   {doubleParam("amount", 0.0, -1.0, 1.0, ""), doubleParam("pivot", 0.18, 0.01, 1.0, "")}))
+    : DescribedPointwise(describe(
+          id::contrast, rank::contrast, "Kontrast", Phase::Finishing,
+          {doubleParam(key::amount, 0.0, -1.0, 1.0, ""), doubleParam(key::pivot, 0.18, 0.01, 1.0, "")}))
 {}
 
 bool ToneCurveStep::isNeutral(const model::ParamSet& p) const
 {
-    const auto flat = [&](const char* name) { return param(p, name, model::Curve{}).points.size() < 2; };
-    return param(p, "black", 0.0) == 0.0 && param(p, "white", 1.0) == 1.0 && flat("master") && flat("r") &&
-           flat("g") && flat("b");
+    const auto flat = [&](std::string_view name) { return param(p, name, model::Curve{}).points.size() < 2; };
+    return param(p, key::black, 0.0) == 0.0 && param(p, key::white, 1.0) == 1.0 && flat(key::curveMaster) &&
+           flat(key::curveR) && flat(key::curveG) && flat(key::curveB);
 }
 
 void ContrastStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                         const pipeline::StepContext& /*ctx*/) const
 {
-    const double k = 1.0 + param(p, "amount", 0.0);
-    const double pivot = param(p, "pivot", 0.18);
+    const double k = 1.0 + param(p, key::amount, 0.0);
+    const double pivot = param(p, key::pivot, 0.18);
     // pivot·(v/pivot)^k = 10^(k·log10 v + (1 − k)·log10 pivot)
     const double o = (1.0 - k) * std::log10(pivot);
     b.log10().scale({k, k, k}).offset({o, o, o}).exp10();
@@ -203,18 +203,19 @@ void ContrastStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet&
 ToneCurveStep::ToneCurveStep()
     : DescribedPointwise(
           describe(id::tonecurve, rank::tonecurve, "Tonwerte und Kurven", Phase::Finishing,
-                   {doubleParam("black", 0.0, 0.0, 0.5, ""), doubleParam("white", 1.0, 0.5, 2.0, ""),
-                    curveParam("master"), curveParam("r"), curveParam("g"), curveParam("b")}))
+                   {doubleParam(key::black, 0.0, 0.0, 0.5, ""), doubleParam(key::white, 1.0, 0.5, 2.0, ""),
+                    curveParam(key::curveMaster), curveParam(key::curveR), curveParam(key::curveG),
+                    curveParam(key::curveB)}))
 {}
 
 void ToneCurveStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                          const pipeline::StepContext& /*ctx*/) const
 {
-    const double black = param(p, "black", 0.0);
-    const double white = std::max(param(p, "white", 1.0), black + 1e-3);
+    const double black = param(p, key::black, 0.0);
+    const double white = std::max(param(p, key::white, 1.0), black + 1e-3);
     const double s = 1.0 / (white - black);
     b.offset({-black, -black, -black}).scale({s, s, s});
-    const char* names[] = {"master", "r", "g", "b"};
+    const std::string_view names[] = {key::curveMaster, key::curveR, key::curveG, key::curveB};
     for (int i = 0; i < 4; ++i) {
         const model::Curve c = param(p, names[i], model::Curve{});
         if (c.points.size() >= 2) {
@@ -226,15 +227,15 @@ void ToneCurveStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet
 SaturationStep::SaturationStep()
     : DescribedPointwise(describe(
           id::saturation, rank::saturation, "Sättigung", Phase::Finishing,
-          {doubleParam("saturation", 0.0, -1.0, 1.0, ""), doubleParam("vibrance", 0.0, -1.0, 1.0, "")},
+          {doubleParam(key::saturation, 0.0, -1.0, 1.0, ""), doubleParam(key::vibrance, 0.0, -1.0, 1.0, "")},
           colorAndSlide, Options{.cacheAfter = true}))
 {}
 
 void SaturationStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
                           const pipeline::StepContext& /*ctx*/) const
 {
-    b.saturate(static_cast<float>(param(p, "saturation", 0.0)),
-               static_cast<float>(param(p, "vibrance", 0.0)));
+    b.saturate(static_cast<float>(param(p, key::saturation, 0.0)),
+               static_cast<float>(param(p, key::vibrance, 0.0)));
 }
 
 double evaluateCurve(const model::Curve& c, double x)

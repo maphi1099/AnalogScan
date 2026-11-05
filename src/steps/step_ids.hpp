@@ -33,6 +33,53 @@ inline constexpr std::string_view denoise = "autoneg.denoise";
 inline constexpr std::string_view sharpen = "autoneg.sharpen";
 } // namespace id
 
+/// Parameternamen der Schritte (gespeichert in den Begleitdateien: nie ändern).
+namespace key {
+inline constexpr std::string_view amount = "amount";
+inline constexpr std::string_view angle = "angle";
+inline constexpr std::string_view area = "area";
+inline constexpr std::string_view aspect = "aspect";
+inline constexpr std::string_view autoFill = "autoFill";
+inline constexpr std::string_view automatic = "auto";
+inline constexpr std::string_view base = "base";
+inline constexpr std::string_view black = "black";
+inline constexpr std::string_view clip = "clip";
+inline constexpr std::string_view compensate = "compensate";
+inline constexpr std::string_view curveB = "b";
+inline constexpr std::string_view curveG = "g";
+inline constexpr std::string_view curveMaster = "master";
+inline constexpr std::string_view curveR = "r";
+inline constexpr std::string_view dMax = "dMax";
+inline constexpr std::string_view dMin = "dMin";
+inline constexpr std::string_view ev = "ev";
+inline constexpr std::string_view flipH = "flipH";
+inline constexpr std::string_view flipV = "flipV";
+inline constexpr std::string_view grade = "grade";
+inline constexpr std::string_view highlights = "highlights";
+inline constexpr std::string_view inset = "inset";
+inline constexpr std::string_view level = "level";
+inline constexpr std::string_view on = "on";
+inline constexpr std::string_view pivot = "pivot";
+inline constexpr std::string_view profile = "profile";
+inline constexpr std::string_view quarterTurns = "quarterTurns";
+inline constexpr std::string_view radius = "radius";
+inline constexpr std::string_view rect = "rect";
+inline constexpr std::string_view saturation = "saturation";
+inline constexpr std::string_view shadows = "shadows";
+inline constexpr std::string_view source = "source";
+inline constexpr std::string_view splitHard = "splitHard";
+inline constexpr std::string_view splitSoft = "splitSoft";
+inline constexpr std::string_view spots = "spots";
+inline constexpr std::string_view strength = "strength";
+inline constexpr std::string_view temperature = "temperature";
+inline constexpr std::string_view threshold = "threshold";
+inline constexpr std::string_view tint = "tint";
+inline constexpr std::string_view type = "type";
+inline constexpr std::string_view vibrance = "vibrance";
+inline constexpr std::string_view weights = "weights";
+inline constexpr std::string_view white = "white";
+} // namespace key
+
 /// Ränge der festen Stufenfolge (Architektur 5.2). Lücken lassen Platz für spätere Stufen.
 namespace rank {
 inline constexpr int flatfield = 10;

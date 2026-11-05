@@ -25,12 +25,13 @@
 namespace autoneg::ui {
 
 namespace id = steps::id;
+namespace key = steps::key;
 
 namespace {
 
 constexpr int ticks = 1000;
 
-double paramOr(const model::EditList& l, std::string_view step, const std::string& name, double fallback)
+double paramOr(const model::EditList& l, std::string_view step, std::string_view name, double fallback)
 {
     if (const model::EditEntry* e = l.get(model::StepId(std::string(step)))) {
         if (const auto v = e->params.get<double>(name)) {
@@ -244,12 +245,12 @@ GradationPanel::GradationPanel(UiController& ui, QWidget* parent)
         const QSignalBlocker block(fine_);
         fine_->setValue(gradeOf(i));
         model::EditEntry e = withParam(std::string(id::gradation), "grade", gradeOf(i));
-        e.params = e.params.with("splitSoft", 0.0).with("splitHard", 0.0);
+        e.params = e.params.with(key::splitSoft, 0.0).with(key::splitHard, 0.0);
         commit(std::move(e));
     });
     connect(fine_, &QDoubleSpinBox::editingFinished, this, [this] {
         model::EditEntry e = withParam(std::string(id::gradation), "grade", fine_->value());
-        e.params = e.params.with("splitSoft", 0.0).with("splitHard", 0.0);
+        e.params = e.params.with(key::splitSoft, 0.0).with(key::splitHard, 0.0);
         commit(std::move(e));
     });
     for (QSlider* s : {soft_, hard_}) {
@@ -272,13 +273,13 @@ void GradationPanel::setSplit(double soft, double hard)
         hard_->setValue(static_cast<int>(std::lround(hard * 100.0)));
     }
     model::EditEntry e = withParam(std::string(id::gradation), "splitSoft", soft);
-    e.params = e.params.with("splitHard", hard);
+    e.params = e.params.with(key::splitHard, hard);
     commit(std::move(e));
 }
 
 void GradationPanel::bindList(const model::EditList& l)
 {
-    const double g = paramOr(l, id::gradation, "grade", 2.0);
+    const double g = paramOr(l, id::gradation, key::grade, 2.0);
     const QSignalBlocker a(fine_);
     fine_->setValue(g);
     grades_->setExclusive(false);
@@ -293,8 +294,8 @@ void GradationPanel::bindList(const model::EditList& l)
     }
     const QSignalBlocker b(soft_);
     const QSignalBlocker c(hard_);
-    soft_->setValue(static_cast<int>(std::lround(paramOr(l, id::gradation, "splitSoft", 0.0) * 100.0)));
-    hard_->setValue(static_cast<int>(std::lround(paramOr(l, id::gradation, "splitHard", 0.0) * 100.0)));
+    soft_->setValue(static_cast<int>(std::lround(paramOr(l, id::gradation, key::splitSoft, 0.0) * 100.0)));
+    hard_->setValue(static_cast<int>(std::lround(paramOr(l, id::gradation, key::splitHard, 0.0) * 100.0)));
 }
 
 // --- ConversionPanel ---------------------------------------------------------------------------
@@ -502,11 +503,11 @@ void ConversionPanel::bindList(const model::EditList& l)
     const model::EditEntry* base = get(steps::id::filmbase);
     const model::EditEntry* conv = get(steps::id::convert);
     const bool manualBase =
-        base != nullptr && base->params.get<std::string>("source").value_or("") == "manual";
+        base != nullptr && base->params.get<std::string>(key::source).value_or("") == "manual";
     autoFrame_->setChecked(crop != nullptr && crop->origin == model::Origin::Automatic);
     autoBase_->setChecked(base != nullptr && !manualBase);
     pickBase_->setChecked(!autoBase_->isChecked() && (manualBase || pickActive_));
-    convert_->setChecked(conv != nullptr && conv->enabled && conv->params.get<bool>("on").value_or(false));
+    convert_->setChecked(conv != nullptr && conv->enabled && conv->params.get<bool>(key::on).value_or(false));
     // Der Filmtyp hängt auch vom Rollen-Standard ab und kommt über setFilm
 }
 
@@ -536,24 +537,25 @@ AdjustPanel::AdjustPanel(UiController& ui, QWidget* parent)
     struct Def
     {
         std::string_view step;
-        const char* param;
+        std::string_view param;
         QString label;
         QString tip;
     };
     const std::vector<Def> defs{
-        {id::exposure, "ev", tr("Belichtung"), tr("Belichtung in Blendenstufen (EV)")},
-        {id::whitebalance, "temperature", tr("Farbtemperatur"), tr("Weißabgleich: warm/kalt")},
-        {id::whitebalance, "tint", tr("Tönung"), tr("Weißabgleich: grün/magenta")},
-        {id::contrast, "amount", tr("Kontrast"), tr("Kontrast um den Mittelton")},
-        {id::shadowshighlights, "shadows", tr("Tiefen"), tr("Tiefen aufhellen")},
-        {id::shadowshighlights, "highlights", tr("Lichter"), tr("Lichter abdunkeln")},
-        {id::saturation, "saturation", tr("Sättigung"), tr("Farbsättigung")},
-        {id::saturation, "vibrance", tr("Dynamik"), tr("Sättigung schwacher Farben")},
-        {id::sharpen, "amount", tr("Schärfen"), tr("Unscharf maskieren: Stärke")},
-        {id::denoise, "strength", tr("Rauschminderung"), tr("Stärke der Rauschminderung")},
+        {id::exposure, key::ev, tr("Belichtung"), tr("Belichtung in Blendenstufen (EV)")},
+        {id::whitebalance, key::temperature, tr("Farbtemperatur"), tr("Weißabgleich: warm/kalt")},
+        {id::whitebalance, key::tint, tr("Tönung"), tr("Weißabgleich: grün/magenta")},
+        {id::contrast, key::amount, tr("Kontrast"), tr("Kontrast um den Mittelton")},
+        {id::shadowshighlights, key::shadows, tr("Tiefen"), tr("Tiefen aufhellen")},
+        {id::shadowshighlights, key::highlights, tr("Lichter"), tr("Lichter abdunkeln")},
+        {id::saturation, key::saturation, tr("Sättigung"), tr("Farbsättigung")},
+        {id::saturation, key::vibrance, tr("Dynamik"), tr("Sättigung schwacher Farben")},
+        {id::sharpen, key::amount, tr("Schärfen"), tr("Unscharf maskieren: Stärke")},
+        {id::denoise, key::strength, tr("Rauschminderung"), tr("Stärke der Rauschminderung")},
     };
     for (const Def& d : defs) {
-        auto* s = new ParamSlider(std::string(d.step), d.param, d.label, d.tip, ui_.registry(), this);
+        auto* s =
+            new ParamSlider(std::string(d.step), std::string(d.param), d.label, d.tip, ui_.registry(), this);
         sliders_.push_back(s);
         layout->addWidget(s);
         const std::string step(d.step);

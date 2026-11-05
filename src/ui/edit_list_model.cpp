@@ -1,5 +1,6 @@
 #include "ui/edit_list_model.hpp"
 
+#include "steps/step_ids.hpp"
 #include "ui/translations.hpp"
 
 #include <QtGui/QColor>
@@ -8,6 +9,8 @@
 #include <cmath>
 
 namespace autoneg::ui {
+
+namespace key = steps::key;
 
 namespace {
 
@@ -41,69 +44,72 @@ QString describe(const std::string& name, const model::ParamValue& value)
     const auto* i = std::get_if<int>(&value);
     const auto* b = std::get_if<bool>(&value);
     const auto* str = std::get_if<std::string>(&value);
-    const auto labelled = [](const QString& label, const QString& v) { return label + QStringLiteral(" ") + v; };
-    if (name == "on" && b != nullptr) {
+    const auto labelled = [](const QString& label, const QString& v) {
+        return label + QStringLiteral(" ") + v;
+    };
+    if (name == key::on && b != nullptr) {
         return *b ? EditListModel::tr("an") : EditListModel::tr("aus");
     }
-    if (name == "type" && str != nullptr) {
+    if (name == key::type && str != nullptr) {
         return filmName(*str);
     }
-    if (name == "flipH" && b != nullptr) {
+    if (name == key::flipH && b != nullptr) {
         return *b ? EditListModel::tr("horizontal gespiegelt") : QString();
     }
-    if (name == "flipV" && b != nullptr) {
+    if (name == key::flipV && b != nullptr) {
         return *b ? EditListModel::tr("vertikal gespiegelt") : QString();
     }
-    if (name == "quarterTurns" && i != nullptr) {
-        return *i != 0 ? labelled(EditListModel::tr("Drehung"), QString::number(*i * 90) + QStringLiteral("°"))
-                       : QString();
+    if (name == key::quarterTurns && i != nullptr) {
+        return *i != 0
+                   ? labelled(EditListModel::tr("Drehung"), QString::number(*i * 90) + QStringLiteral("°"))
+                   : QString();
     }
-    if (const auto* r = std::get_if<model::NormRect>(&value); r != nullptr && name == "rect") {
+    if (const auto* r = std::get_if<model::NormRect>(&value); r != nullptr && name == key::rect) {
         return labelled(EditListModel::tr("Fläche"), percent(r->w * r->h, false));
     }
     if (const auto* spots = std::get_if<model::SpotList>(&value)) {
         return EditListModel::tr("%n Stelle(n)", nullptr, static_cast<int>(spots->size()));
     }
-    if (str != nullptr && name == "aspect") {
+    if (str != nullptr && name == key::aspect) {
         return str->empty() ? QString() : labelled(EditListModel::tr("Format"), QString::fromStdString(*str));
     }
-    if (i != nullptr && name == "level") {
+    if (i != nullptr && name == key::level) {
         return labelled(EditListModel::tr("Stufe"), QString::number(*i));
     }
     if (d == nullptr) {
         return {}; // interne Werte (Basis, Messfläche, Kurven, Herkunft)
     }
-    if (name == "angle") {
+    if (name == key::angle) {
         return labelled(EditListModel::tr("Winkel"), number(*d, 2, false) + QStringLiteral("°"));
     }
-    if (name == "ev") {
+    if (name == key::ev) {
         return number(*d, 2, true) + QStringLiteral(" EV");
     }
-    if (name == "temperature") {
+    if (name == key::temperature) {
         return labelled(EditListModel::tr("Temperatur"), number(*d, 0, true));
     }
-    if (name == "tint") {
+    if (name == key::tint) {
         return labelled(EditListModel::tr("Tönung"), number(*d, 0, true));
     }
-    if (name == "grade") {
+    if (name == key::grade) {
         return labelled(EditListModel::tr("Gradation"), number(*d, 1, false));
     }
-    if (name == "radius") {
+    if (name == key::radius) {
         return labelled(EditListModel::tr("Radius"), number(*d, 1, false) + QStringLiteral(" px"));
     }
-    if (name == "pivot") {
+    if (name == key::pivot) {
         return labelled(EditListModel::tr("Mitte"), number(*d, 2, false));
     }
-    const std::pair<const char*, QString> shares[] = {
-        {"saturation", EditListModel::tr("Sättigung")}, {"vibrance", EditListModel::tr("Dynamik")},
-        {"amount", EditListModel::tr("Stärke")},        {"strength", EditListModel::tr("Stärke")},
-        {"shadows", EditListModel::tr("Tiefen")},       {"highlights", EditListModel::tr("Lichter")},
-        {"splitSoft", EditListModel::tr("weich")},      {"splitHard", EditListModel::tr("hart")},
-        {"black", EditListModel::tr("Schwarz")},        {"white", EditListModel::tr("Weiß")},
-        {"inset", EditListModel::tr("Rand")},           {"clip", EditListModel::tr("Beschnitt")},
-        {"threshold", EditListModel::tr("Schwelle")},
+    const std::pair<std::string_view, QString> shares[] = {
+        {key::saturation, EditListModel::tr("Sättigung")}, {key::vibrance, EditListModel::tr("Dynamik")},
+        {key::amount, EditListModel::tr("Stärke")},        {key::strength, EditListModel::tr("Stärke")},
+        {key::shadows, EditListModel::tr("Tiefen")},       {key::highlights, EditListModel::tr("Lichter")},
+        {key::splitSoft, EditListModel::tr("weich")},      {key::splitHard, EditListModel::tr("hart")},
+        {key::black, EditListModel::tr("Schwarz")},        {key::white, EditListModel::tr("Weiß")},
+        {key::inset, EditListModel::tr("Rand")},           {key::clip, EditListModel::tr("Beschnitt")},
+        {key::threshold, EditListModel::tr("Schwelle")},
     };
-    const bool sign = name == "saturation" || name == "vibrance" || name == "amount";
+    const bool sign = name == key::saturation || name == key::vibrance || name == key::amount;
     for (const auto& [key, label] : shares) {
         if (name == key) {
             return labelled(label, percent(*d, sign));
