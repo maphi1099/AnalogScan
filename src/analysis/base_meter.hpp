@@ -24,6 +24,7 @@ struct BaseMeasurement
     base::Vec3 transmission; ///< Transmission je Kanal (linear, Quellwerte)
     base::Vec3 spread;       ///< robuste Streuung je Kanal (MAD × 1,4826)
     int samples = 0;
+    double rejected = 0.0; ///< Anteil der als Ausreißer verworfenen Messpunkte (0–1)
     BaseMethod method = BaseMethod::Rebate;
 };
 

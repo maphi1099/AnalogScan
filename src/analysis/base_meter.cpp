@@ -10,8 +10,10 @@ namespace autoneg::analysis {
 
 namespace {
 
-/// Robuster Mittelwert: Ausreißer der Luminanz (> 3 σ vom Median) verwerfen, dann Median je
-/// Kanal und MAD als Streuung.
+/// Robuster Mittelwert: Ausreißer schrittweise verwerfen (höchstens 4 Durchgänge, bis sich
+/// nichts mehr ändert). Ein Punkt fällt weg, wenn einer der Kanäle oder einer der Farbtöne R/G
+/// und B/G mehr als 3 σ (MAD) vom Median der verbliebenen Punkte abweicht. So fallen auch
+/// Fehlfarben gleicher Helligkeit (Lichtleck, Schleier) heraus. Ergebnis: Median je Kanal.
 base::Expected<BaseMeasurement> robustBase(const image::ImageBuffer& img,
                                            const std::vector<std::size_t>& pixels, BaseMethod method)
 {
@@ -21,18 +23,50 @@ base::Expected<BaseMeasurement> robustBase(const image::ImageBuffer& img,
     const auto v = img.host();
     const auto ch = static_cast<std::size_t>(img.spec().channels);
     const auto value = [&](std::size_t i, std::size_t c) { return v[i * ch + (ch == 1 ? 0 : c)]; };
-    std::vector<float> lum;
-    lum.reserve(pixels.size());
-    for (const std::size_t i : pixels) {
-        lum.push_back(0.2627F * value(i, 0) + 0.6780F * value(i, 1) + 0.0593F * value(i, 2));
+    // je Punkt fünf Merkmale: R, G, B, R/G, B/G
+    constexpr std::size_t features = 5;
+    std::vector<std::array<float, features>> f(pixels.size());
+    for (std::size_t k = 0; k < pixels.size(); ++k) {
+        const float r = value(pixels[k], 0);
+        const float g = value(pixels[k], 1);
+        const float b = value(pixels[k], 2);
+        const float gs = std::max(g, 1e-6F);
+        f[k] = {r, g, b, r / gs, b / gs};
     }
-    const detail::Robust r = detail::robust(lum);
-    const double limit = 3.0 * std::max(r.mad, 1e-4 * std::abs(r.median) + 1e-7);
+    std::vector<char> keep(pixels.size(), 1);
+    std::array<detail::Robust, features> stat{};
+    for (int pass = 0; pass < 4; ++pass) {
+        for (std::size_t c = 0; c < features; ++c) {
+            std::vector<float> col;
+            col.reserve(pixels.size());
+            for (std::size_t k = 0; k < pixels.size(); ++k) {
+                if (keep[k] != 0) {
+                    col.push_back(f[k][c]);
+                }
+            }
+            stat[c] = detail::robust(std::move(col));
+        }
+        bool changed = false;
+        for (std::size_t k = 0; k < pixels.size(); ++k) {
+            bool in = true;
+            for (std::size_t c = 0; c < features && in; ++c) {
+                const double limit = 3.0 * std::max(stat[c].mad, 1e-4 * std::abs(stat[c].median) + 1e-7);
+                in = std::abs(f[k][c] - stat[c].median) <= limit;
+            }
+            if (in != (keep[k] != 0)) {
+                keep[k] = in ? 1 : 0;
+                changed = true;
+            }
+        }
+        if (!changed) {
+            break;
+        }
+    }
     std::array<std::vector<float>, 3> kept;
     for (std::size_t k = 0; k < pixels.size(); ++k) {
-        if (std::abs(lum[k] - r.median) <= limit) {
+        if (keep[k] != 0) {
             for (std::size_t c = 0; c < 3; ++c) {
-                kept[c].push_back(value(pixels[k], c));
+                kept[c].push_back(f[k][c]);
             }
         }
     }
@@ -41,6 +75,7 @@ base::Expected<BaseMeasurement> robustBase(const image::ImageBuffer& img,
     }
     BaseMeasurement m;
     m.samples = static_cast<int>(kept[0].size());
+    m.rejected = 1.0 - static_cast<double>(kept[0].size()) / static_cast<double>(pixels.size());
     m.method = method;
     const detail::Robust rr = detail::robust(kept[0]);
     const detail::Robust rg = detail::robust(kept[1]);

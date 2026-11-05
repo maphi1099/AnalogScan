@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -262,6 +263,41 @@ TEST_F(Analysis, U_ANA_07_BaseRobustAgainstDisturbances)
     ASSERT_TRUE(m.has_value()) << m.error().message;
     EXPECT_LE(worstChannel(m->transmission, scan.truth.base), 0.02)
         << m->transmission.x << " " << m->transmission.y << " " << m->transmission.z;
+}
+
+// LF-BAS-02: Fehlfarbe im Filmrand (Lichtleck, Schleier) bei gleicher Helligkeit wie die Basis.
+// Die Luminanz allein erkennt sie nicht; Ausreißer werden je Kanal und nach Farbton verworfen.
+TEST_F(Analysis, M10_BaseIgnoresColorCastAtSameBrightness)
+{
+    const base::Vec3 truth{0.80, 0.50, 0.30};
+    const double lum = 0.2627 * truth.x + 0.6780 * truth.y + 0.0593 * truth.z;
+    // rötlich, gleiche Luminanz
+    const double leakR = 0.95;
+    const double leakB = 0.30;
+    const double leakG = (lum - 0.2627 * leakR - 0.0593 * leakB) / 0.6780;
+    std::mt19937 rng(7);
+    std::normal_distribution<double> noise(0.0, 0.01);
+    std::uniform_real_distribution<double> u(0.0, 1.0);
+    std::vector<std::array<float, 3>> px(200U * 100U);
+    for (auto& v : px) {
+        const bool leak = u(rng) < 0.3; // 30 % des Rands betroffen
+        const double n = noise(rng);
+        v = {static_cast<float>((leak ? leakR : truth.x) * (1 + n)),
+             static_cast<float>((leak ? leakG : truth.y) * (1 + n + noise(rng) * 0.3)),
+             static_cast<float>((leak ? leakB : truth.z) * (1 + noise(rng)))};
+    }
+    // rechts eine Leuchtfläche (Lichtpegel), gemessen wird links
+    const image::ImageBuffer img = t::imageFrom(220, 100, 3, [&](int x, int y, int c) {
+        return x >= 200 ? 1.0F
+                        : px[static_cast<std::size_t>(y) * 200U + static_cast<std::size_t>(x)]
+                            [static_cast<std::size_t>(c)];
+    });
+    const auto m = BaseMeter{}.measureRect(img, model::NormRect{0.0, 0.0, 200.0 / 220.0, 1.0});
+    ASSERT_TRUE(m.has_value()) << m.error().message;
+    EXPECT_NEAR(m->transmission.x / truth.x, 1.0, 0.002) << m->transmission.x;
+    EXPECT_NEAR(m->transmission.y / truth.y, 1.0, 0.002) << m->transmission.y;
+    EXPECT_NEAR(m->transmission.z / truth.z, 1.0, 0.002) << m->transmission.z;
+    EXPECT_GT(m->rejected, 0.2); // Anteil verworfener Punkte wird gemeldet
 }
 
 // LF-BAS-04

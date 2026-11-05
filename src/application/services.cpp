@@ -220,6 +220,9 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                 if (!base) {
                     if (auto b = fns_.measureBase(*img, d->regions)) {
                         base = b->transmission;
+                        if (b->rejected > 0.5) {
+                            d->notes.emplace_back("Filmrand ungleichmäßig (Fehlfarben), Basis prüfen");
+                        }
                         if ((parts_ & Base) != 0) {
                             model::ParamSet p = model::ParamSet{}.with("base", b->transmission);
                             if (!d->regions.rebate().empty()) {

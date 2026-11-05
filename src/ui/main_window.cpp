@@ -1432,8 +1432,17 @@ void MainWindow::requestPreview(const model::EditList& l)
     const double dpr = canvas_->devicePixelRatioF();
     const QRectF ir = canvas_->mapping().imageRect;
     if (canvas_->zoom() == ImageCanvas::Zoom::Fit) {
-        r.profile.target = {std::max(1, static_cast<int>(canvas_->width() * dpr)),
-                            std::max(1, static_cast<int>(canvas_->height() * dpr))};
+        // Die Vorschau verkleinert den ganzen Scan auf das Ziel und schneidet danach zu: mit
+        // Zuschnitt entsprechend größer anfordern, damit der Ausschnitt das Fenster füllt
+        double fw = 1.0;
+        double fh = 1.0;
+        if (const model::EditEntry* e = r.list->get(model::StepId(std::string(id::crop))); e && e->enabled) {
+            const auto c = e->params.get<model::NormRect>("rect").value_or(model::NormRect{0, 0, 1, 1});
+            fw = std::clamp(c.w, 0.05, 1.0);
+            fh = std::clamp(c.h, 0.05, 1.0);
+        }
+        r.profile.target = {std::max(1, static_cast<int>(canvas_->width() * dpr / fw)),
+                            std::max(1, static_cast<int>(canvas_->height() * dpr / fh))};
     } else {
         // 100 %: so viele Pixel wie das Ergebnis hat (200 % vergrößert die Brücke)
         const int scale = canvas_->zoom() == ImageCanvas::Zoom::Double ? 2 : 1;
@@ -1461,7 +1470,15 @@ void MainWindow::onPreview(const PreviewFrame& p)
                 QSize(src.width(), std::max(1, static_cast<int>(std::lround(src.width() / aspect)))));
         }
     }
-    canvas_->setImage(p.image, canvas_->mapping().imageRect);
+    // Bild mittig im Feld (falls die Vorschau kleiner ist, etwa am Rand der Quellauflösung)
+    QRectF place = canvas_->mapping().imageRect;
+    {
+        const double dpr = canvas_->devicePixelRatioF();
+        const QSizeF logical(p.image.width() / dpr, p.image.height() / dpr);
+        place = QRectF(place.center().x() - logical.width() / 2.0,
+                       place.center().y() - logical.height() / 2.0, logical.width(), logical.height());
+    }
+    canvas_->setImage(p.image, place);
     canvas_->setClipping(p.clipping, false);
     histogram_->setHistogram(p.histogram);
     ++previewsShown_;
