@@ -321,11 +321,14 @@ base::Expected<Layout> findLayout(const Planes& p, model::FilmType film, const F
     Layout l;
     l.t0 = strip.a;
     l.t1 = strip.b;
-    // Halter am Rand des Laufs abschneiden (gleichmäßig dunkel)
-    while (strip.a < strip.b && darkRow[static_cast<std::size_t>(strip.a)] >= 0.8) {
+    // Halter am Rand des Laufs abschneiden (gleichmäßig dunkel). Nicht bei Dias: deren
+    // unbelichteter Filmrand ist selbst schwarz (mit der Lochreihe darin)
+    while (film != model::FilmType::Slide && strip.a < strip.b &&
+           darkRow[static_cast<std::size_t>(strip.a)] >= 0.8) {
         ++strip.a;
     }
-    while (strip.b > strip.a && darkRow[static_cast<std::size_t>(strip.b - 1)] >= 0.8) {
+    while (film != model::FilmType::Slide && strip.b > strip.a &&
+           darkRow[static_cast<std::size_t>(strip.b - 1)] >= 0.8) {
         --strip.b;
     }
     if (strip.b - strip.a < std::max(8, h / 20)) {
@@ -379,7 +382,8 @@ base::Expected<Layout> findLayout(const Planes& p, model::FilmType film, const F
     const std::optional<double> span = perforationSpan(lightRow, l.s0, l.s1);
     if (span) {
         const double height = *span * 24.0 / 25.4;
-        if (l.bottom - l.top < 0.8 * height) {
+        // zu klein (dünnes Negativ, dunkles Dia) oder zu hoch (Randbeschriftung als Bild gezählt)
+        if (l.bottom - l.top < 0.8 * height || l.bottom - l.top > 1.05 * height) {
             l.fromPerforation = true;
             double mid = 0.0;
             int y = l.s0;
@@ -473,7 +477,6 @@ base::Expected<Layout> findLayout(const Planes& p, model::FilmType film, const F
     l.rowContrast = rowBoundary ? pin - pout : 1.0;
     l.colContrast = qin - qout;
     l.confidence = std::clamp(std::min(l.rowContrast, l.colContrast), 0.0, 1.0);
-    (void)film;
     return l;
 }
 
