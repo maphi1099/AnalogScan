@@ -888,9 +888,32 @@ FrameDetector::detectAll(const image::ImageBuffer& img, model::FilmType film, co
     std::vector<FrameDetection> out;
     const double lw = q.t.w;
     const double lh = q.t.h;
+    // Negativ: Randzeilen so hell wie die Basis sind Filmrand im Bildfeld (Kanten aus
+    // Perforation/Format geschätzt oder schwach) und werden abgeschnitten
+    std::optional<float> rebateT;
+    if (film != model::FilmType::Slide) {
+        // Pegel des Filmrands ober- und unterhalb des Bildfelds, ohne Perforation
+        std::vector<float> rebate;
+        for (int y = layout->s0; y < layout->s1; ++y) {
+            if (y >= layout->top && y < layout->bottom) {
+                continue;
+            }
+            for (int x = 0; x < q.t.w; ++x) {
+                if (q.zone.at(x, y) < 0.5F && std::isfinite(q.t.at(x, y))) {
+                    rebate.push_back(q.t.at(x, y));
+                }
+            }
+        }
+        if (rebate.size() > 100) {
+            rebateT = static_cast<float>(0.9 * detail::percentile(rebate, 0.5));
+        }
+    }
     for (const auto& [left, right] : layout->cols) {
-        model::NormRect r{left / lw, layout->top / lh, (right - left) / lw,
-                          (layout->bottom - layout->top) / lh};
+        detail::Box b{left, layout->top, right, layout->bottom};
+        if (rebateT) {
+            b = detail::trimRebate(q.t, b, *rebateT, 0.04);
+        }
+        model::NormRect r{b.x0 / lw, b.y0 / lh, (b.x1 - b.x0) / lw, (b.y1 - b.y0) / lh};
         if (vertical) {
             r = {r.y, r.x, r.h, r.w};
         }

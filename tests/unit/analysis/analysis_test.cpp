@@ -4,6 +4,7 @@
 
 #include "analysis/base_meter.hpp"
 #include "analysis/frame_detector.hpp"
+#include "analysis/planes.hpp"
 #include "analysis/tone.hpp"
 #include "mocks/fake_vision.hpp"
 #include "support/color_metrics.hpp"
@@ -135,6 +136,33 @@ TEST_F(Analysis, U_ANA_02_RegionClassification)
     const model::NormRect& top = m.rebate().front();
     EXPECT_NEAR(top.y, scan.truth.rebateTop.y, 1.5 / s.height);
     EXPECT_NEAR(top.y + top.h, scan.truth.rebateTop.y + scan.truth.rebateTop.h, 1.5 / s.height);
+}
+
+// Fehler aus der Reflexion (Bilder 5, 6): ein aus Perforation/Format geschätztes Bildfeld
+// enthielt am Rand einen Streifen Filmrand. Unbelichtete Randzeilen/-spalten werden abgeschnitten,
+// höchstens 4 % je Seite; Bildinhalt bleibt.
+TEST(TrimRebateTest, M10_RebateStripeIsCut)
+{
+    detail::Plane t(200, 100, 0.7F); // Filmrand: Transmission der Basis
+    for (int y = 10; y < 90; ++y) {
+        for (int x = 20; x < 180; ++x) {
+            t.at(x, y) = 0.05F + 0.3F * static_cast<float>((x + y) % 7) / 7.0F; // Bildinhalt
+        }
+    }
+    t.at(18, 50) = 0.02F; // Staub im Filmrand: einzelne Pixel ändern nichts
+    // geschätztes Bildfeld 3 px zu weit links und 2 px zu weit oben
+    const detail::Box b = detail::trimRebate(t, {17.0, 8.0, 180.0, 90.0}, 0.6F, 0.04);
+    EXPECT_DOUBLE_EQ(b.x0, 20.0);
+    EXPECT_DOUBLE_EQ(b.y0, 10.0);
+    EXPECT_DOUBLE_EQ(b.x1, 180.0); // passende Seiten bleiben
+    EXPECT_DOUBLE_EQ(b.y1, 90.0);
+    // höchstens 4 %: ein breiter heller Bereich wird nicht ganz weggeschnitten
+    EXPECT_DOUBLE_EQ(detail::trimRebate(t, {0.0, 10.0, 180.0, 90.0}, 0.6F, 0.04).x0, 7.0);
+    // Randzeile überwiegend Bildinhalt gilt als Bild
+    for (int x = 17; x < 110; ++x) {
+        t.at(x, 9) = 0.1F;
+    }
+    EXPECT_DOUBLE_EQ(detail::trimRebate(t, {20.0, 9.0, 180.0, 90.0}, 0.6F, 0.04).y0, 9.0);
 }
 
 // LF-GEO-03

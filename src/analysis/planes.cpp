@@ -168,4 +168,39 @@ Plane transpose(const Plane& p)
     return out;
 }
 
+Box trimRebate(const Plane& t, Box b, float minT, double maxShare)
+{
+    const int x0 = std::clamp(static_cast<int>(std::ceil(b.x0)), 0, t.w);
+    const int x1 = std::clamp(static_cast<int>(std::floor(b.x1)), 0, t.w);
+    const int y0 = std::clamp(static_cast<int>(std::ceil(b.y0)), 0, t.h);
+    const int y1 = std::clamp(static_cast<int>(std::floor(b.y1)), 0, t.h);
+    if (x1 - x0 < 4 || y1 - y0 < 4) {
+        return b;
+    }
+    std::vector<float> line;
+    const auto rebate = [&](bool row, int k) {
+        line.clear();
+        for (int i = row ? x0 : y0; i < (row ? x1 : y1); ++i) {
+            line.push_back(row ? t.at(i, k) : t.at(k, i));
+        }
+        return percentile(line, 0.5) >= minT;
+    };
+    const int maxRows = static_cast<int>(maxShare * (y1 - y0));
+    const int maxCols = static_cast<int>(maxShare * (x1 - x0));
+    Box out = b;
+    for (int i = 0; i < maxRows && rebate(true, y0 + i); ++i) {
+        out.y0 = y0 + i + 1;
+    }
+    for (int i = 0; i < maxRows && rebate(true, y1 - 1 - i); ++i) {
+        out.y1 = y1 - 1 - i;
+    }
+    for (int i = 0; i < maxCols && rebate(false, x0 + i); ++i) {
+        out.x0 = x0 + i + 1;
+    }
+    for (int i = 0; i < maxCols && rebate(false, x1 - 1 - i); ++i) {
+        out.x1 = x1 - 1 - i;
+    }
+    return out;
+}
+
 } // namespace autoneg::analysis::detail

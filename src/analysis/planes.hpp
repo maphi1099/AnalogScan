@@ -68,4 +68,16 @@ struct Robust
 /// Vertauscht Zeilen und Spalten.
 [[nodiscard]] Plane transpose(const Plane& p);
 
+/// Rechteck in Pixeln der Ebene: Spalten [x0, x1), Zeilen [y0, y1).
+struct Box
+{
+    double x0 = 0.0;
+    double y0 = 0.0;
+    double x1 = 0.0;
+    double y1 = 0.0;
+};
+/// Zieht jede Seite nach innen, solange die Randzeile bzw. -spalte im Median mindestens so hell
+/// wie minT ist (Filmrand im Bildfeld); höchstens maxShare der Breite bzw. Höhe je Seite.
+[[nodiscard]] Box trimRebate(const Plane& t, Box b, float minT, double maxShare);
+
 } // namespace autoneg::analysis::detail
