@@ -739,7 +739,7 @@ void assess(FrameDetection& d, const Layout& l, double left, double right, doubl
 
 } // namespace
 
-base::Expected<double> SkewEstimator::estimate(const image::ImageBuffer& img) const
+base::Expected<double> SkewEstimator::estimate(const image::ImageBuffer& img, double maxDeg) const
 {
     if (img.empty() || img.host().empty()) {
         return base::makeError(base::ErrorCode::InvalidArgument, "Schräglage ohne Bild");
@@ -776,9 +776,9 @@ base::Expected<double> SkewEstimator::estimate(const image::ImageBuffer& img) co
         } else if (a <= -90.0) {
             a += 180.0;
         }
-        if (std::abs(a) <= 10.0) {
+        if (std::abs(a) <= maxDeg) {
             cands.push_back({ln, a, len, true});
-        } else if (std::abs(a) >= 80.0) {
+        } else if (std::abs(a) >= 90.0 - maxDeg) {
             cands.push_back({ln, a > 0 ? a - 90.0 : a + 90.0, len, false});
         }
     }
@@ -833,6 +833,9 @@ base::Expected<double> SkewEstimator::estimate(const image::ImageBuffer& img) co
         used += slope ? 1 : 0;
     }
     const double skew = fine.empty() ? skew0 : weightedMedian(fine);
+    if (std::abs(skew) > maxDeg + 0.25) { // Feinmessung über die eingestellte Grenze hinaus
+        return base::makeError(base::ErrorCode::NotFound, "Schräglage über der eingestellten Grenze");
+    }
     return -skew; // Korrekturwinkel für autoneg.rotation
 }
 
@@ -842,7 +845,7 @@ FrameDetector::detectAll(const image::ImageBuffer& img, model::FilmType film, co
     if (img.empty() || img.host().empty()) {
         return base::makeError(base::ErrorCode::InvalidArgument, "Bildfelderkennung ohne Bild");
     }
-    const auto correction = SkewEstimator(vision_).estimate(img);
+    const auto correction = SkewEstimator(vision_).estimate(img, std::clamp(hint.maxSkewDeg, 0.5, 30.0));
     const double skew = correction ? -*correction : 0.0;
     const Plane lum = detail::deskew(detail::luminance(img), std::abs(skew) < 0.01 ? 0.0 : skew);
     Planes p = makePlanes(lum, film, vision_);

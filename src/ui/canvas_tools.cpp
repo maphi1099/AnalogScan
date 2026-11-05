@@ -187,6 +187,7 @@ double CropRotateTool::straighten(QPointF a, QPointF b)
 
 CropRotateTool::Handle CropRotateTool::hit(QPointF w, const ViewMapping& m) const
 {
+    w = m.toWidget(toRect(m.toNorm(w))); // Anfasser im gedrehten Bild prüfen
     const QRectF r = m.toWidget(rect_);
     if (near(w, r.topLeft())) {
         return Handle::TopLeft;
@@ -215,6 +216,27 @@ CropRotateTool::Handle CropRotateTool::hit(QPointF w, const ViewMapping& m) cons
     return r.contains(w) ? Handle::Move : Handle::Rotate;
 }
 
+QPointF CropRotateTool::toScan(QPointF q) const
+{
+    // Drehung im Uhrzeigersinn um die Bildmitte (WarpBuilder::rotate), in Pixeln des Scans
+    const double a = -angle_ * 3.14159265358979323846 / 180.0;
+    const double w = source_.width();
+    const double h = source_.height();
+    const double x = (q.x() - 0.5) * w;
+    const double y = (q.y() - 0.5) * h;
+    return {(x * std::cos(a) - y * std::sin(a)) / w + 0.5, (x * std::sin(a) + y * std::cos(a)) / h + 0.5};
+}
+
+QPointF CropRotateTool::toRect(QPointF p) const
+{
+    const double a = angle_ * 3.14159265358979323846 / 180.0;
+    const double w = source_.width();
+    const double h = source_.height();
+    const double x = (p.x() - 0.5) * w;
+    const double y = (p.y() - 0.5) * h;
+    return {(x * std::cos(a) - y * std::sin(a)) / w + 0.5, (x * std::sin(a) + y * std::cos(a)) / h + 0.5};
+}
+
 bool CropRotateTool::mouse(QMouseEvent* e, const ViewMapping& m)
 {
     const QPointF w = e->position();
@@ -224,7 +246,7 @@ bool CropRotateTool::mouse(QMouseEvent* e, const ViewMapping& m)
             return false;
         }
         active_ = hit(w, m);
-        pressNorm_ = m.toNorm(w);
+        pressNorm_ = toRect(m.toNorm(w));
         pressRect_ = rect_;
         pressAngle_ = angle_;
         return true;
@@ -232,7 +254,7 @@ bool CropRotateTool::mouse(QMouseEvent* e, const ViewMapping& m)
         if (active_ == Handle::None) {
             return false;
         }
-        const QPointF n = m.toNorm(w);
+        const QPointF n = toRect(m.toNorm(w));
         if (active_ == Handle::Move) {
             rect_ = pressRect_;
             rect_.x += n.x() - pressNorm_.x();
@@ -240,8 +262,8 @@ bool CropRotateTool::mouse(QMouseEvent* e, const ViewMapping& m)
             clampToImage();
         } else if (active_ == Handle::Rotate) {
             // Feindrehen: Winkel um die Rahmenmitte
-            const QPointF c = m.toWidget(QPointF(rect_.x + rect_.w / 2.0, rect_.y + rect_.h / 2.0));
-            const QPointF p0 = m.toWidget(pressNorm_);
+            const QPointF c = m.toWidget(toScan(QPointF(rect_.x + rect_.w / 2.0, rect_.y + rect_.h / 2.0)));
+            const QPointF p0 = m.toWidget(toScan(pressNorm_));
             const double a0 = std::atan2(p0.y() - c.y(), p0.x() - c.x());
             const double a1 = std::atan2(w.y() - c.y(), w.x() - c.x());
             angle_ = std::clamp(pressAngle_ + deg(a1 - a0), -45.0, 45.0);
@@ -266,25 +288,29 @@ bool CropRotateTool::mouse(QMouseEvent* e, const ViewMapping& m)
 
 void CropRotateTool::paint(QPainter& p, const ViewMapping& m)
 {
-    const QRectF r = m.toWidget(rect_);
+    // Rahmen schräg auf dem Scan: Ecken aus dem gedrehten Bild zurückrechnen
+    const auto at = [&](double u, double v) {
+        return m.toWidget(toScan(QPointF(rect_.x + u * rect_.w, rect_.y + v * rect_.h)));
+    };
+    const QPolygonF frame({at(0, 0), at(1, 0), at(1, 1), at(0, 1)});
     // Abdunkeln außerhalb des Rahmens
     QPainterPath outside;
     outside.addRect(m.imageRect);
     QPainterPath inside;
-    inside.addRect(r);
+    inside.addPolygon(frame);
+    inside.closeSubpath();
     p.fillPath(outside.subtracted(inside), QColor(0, 0, 0, 140));
+    p.setRenderHint(QPainter::Antialiasing);
     p.setPen(QPen(Qt::white, 1.0));
-    p.drawRect(r);
+    p.drawPolygon(frame);
     // Drittelraster
     p.setPen(QPen(QColor(255, 255, 255, 90), 1.0));
     for (int i = 1; i < 3; ++i) {
-        p.drawLine(QPointF(r.left() + r.width() * i / 3.0, r.top()),
-                   QPointF(r.left() + r.width() * i / 3.0, r.bottom()));
-        p.drawLine(QPointF(r.left(), r.top() + r.height() * i / 3.0),
-                   QPointF(r.right(), r.top() + r.height() * i / 3.0));
+        p.drawLine(at(i / 3.0, 0), at(i / 3.0, 1));
+        p.drawLine(at(0, i / 3.0), at(1, i / 3.0));
     }
     p.setBrush(Qt::white);
-    for (const QPointF c : {r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()}) {
+    for (const QPointF c : frame) {
         p.drawRect(QRectF(c.x() - 4, c.y() - 4, 8, 8));
     }
     p.setBrush(Qt::NoBrush);

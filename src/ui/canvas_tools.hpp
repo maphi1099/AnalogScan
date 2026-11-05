@@ -99,6 +99,10 @@ public:
 
 private:
     [[nodiscard]] Handle hit(QPointF widget, const ViewMapping& m) const;
+    /// Rahmen liegt im gedrehten Bild (hinter autoneg.rotation, ohne Auffüllen); die Fläche zeigt
+    /// den ungedrehten Scan. toScan: Punkt des gedrehten Bilds → Scan, toRect: umgekehrt.
+    [[nodiscard]] QPointF toScan(QPointF q) const;
+    [[nodiscard]] QPointF toRect(QPointF p) const;
     void enforceAspect(Handle anchorFrom);
     void clampToImage();
 

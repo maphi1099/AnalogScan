@@ -204,7 +204,8 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                 entries.push_back(automatic("autoneg.crop", model::ParamSet{}.with("rect", crop)));
                 if (std::abs(d->angleDeg) >= 0.01) {
                     entries.push_back(
-                        automatic("autoneg.rotation", model::ParamSet{}.with("angle", d->angleDeg)));
+                        automatic("autoneg.rotation",
+                                  model::ParamSet{}.with("angle", d->angleDeg).with("autoFill", false)));
                 }
             }
             if (film != model::FilmType::Slide && (parts_ & (Base | Levels)) != 0) {

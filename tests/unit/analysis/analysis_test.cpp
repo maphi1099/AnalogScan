@@ -156,6 +156,21 @@ TEST_F(Analysis, U_ANA_03_SkewWithinTenthDegree)
     }
 }
 
+// K-M10-16 (Wunsch des Nutzers): schief liegender Film bis zur eingestellten Grenze (Standard
+// 10°); jenseits der Grenze wird der Winkel nicht gesucht
+TEST_F(Analysis, M10_SkewUpToConfiguredLimit)
+{
+    auto s = spec();
+    s.angleDeg = 7.0;
+    const t::SyntheticScan scan = t::makeNegative(s);
+    const auto d = detector.detect(scan.scan, FilmType::ColorNegative);
+    ASSERT_TRUE(d.has_value()) << d.error().message;
+    EXPECT_NEAR(d->angleDeg, -7.0, 0.15);
+    EXPECT_LE(worstEdge(d->frame, scan.truth.frame, s.width, s.height), 2.0);
+    const auto limited = skew.estimate(scan.scan, 5.0);
+    EXPECT_FALSE(limited.has_value() && std::abs(*limited + 7.0) < 0.5);
+}
+
 // LF-GEO-05
 TEST_F(Analysis, U_ANA_04_NoFrameRecognizable)
 {

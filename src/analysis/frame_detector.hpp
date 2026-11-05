@@ -27,6 +27,8 @@ struct FrameHint
         Portrait   ///< Bild im Scan hochkant
     };
     Orientation orientation = Orientation::Any;
+    /// Größte gesuchte Schräglage in Grad (Film schief unter der Kamera)
+    double maxSkewDeg = 10.0;
 };
 
 /// Ergebnis der Bildfelderkennung (Architektur 9.7, LF-GEO-01…06).
@@ -57,7 +59,7 @@ public:
         : vision_(vision)
     {}
 
-    [[nodiscard]] base::Expected<double> estimate(const image::ImageBuffer& img) const;
+    [[nodiscard]] base::Expected<double> estimate(const image::ImageBuffer& img, double maxDeg = 10.0) const;
 
 private:
     ports::IVision& vision_;

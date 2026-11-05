@@ -25,6 +25,7 @@
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QDockWidget>
+#include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
@@ -174,7 +175,11 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
     cropTool_->setCommit([this](const model::NormRect& r, double angle) {
         const model::EditList cur = ui_->currentList();
         ui_->apply(std::make_unique<SetEntriesCommand>(std::vector<model::EditEntry>{
-            entryWith(cur, id::crop, "rect", r), entryWith(cur, id::rotation, "angle", angle)}));
+            entryWith(cur, id::crop, "rect", r), [&] {
+                model::EditEntry e = entryWith(cur, id::rotation, "angle", angle);
+                e.params = e.params.with("autoFill", false); // der Rahmen bestimmt den Ausschnitt
+                return e;
+            }()}));
     });
     retouchTool_->setSpot([this](const model::Spot& spot) {
         const model::EditList cur = ui_->currentList();
@@ -1673,6 +1678,9 @@ void MainWindow::applyFrameHint()
     h.orientation = o == "landscape"  ? analysis::FrameHint::Orientation::Landscape
                     : o == "portrait" ? analysis::FrameHint::Orientation::Portrait
                                       : analysis::FrameHint::Orientation::Any;
+    if (const auto v = s_.settings.get("maxSkewDeg"); v && v->number()) {
+        h.maxSkewDeg = *v->number();
+    }
     s_.analysis.setFrameHint(h);
 }
 
@@ -1713,6 +1721,18 @@ void MainWindow::doFrameOptions()
     layout->addWidget(format);
     layout->addWidget(new QLabel(tr("Lage"), &d));
     layout->addWidget(orientation);
+    auto* skew = new QDoubleSpinBox(&d);
+    skew->setObjectName(QStringLiteral("maxSkew"));
+    skew->setRange(1.0, 30.0);
+    skew->setDecimals(1);
+    skew->setSuffix(QStringLiteral(" °"));
+    skew->setToolTip(tr("So schief darf der Film unter der Kamera liegen; Standard 10°"));
+    {
+        const auto v = s_.settings.get("maxSkewDeg");
+        skew->setValue(v && v->number() ? *v->number() : 10.0);
+    }
+    layout->addWidget(new QLabel(tr("Maximale Schräglage"), &d));
+    layout->addWidget(skew);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &d);
     layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &d, &QDialog::accept);
@@ -1723,6 +1743,7 @@ void MainWindow::doFrameOptions()
     s_.settings.set("frameFormat", model::JsonValue(format->currentData().toString().toStdString()));
     s_.settings.set("frameOrientation",
                     model::JsonValue(orientation->currentData().toString().toStdString()));
+    s_.settings.set("maxSkewDeg", model::JsonValue(skew->value()));
     applyFrameHint();
 }
 

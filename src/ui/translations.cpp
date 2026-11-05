@@ -170,6 +170,8 @@ const QHash<QString, QString>& english()
             {"– keine –", "– none –"},
             {"…", "…"},
             // Konvertieren, Bildfeld-Hinweis, Fenster (K-M10-14)
+            {"Maximale Schräglage", "Maximum skew"},
+            {"So schief darf der Film unter der Kamera liegen; Standard 10°", "How crooked the film may lie under the camera; default 10°"},
             {"Eingeschaltet setzt jeder Klick auf ein Staubkorn eine Retuschestelle.", "When on, each click on a dust speck sets a retouch spot."},
             {"Alle Stellen eines Bilds sind eine Bearbeitungsoption.", "All spots of an image form one editing option."},
             {"Licht und Farbe", "Light and colour"},
