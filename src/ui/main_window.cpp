@@ -505,7 +505,7 @@ void MainWindow::buildUi()
             for (const model::Frame& f : frames_) {
                 all.push_back(f.id);
             }
-            detect(all, tr("Bildfeld erkennen"));
+            detect(all, tr("Bildfeld erkennen"), automatic(&application::AnalysisService::autoConvert));
         }
     });
     connect(import_, &ImportPage::cancelled, this, [this] { closeRoll(); });
@@ -599,7 +599,7 @@ void MainWindow::buildUi()
         removeSteps({id::crop, id::rotation}); // auch einen eigenen Zuschnitt ersetzen
         if (on) {
             showFrameAfterDetect_ = s_.session.current; // erkannten Rahmen zeigen, ziehbar
-            detect(targets(), tr("Bildfeld erkennen"), application::AnalysisService::Frame,
+            detect(targets(), tr("Bildfeld erkennen"), automatic(&application::AnalysisService::autoFrame),
                    QStringLiteral("autoFrame"));
         }
     });
@@ -610,7 +610,7 @@ void MainWindow::buildUi()
         // Einträge des Anwenders, sonst bliebe die alte Basis stehen
         removeSteps({id::filmbase});
         if (on) {
-            detect(targets(), tr("Basis messen"), application::AnalysisService::Base,
+            detect(targets(), tr("Basis messen"), automatic(&application::AnalysisService::autoBase),
                    QStringLiteral("autoBase"));
         }
     });
@@ -637,13 +637,13 @@ void MainWindow::buildUi()
             return;
         }
         // Tonwerte aus Bild und Basis, dann umkehren
-        detect(targets(), tr("Konvertieren"),
-               application::AnalysisService::Levels | application::AnalysisService::Convert,
+        detect(targets(), tr("Konvertieren"), automatic(&application::AnalysisService::convert),
                QStringLiteral("convert"));
     });
     connect(conversion_, &ConversionPanel::frameOptionsRequested, this, [this] { doFrameOptions(); });
-    connect(conversion_, &ConversionPanel::autoLevelsRequested, this,
-            [this] { detect(targets(), tr("Tonwerte"), application::AnalysisService::Levels); });
+    connect(conversion_, &ConversionPanel::autoLevelsRequested, this, [this] {
+        detect(targets(), tr("Tonwerte"), automatic(&application::AnalysisService::autoLevels));
+    });
     connect(conversion_, &ConversionPanel::autoConvertToggled, this, [this](bool on) { setAutoConvert(on); });
     connect(conversion_, &ConversionPanel::levelPresetChosen, this, [this](const QString& name) {
         if (!roll_ || !s_.decodeEdits) {
@@ -1414,7 +1414,23 @@ void MainWindow::chooseFilm(const std::string& type)
     refreshCurrent();
 }
 
-void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString& what, unsigned parts,
+MainWindow::Automatic MainWindow::automatic(application::JobHandle (application::AnalysisService::*a)(
+    const model::Frame&, std::shared_ptr<const model::Roll>, model::FilmType, model::EditList))
+{
+    return [this, a](const model::Frame& f, model::FilmType film, model::EditList current) {
+        return (s_.analysis.*a)(f, roll_, film, std::move(current));
+    };
+}
+
+void MainWindow::redetect(const std::vector<model::FrameId>& frames, const std::set<model::StepId>& steps)
+{
+    detect(frames, tr("Automatik neu berechnen"),
+           [this, steps](const model::Frame& f, model::FilmType film, model::EditList current) {
+               return s_.analysis.redetect(f, roll_, film, std::move(current), steps);
+           });
+}
+
+void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString& what, const Automatic& run,
                         const QString& button)
 {
     // Erkennung braucht den Filmtyp; Bilder ohne Filmtyp werden übersprungen und gemeldet
@@ -1429,8 +1445,7 @@ void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString
             ++skipped;
             continue;
         }
-        application::JobHandle h =
-            s_.analysis.detectFrame(*fr, roll_, film, parts, s_.bus.history(f).current());
+        application::JobHandle h = run(*fr, film, s_.bus.history(f).current());
         if (!button.isEmpty()) {
             busy_[button].push_back(h);
             conversion_->setBusy(button, true);
@@ -1658,15 +1673,12 @@ void MainWindow::applyCopiedTo(std::vector<model::FrameId> frames, bool batch)
     }
     // Automatische Optionen gehören zum einzelnen Bild: dort neu berechnen statt kopieren
     std::set<model::StepId> values;
-    unsigned parts = 0;
+    std::set<model::StepId> automatics;
     for (const model::EditEntry& e : s_.clipboard.source().entries()) {
         const std::string& step = e.step.value();
-        if (e.origin == model::Origin::Automatic && (step == id::crop || step == id::rotation)) {
-            parts |= application::AnalysisService::Frame;
-        } else if (e.origin == model::Origin::Automatic && step == id::filmbase) {
-            parts |= application::AnalysisService::Base;
-        } else if (e.origin == model::Origin::Automatic && step == id::densityrange) {
-            parts |= application::AnalysisService::Levels;
+        if (e.origin == model::Origin::Automatic &&
+            (step == id::crop || step == id::rotation || step == id::filmbase || step == id::densityrange)) {
+            automatics.insert(e.step);
         } else {
             values.insert(e.step);
         }
@@ -1674,8 +1686,8 @@ void MainWindow::applyCopiedTo(std::vector<model::FrameId> frames, bool batch)
     if (!values.empty()) {
         s_.bus.execute(s_.clipboard.paste(values, application::PasteMode::Values), frames, *roll_, batch);
     }
-    if (parts != 0) {
-        detect(frames, tr("Automatik neu berechnen"), parts);
+    if (!automatics.empty()) {
+        redetect(frames, automatics);
     }
     refreshCurrent();
     report(tr("Kopierte Bearbeitungsoptionen auf %n Bild(er) übernommen", nullptr,
@@ -1705,7 +1717,7 @@ void MainWindow::setAutoConvert(bool on)
         }
     }
     if (on) {
-        detect(t, tr("Autokonvertierung"), application::AnalysisService::All);
+        detect(t, tr("Autokonvertierung"), automatic(&application::AnalysisService::autoConvert));
     }
 }
 
@@ -2156,7 +2168,7 @@ void MainWindow::doPaste()
     const auto t = targets();
     s_.bus.execute(cmd, t, *roll_, view_ == View::Overview); // Leuchttisch: dort rückgängig
     if (d.mode() == application::PasteMode::Redetect && !cmd.redetect().empty()) {
-        detect(t, tr("Erkennung"));
+        redetect(t, cmd.redetect());
     }
     refreshCurrent();
 }

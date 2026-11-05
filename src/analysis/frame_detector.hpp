@@ -29,6 +29,8 @@ struct FrameHint
     Orientation orientation = Orientation::Any;
     /// Größte gesuchte Schräglage in Grad (Film schief unter der Kamera)
     double maxSkewDeg = 10.0;
+
+    friend bool operator==(const FrameHint&, const FrameHint&) = default;
 };
 
 /// Ergebnis der Bildfelderkennung (Architektur 9.7, LF-GEO-01…06).

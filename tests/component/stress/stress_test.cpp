@@ -170,7 +170,7 @@ TEST(StressComponent, K_16_ConcurrencyUnderLoad)
             break;
         case 6:
             if (jobs.size() < maxJobs) {
-                jobs.push_back(c.analysis().detectFrame(f, shared, shared->filmType));
+                jobs.push_back(c.analysis().autoConvert(f, shared, shared->filmType));
             }
             break;
         case 7: { // Stapelexport aller Bilder

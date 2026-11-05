@@ -14,7 +14,11 @@
 
 #include <filesystem>
 #include <functional>
+#include <list>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 
 namespace autoneg::application {
@@ -46,23 +50,50 @@ struct AnalysisFunctions
              std::function<base::Expected<image::ImageBuffer>(const model::Frame&)> image);
 };
 
+/// Zwischenspeicher der Automatiken je Bild: verkleinertes Analysebild und letzte
+/// Bildfelderkennung (für Filmtyp und Hinweis). Auto-Bildfeld, Auto-Basis und Konvertieren
+/// dekodieren und erkennen so nur einmal. Hält die zuletzt benutzten Bilder; threadsicher.
+class AnalysisCache
+{
+public:
+    explicit AnalysisCache(std::size_t capacity = 6)
+        : capacity_(capacity)
+    {}
+
+    [[nodiscard]] std::shared_ptr<const image::ImageBuffer> image(const model::FrameId& f);
+    void putImage(const model::FrameId& f, std::shared_ptr<const image::ImageBuffer> img);
+    [[nodiscard]] std::optional<analysis::FrameDetection>
+    detection(const model::FrameId& f, model::FilmType film, const analysis::FrameHint& hint);
+    void putDetection(const model::FrameId& f, model::FilmType film, const analysis::FrameHint& hint,
+                      analysis::FrameDetection d);
+
+private:
+    struct Entry
+    {
+        model::FrameId frame;
+        std::shared_ptr<const image::ImageBuffer> image;
+        std::optional<analysis::FrameDetection> detection;
+        model::FilmType film = model::FilmType::Unconverted;
+        analysis::FrameHint hint;
+    };
+    Entry& entry(const model::FrameId& f); ///< nach vorn holen bzw. anlegen; mtx_ gehalten
+
+    std::size_t capacity_;
+    std::mutex mtx_;
+    std::list<Entry> entries_; ///< zuletzt benutzt vorn
+};
+
 /// Automatiken (Architektur 9.13, LF-GEO-01, LF-BAS-01): laufen als Jobs im Hintergrund und
 /// schreiben ihre Ergebnisse als Einträge mit Herkunft Automatic über den CommandBus (im
 /// UI-Thread). Einträge, die der Anwender gesetzt, kopiert oder aus einer Vorlage hat, werden
-/// nicht überschrieben.
+/// nicht überschrieben. Jede Automatik trägt nur ihren Teil ein (K-M10-13).
+///
+/// film ist der Filmtyp des Bilds (steps::FilmModeStep::effective); ohne festgelegten Filmtyp
+/// scheitert der Job (K-M10-08). current ist der Stand des Bilds: Tonwerte nutzen dessen
+/// Zuschnitt und Basis, sofern vorhanden.
 class AnalysisService
 {
 public:
-    /// Teile der Automatik: Bildfeld (Zuschnitt, Feindrehung), Filmbasis, Tonwertgrenzen, Konvertieren.
-    enum Part : unsigned
-    {
-        Frame = 1U,
-        Base = 2U,
-        Levels = 4U,
-        Convert = 8U, ///< Konvertieren einschalten (autoneg.convert)
-        All = 15U
-    };
-
     AnalysisService(JobScheduler& jobs, CommandBus& bus, UiDispatcher ui, AnalysisFunctions fns)
         : jobs_(jobs)
         , bus_(bus)
@@ -77,12 +108,27 @@ public:
         , fns_(std::move(fns))
     {}
 
-    /// Automatik eines Bildes: nur die gewünschten Teile werden eingetragen (Auto-Bildfeld
-    /// schreibt nur den Zuschnitt). current ist der Stand des Bilds; Tonwerte nutzen dessen
-    /// Zuschnitt und Basis, sofern vorhanden. film ist der Filmtyp des Bilds
-    /// (steps::FilmModeStep::effective); ohne festgelegten Filmtyp scheitert der Job (K-M10-08).
-    JobHandle detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
-                          model::FilmType film, unsigned parts = All, model::EditList current = {});
+    /// Auto-Bildfeld: Zuschnitt und Feindrehung.
+    JobHandle autoFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
+                        model::EditList current = {});
+    /// Auto-Basis: Filmbasis im Filmrand, ohne Filmrand statistisch geschätzt.
+    JobHandle autoBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
+                       model::EditList current = {});
+    /// Tonwertgrenzen aus Bild und Basis.
+    JobHandle autoLevels(const model::Frame& f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
+                         model::EditList current = {});
+    /// Schalter Konvertieren: Tonwerte und Umkehrung mit der vorhandenen Basis.
+    JobHandle convert(const model::Frame& f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
+                      model::EditList current = {});
+    /// Autokonvertierung: Bildfeld, Basis, Tonwerte und Umkehrung.
+    JobHandle autoConvert(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                          model::FilmType film, model::EditList current = {});
+    /// Automatische Einträge der Schritte steps neu berechnen (Einfügen mit Neuberechnung):
+    /// Zuschnitt/Feindrehung, Filmbasis, Tonwerte. Mit Basis und Tonwerten nutzen die Tonwerte
+    /// die neu gemessene Basis.
+    JobHandle redetect(const model::Frame& f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
+                       model::EditList current, const std::set<model::StepId>& steps);
+
     /// Hinweis für die Bildfelderkennung (Format, Lage); gilt für folgende Aufträge.
     void setFrameHint(const analysis::FrameHint& h) { hint_ = h; }
     /// Meldung je Bild nach der Erkennung (im UI-Thread).
@@ -100,11 +146,23 @@ public:
                           model::NormRect rect);
 
 private:
+    enum Part : unsigned
+    {
+        Frame = 1U,
+        Base = 2U,
+        Levels = 4U,
+        Convert = 8U, ///< Konvertieren einschalten (autoneg.convert)
+        All = 15U
+    };
+    JobHandle run(const model::Frame& f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
+                  unsigned parts, model::EditList current);
+
     JobScheduler& jobs_;
     CommandBus& bus_;
     std::shared_ptr<int> alive_ = std::make_shared<int>(0); ///< vor ui_: lebt so lange wie der Dienst
     UiDispatcher ui_;
     AnalysisFunctions fns_;
+    std::shared_ptr<AnalysisCache> cache_ = std::make_shared<AnalysisCache>(); ///< teilen sich die Jobs
     analysis::FrameHint hint_;
     Report report_;
 };

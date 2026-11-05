@@ -162,15 +162,131 @@ model::EditList SetAutomaticEntriesCommand::apply(const model::EditList& l, cons
     return out;
 }
 
-JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
-                                       model::FilmType film, unsigned parts, model::EditList current)
+AnalysisCache::Entry& AnalysisCache::entry(const model::FrameId& f)
+{
+    const auto it = std::ranges::find(entries_, f, &Entry::frame);
+    if (it != entries_.end()) {
+        entries_.splice(entries_.begin(), entries_, it);
+    } else {
+        entries_.emplace_front();
+        entries_.front().frame = f;
+        if (entries_.size() > capacity_) {
+            entries_.pop_back();
+        }
+    }
+    return entries_.front();
+}
+
+std::shared_ptr<const image::ImageBuffer> AnalysisCache::image(const model::FrameId& f)
+{
+    const std::scoped_lock lock(mtx_);
+    return entry(f).image;
+}
+
+void AnalysisCache::putImage(const model::FrameId& f, std::shared_ptr<const image::ImageBuffer> img)
+{
+    const std::scoped_lock lock(mtx_);
+    entry(f).image = std::move(img);
+}
+
+std::optional<analysis::FrameDetection>
+AnalysisCache::detection(const model::FrameId& f, model::FilmType film, const analysis::FrameHint& hint)
+{
+    const std::scoped_lock lock(mtx_);
+    const Entry& e = entry(f);
+    if (e.detection && e.film == film && e.hint == hint) {
+        return e.detection;
+    }
+    return std::nullopt;
+}
+
+void AnalysisCache::putDetection(const model::FrameId& f, model::FilmType film,
+                                 const analysis::FrameHint& hint, analysis::FrameDetection d)
+{
+    const std::scoped_lock lock(mtx_);
+    Entry& e = entry(f);
+    e.detection = std::move(d);
+    e.film = film;
+    e.hint = hint;
+}
+
+namespace {
+
+/// Analysebild aus dem Zwischenspeicher, sonst dekodiert und dort abgelegt.
+base::Expected<std::shared_ptr<const image::ImageBuffer>>
+analysisImage(AnalysisCache& cache, const AnalysisFunctions& fns, const model::Frame& f)
+{
+    if (auto img = cache.image(f.id)) {
+        return img;
+    }
+    auto decoded = fns.image(f);
+    if (!decoded) {
+        return std::unexpected(decoded.error());
+    }
+    auto img = std::make_shared<const image::ImageBuffer>(std::move(*decoded));
+    cache.putImage(f.id, img);
+    return img;
+}
+
+} // namespace
+
+JobHandle AnalysisService::autoFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                     model::FilmType film, model::EditList current)
+{
+    return run(f, std::move(roll), film, Frame, std::move(current));
+}
+
+JobHandle AnalysisService::autoBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                    model::FilmType film, model::EditList current)
+{
+    return run(f, std::move(roll), film, Base, std::move(current));
+}
+
+JobHandle AnalysisService::autoLevels(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                      model::FilmType film, model::EditList current)
+{
+    return run(f, std::move(roll), film, Levels, std::move(current));
+}
+
+JobHandle AnalysisService::convert(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                   model::FilmType film, model::EditList current)
+{
+    return run(f, std::move(roll), film, Levels | Convert, std::move(current));
+}
+
+JobHandle AnalysisService::autoConvert(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                       model::FilmType film, model::EditList current)
+{
+    return run(f, std::move(roll), film, All, std::move(current));
+}
+
+JobHandle AnalysisService::redetect(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                                    model::FilmType film, model::EditList current,
+                                    const std::set<model::StepId>& steps)
+{
+    unsigned parts = 0;
+    for (const model::StepId& s : steps) {
+        if (s.value() == id::crop || s.value() == id::rotation) {
+            parts |= Frame;
+        } else if (s.value() == id::filmbase) {
+            parts |= Base;
+        } else if (s.value() == id::densityrange) {
+            parts |= Levels;
+        }
+    }
+    return run(f, std::move(roll), film, parts, std::move(current));
+}
+
+JobHandle AnalysisService::run(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
+                               model::FilmType film, unsigned parts, model::EditList current)
 {
     class DetectJob final : public Job
     {
     public:
         DetectJob(model::Frame f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
                   unsigned parts, model::EditList current, analysis::FrameHint hint, Report report,
-                  AnalysisFunctions fns, CommandBus& bus, UiDispatcher ui)
+                  AnalysisFunctions fns, std::shared_ptr<AnalysisCache> cache, CommandBus& bus,
+                  UiDispatcher ui)
             : f_(std::move(f))
             , hint_(hint)
             , report_(std::move(report))
@@ -179,6 +295,7 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
             , parts_(parts)
             , current_(std::move(current))
             , fns_(std::move(fns))
+            , cache_(std::move(cache))
             , bus_(bus)
             , ui_(std::move(ui))
         {}
@@ -190,16 +307,22 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                 return base::makeError(base::ErrorCode::InvalidArgument,
                                        "Filmtyp nicht festgelegt (Farbnegativ, S/W-Negativ oder Dia wählen)");
             }
-            auto img = fns_.image(f_);
-            if (!img) {
-                return std::unexpected(img.error());
+            auto shared = analysisImage(*cache_, fns_, f_);
+            if (!shared) {
+                return std::unexpected(shared.error());
             }
+            const image::ImageBuffer* img = shared->get();
             if (c.cancel.cancelled()) {
                 return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
             }
-            auto d = fns_.detect(*img, film, hint_);
+            auto d = cache_->detection(f_.id, film, hint_);
             if (!d) {
-                return std::unexpected(d.error()); // Oberfläche meldet, Zuschnitt bleibt (LF-GEO-05)
+                auto found = fns_.detect(*img, film, hint_);
+                if (!found) {
+                    return std::unexpected(found.error()); // Oberfläche meldet, Zuschnitt bleibt (LF-GEO-05)
+                }
+                cache_->putDetection(f_.id, film, hint_, *found);
+                d = std::move(*found);
             }
             std::vector<model::EditEntry> entries;
             std::vector<std::string> hints;
@@ -285,11 +408,12 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
         unsigned parts_;
         model::EditList current_;
         AnalysisFunctions fns_;
+        std::shared_ptr<AnalysisCache> cache_;
         CommandBus& bus_;
         UiDispatcher ui_;
     };
     return jobs_.submit(std::make_unique<DetectJob>(f, std::move(roll), film, parts, std::move(current),
-                                                    hint_, report_, fns_, bus_, ui_),
+                                                    hint_, report_, fns_, cache_, bus_, ui_),
                         ports::Priority::Batch);
 }
 
@@ -300,11 +424,13 @@ JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<co
     {
     public:
         MeasureJob(model::Frame f, std::shared_ptr<const model::Roll> roll, model::NormRect rect,
-                   AnalysisFunctions fns, CommandBus& bus, UiDispatcher ui)
+                   AnalysisFunctions fns, std::shared_ptr<AnalysisCache> cache, CommandBus& bus,
+                   UiDispatcher ui)
             : f_(std::move(f))
             , roll_(std::move(roll))
             , rect_(rect)
             , fns_(std::move(fns))
+            , cache_(std::move(cache))
             , bus_(bus)
             , ui_(std::move(ui))
         {}
@@ -314,11 +440,11 @@ JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<co
             if (!fns_.measureRect) {
                 return base::makeError(base::ErrorCode::Unsupported, "Basismessung nicht verfügbar");
             }
-            auto img = fns_.image(f_);
+            auto img = analysisImage(*cache_, fns_, f_);
             if (!img) {
                 return std::unexpected(img.error());
             }
-            auto b = fns_.measureRect(*img, rect_);
+            auto b = fns_.measureRect(**img, rect_);
             if (!b) {
                 return std::unexpected(b.error());
             }
@@ -341,10 +467,11 @@ JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<co
         std::shared_ptr<const model::Roll> roll_;
         model::NormRect rect_;
         AnalysisFunctions fns_;
+        std::shared_ptr<AnalysisCache> cache_;
         CommandBus& bus_;
         UiDispatcher ui_;
     };
-    return jobs_.submit(std::make_unique<MeasureJob>(f, std::move(roll), rect, fns_, bus_, ui_),
+    return jobs_.submit(std::make_unique<MeasureJob>(f, std::move(roll), rect, fns_, cache_, bus_, ui_),
                         ports::Priority::Interactive);
 }
 

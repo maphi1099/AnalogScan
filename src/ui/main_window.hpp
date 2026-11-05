@@ -159,10 +159,18 @@ private:
     /// Filmtyp eines Bilds (Eintrag "Filmtyp" oder Rollen-Standard).
     [[nodiscard]] model::FilmType filmOf(const model::FrameId& f) const;
     void chooseFilm(const std::string& type);
-    /// Automatik für die Bilder; parts: Teile von AnalysisService::Part. button: Schalter der
-    /// Konvertierung, der bis zum Ende ein drehendes Symbol zeigt.
-    void detect(const std::vector<model::FrameId>& frames, const QString& what,
-                unsigned parts = application::AnalysisService::All, const QString& button = {});
+    /// Eine Automatik des AnalysisService für ein Bild (Filmtyp, Stand des Bilds).
+    using Automatic =
+        std::function<application::JobHandle(const model::Frame&, model::FilmType, model::EditList)>;
+    /// Automatik a des AnalysisService (z. B. &AnalysisService::autoBase) für die geöffnete Rolle.
+    [[nodiscard]] Automatic automatic(application::JobHandle (application::AnalysisService::*a)(
+        const model::Frame&, std::shared_ptr<const model::Roll>, model::FilmType, model::EditList));
+    /// Automatik für die Bilder. button: Schalter der Konvertierung, der bis zum Ende ein
+    /// drehendes Symbol zeigt.
+    void detect(const std::vector<model::FrameId>& frames, const QString& what, const Automatic& run,
+                const QString& button = {});
+    /// Automatische Einträge der Schritte neu berechnen (Einfügen mit Neuberechnung).
+    void redetect(const std::vector<model::FrameId>& frames, const std::set<model::StepId>& steps);
     void onRollOpened(application::OpenedRoll r);
     /// Tastenkürzel: Standard, überschrieben durch die Einstellungen ("shortcuts").
     void applyShortcuts();

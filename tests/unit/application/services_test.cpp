@@ -201,10 +201,10 @@ TEST(AnalysisServiceTest, U_APP_16_AutomaticsWriteEntries)
     ownCrop.params = ParamSet{}.with("rect", model::NormRect{0.2, 0.2, 0.5, 0.5});
     manual.edits = EditList{}.with(ownCrop);
     bus.open(f2, manual);
-    ASSERT_TRUE(service.detectFrame(f1, roll, roll->filmType).wait().has_value());
-    ASSERT_TRUE(service.detectFrame(f2, roll, roll->filmType).wait().has_value());
+    ASSERT_TRUE(service.autoConvert(f1, roll, roll->filmType).wait().has_value());
+    ASSERT_TRUE(service.autoConvert(f2, roll, roll->filmType).wait().has_value());
     // K-M10-08: ohne festgelegten Filmtyp keine Erkennung, verständliche Meldung
-    const auto none = service.detectFrame(f1, roll, model::FilmType::Unconverted).wait();
+    const auto none = service.autoConvert(f1, roll, model::FilmType::Unconverted).wait();
     ASSERT_FALSE(none.has_value());
     EXPECT_NE(none.error().message.find("Filmtyp nicht festgelegt"), std::string::npos);
     {
@@ -269,7 +269,7 @@ TEST(AnalysisServiceTest, M10_ResultAfterShutdownIsDropped)
     roll->filmType = model::FilmType::ColorNegative;
     {
         AnalysisService service(jobs, bus, ui, fns);
-        ASSERT_TRUE(service.detectFrame(f1, roll, roll->filmType).wait().has_value());
+        ASSERT_TRUE(service.autoConvert(f1, roll, roll->filmType).wait().has_value());
     }
     const std::scoped_lock lock(mutex);
     ASSERT_FALSE(uiQueue.empty());
@@ -320,9 +320,10 @@ TEST(AnalysisServiceTest, M10_EachAutomaticWritesOnlyItsPart)
     roll->filmType = model::FilmType::ColorNegative;
     const model::Frame f1 = frame(1);
     bus.open(f1, {});
-    const auto run = [&](unsigned parts) {
-        ASSERT_TRUE(
-            service.detectFrame(f1, roll, roll->filmType, parts, bus.history(f1.id).current()).wait());
+    using Automatic = JobHandle (AnalysisService::*)(const model::Frame&, std::shared_ptr<const model::Roll>,
+                                                     model::FilmType, model::EditList);
+    const auto run = [&](Automatic a) {
+        ASSERT_TRUE((service.*a)(f1, roll, roll->filmType, bus.history(f1.id).current()).wait());
         const std::scoped_lock lock(mutex);
         for (auto& task : uiQueue) {
             task();
@@ -332,15 +333,105 @@ TEST(AnalysisServiceTest, M10_EachAutomaticWritesOnlyItsPart)
     const auto has = [&](const char* step) {
         return bus.history(f1.id).current().get(StepId(step)) != nullptr;
     };
-    run(AnalysisService::Frame);
+    run(&AnalysisService::autoFrame);
     EXPECT_TRUE(has("autoneg.crop"));
     EXPECT_FALSE(has("autoneg.filmbase"));
     EXPECT_FALSE(has("autoneg.densityrange"));
-    run(AnalysisService::Base);
+    run(&AnalysisService::autoBase);
     EXPECT_TRUE(has("autoneg.filmbase"));
     EXPECT_FALSE(has("autoneg.densityrange"));
-    run(AnalysisService::Levels);
+    run(&AnalysisService::autoLevels);
     EXPECT_TRUE(has("autoneg.densityrange"));
+    EXPECT_FALSE(has("autoneg.convert"));
+    run(&AnalysisService::convert);
+    ASSERT_TRUE(has("autoneg.convert"));
+    // Schalter Konvertieren: nicht als Autokonvertierung markiert
+    EXPECT_FALSE(
+        bus.history(f1.id).current().get(StepId("autoneg.convert"))->params.get<bool>("auto").value());
+    // Neuberechnung nach dem Einfügen: nur die genannten Schritte
+    bus.execute(RemoveEntryCommand(StepId("autoneg.crop")), std::vector{f1.id}, *roll);
+    bus.execute(RemoveEntryCommand(StepId("autoneg.filmbase")), std::vector{f1.id}, *roll);
+    ASSERT_TRUE(
+        service.redetect(f1, roll, roll->filmType, bus.history(f1.id).current(), {StepId("autoneg.crop")})
+            .wait());
+    {
+        const std::scoped_lock lock(mutex);
+        for (auto& task : uiQueue) {
+            task();
+        }
+        uiQueue.clear();
+    }
+    EXPECT_TRUE(has("autoneg.crop"));
+    EXPECT_FALSE(has("autoneg.filmbase"));
+}
+
+// Reflexion: jede Teil-Automatik dekodierte das RAW und erkannte das Bildfeld neu (Auto-Basis
+// über 10 s). Analysebild und Erkennung werden je Bild einmal berechnet; ein anderer Filmtyp
+// oder Hinweis erkennt neu, das Bild bleibt.
+TEST(AnalysisServiceTest, M10_AutomaticsShareImageAndDetection)
+{
+    steps::FlatFieldCache flat;
+    pipeline::StepRegistry registry;
+    ASSERT_TRUE(steps::registerStandardSteps(registry, flat).has_value());
+    NullRepository repo;
+    PersistenceQueue queue(repo);
+    CommandBus bus(registry, queue);
+    mocks::FakeTaskExecutor executor(2);
+    JobScheduler jobs(executor);
+    const UiDispatcher ui = [](const std::function<void()>&) {};
+    std::atomic<int> decoded{0};
+    std::atomic<int> detected{0};
+    AnalysisFunctions fns;
+    fns.image = [&decoded](const model::Frame&) {
+        ++decoded;
+        return image::ImageBuffer::fromFloats(
+            {32, 32, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+            std::vector<float>(32 * 32 * 3, 0.2F));
+    };
+    fns.detect = [&detected](const image::ImageBuffer&, model::FilmType,
+                             const analysis::FrameHint&) -> base::Expected<analysis::FrameDetection> {
+        ++detected;
+        analysis::FrameDetection d;
+        d.frame = {0.1, 0.1, 0.8, 0.8};
+        return d;
+    };
+    fns.measureBase = [](const image::ImageBuffer&,
+                         const analysis::RegionMap&) -> base::Expected<analysis::BaseMeasurement> {
+        analysis::BaseMeasurement m;
+        m.transmission = {0.7, 0.42, 0.27};
+        return m;
+    };
+    fns.measureRect = [](const image::ImageBuffer&,
+                         const model::NormRect&) -> base::Expected<analysis::BaseMeasurement> {
+        return analysis::BaseMeasurement{};
+    };
+    AnalysisService service(jobs, bus, ui, fns);
+    auto roll = std::make_shared<model::Roll>();
+    const model::Frame f1 = frame(1);
+    bus.open(f1, {});
+    const auto film = model::FilmType::ColorNegative;
+    ASSERT_TRUE(service.autoFrame(f1, roll, film).wait());
+    ASSERT_TRUE(service.autoBase(f1, roll, film).wait());
+    ASSERT_TRUE(service.convert(f1, roll, film).wait());
+    ASSERT_TRUE(service.measureBase(f1, roll, {0.0, 0.0, 0.1, 0.1}).wait());
+    EXPECT_EQ(decoded, 1);
+    EXPECT_EQ(detected, 1);
+    ASSERT_TRUE(service.autoFrame(f1, roll, model::FilmType::BwNegative).wait());
+    EXPECT_EQ(detected, 2);
+    analysis::FrameHint portrait;
+    portrait.orientation = analysis::FrameHint::Orientation::Portrait;
+    service.setFrameHint(portrait);
+    ASSERT_TRUE(service.autoFrame(f1, roll, model::FilmType::BwNegative).wait());
+    EXPECT_EQ(detected, 3);
+    EXPECT_EQ(decoded, 1);
+    // mehr Bilder als Plätze: das älteste fällt heraus
+    for (int i = 2; i <= 8; ++i) {
+        const model::Frame f = frame(i);
+        bus.open(f, {});
+        ASSERT_TRUE(service.autoFrame(f, roll, film).wait());
+    }
+    ASSERT_TRUE(service.autoFrame(f1, roll, film).wait());
+    EXPECT_EQ(decoded, 9);
 }
 
 // LF-BAS-05 c: ohne Filmrand schätzt Auto-Basis die Basis aus dem Bild und sagt das dazu
@@ -389,7 +480,7 @@ TEST(AnalysisServiceTest, M10_BaseWithoutRebateIsEstimated)
     roll->filmType = model::FilmType::ColorNegative;
     const model::Frame f1 = frame(1);
     bus.open(f1, {});
-    ASSERT_TRUE(service.detectFrame(f1, roll, roll->filmType, AnalysisService::Base).wait());
+    ASSERT_TRUE(service.autoBase(f1, roll, roll->filmType).wait());
     {
         const std::scoped_lock lock(mutex);
         for (auto& task : uiQueue) {
