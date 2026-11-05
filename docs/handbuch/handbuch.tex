@@ -98,8 +98,9 @@ Begleitdateien neben den Scans bleiben dabei bewusst erhalten.
         klicken, dann \taste{Strg+A}) und \menu{Auto-Bildfeld} klicken.
   \item Ein Bild anklicken und im Reiter \menu{Anpassen} Belichtung, Farbe und Kontrast
         einstellen. Bei Schwarzweiß im Reiter \menu{Gradation} die Filterstufe wählen.
-  \item Gelungene Einstellungen mit einem Klick übernehmen: am Filmstreifen
-        \menu{Einstellungen übernehmen: auf Auswahl} oder \menu{auf alle}.
+  \item Gelungene Einstellungen mit einem Klick übernehmen: \menu{Ausgewählte kopieren}, dann
+        am Filmstreifen \menu{Kopierte Bearbeitungsoptionen übernehmen auf: Auswahl} oder
+        \menu{alle}.
   \item Im \menu{Leuchttisch} (\taste{G}) rechts \menu{Alle exportieren} oder
         \menu{Auswahl exportieren}; darunter der Kontaktabzug als PDF.
 \end{enumerate}
@@ -130,17 +131,18 @@ schließt die aktive Ansicht.
         (\taste{1}–\taste{5}, \taste{0} entfernt sie), \menu{Verwerfen} (\taste{X}) und
         \menu{Einstellungen übernehmen: auf Auswahl} bzw. \menu{auf alle}. Nicht lesbare Dateien
         erscheinen rot.
-  \item[Werkzeuge] Rechts, mit den Reitern \menu{Konvertierung}, \menu{Gradation} und
-        \menu{Anpassen}.
+  \item[Werkzeuge] Rechts, mit den Reitern \menu{Zuschnitt und Retusche} (Zuschneiden und
+        Drehen, Vierteldrehungen, Spiegeln, Staubretusche), \menu{Konvertierung},
+        \menu{Gradation} und \menu{Anpassen}.
   \item[Histogramm] Rot, Grün, Blau und Helligkeit. Ein blaues Dreieck oben links zeigt
         beschnittene Tiefen, ein rotes oben rechts beschnittene Lichter.
-  \item[Bearbeitungsliste] Alle Änderungen des aktuellen Bilds (Abschnitt~\ref{sec:liste}).
+  \item[Bearbeitungsoptionen] Alle Änderungen des aktuellen Bilds (Abschnitt~\ref{sec:liste}).
   \item[Statusleiste] Meldungen, bei laufenden Aufträgen ein Fortschrittsbalken und die
         Schaltfläche \menu{Abbrechen}.
 \end{description}
 
-Die Werkzeugleiste enthält die häufigsten Befehle: Ordner öffnen, Rückgängig, Wiederholen,
-Zuschneiden und Drehen, Staubretusche, Vorher/Nachher, Exportieren und
+Die Werkzeugleiste enthält Rückgängig (\textlarrow) und Wiederholen (\textrarrow),
+Vorher/Nachher und Exportieren; auf dem Leuchttisch zusätzlich Ordner öffnen und
 Kontaktabzug. Alle Docks lassen sich verschieben, abdocken und über ihr Kontextmenü ein- und
 ausblenden.
 
@@ -185,11 +187,18 @@ AutoNeg den Scan.
 
 \subsection{Bildfeld und Filmbasis}
 \begin{description}
-  \item[Auto-Bildfeld] erkennt für alle markierten Bilder das Bildfeld (Zuschnitt, knapp
-        innerhalb der Bildkanten), die Schräglage, die Filmbasis und die Tonwertgrenzen je
-        Farbkanal. Bei Kleinbild hilft die Perforation, das Bildfeld auch bei sehr dünnen oder
-        sehr dichten Negativen zu finden. Ein vorhandener eigener Zuschnitt bleibt erhalten.
-  \item[Auto-Basis] misst die Filmbasis (den unbelichteten Filmrand) automatisch.
+  \item[Autokonvertierung] ganz oben: bestimmt Bildfeld, Filmbasis und Tonwerte
+        vollautomatisch; die Einzelschritte darunter verschwinden und kommen zurück, wenn man
+        den Haken entfernt.
+  \item[Auto-Bildfeld] erkennt nur das Bildfeld (Zuschnitt knapp innerhalb der Bildkanten) und
+        die Schräglage. Bei Kleinbild hilft die Perforation, das Bildfeld auch bei sehr dünnen
+        oder sehr dichten Negativen zu finden. Ein eigener Zuschnitt bleibt erhalten.
+  \item[Auto-Basis] misst nur die Filmbasis (den unbelichteten Filmrand).
+  \item[Tonwerte] \menu{Automatisch} bestimmt die Tonwertgrenzen je Farbkanal aus dem Bild.
+        Gespeicherte Filmvorgaben stehen in derselben Liste; \menu{Speichern …} legt die
+        Tonwerte des Bilds als Vorgabe ab, etwa unter dem Filmnamen.
+  \item[Messbereich anzeigen] zeigt das ganze, ungeschnittene Bild mit dem Bereich, in dem
+        die Basis gemessen wurde.
   \item[Basis messen] für schwierige Fälle: Schaltfläche klicken und auf dem Bild ein Rechteck
         in den unbelichteten Filmrand ziehen (gelb gestrichelt). Nach dem Loslassen misst
         AutoNeg die Basis in diesem Bereich.
@@ -263,9 +272,9 @@ Stellen eines Bilds bilden einen Eintrag \enquote{Staubretusche} in der Bearbeit
 \end{itemize}
 
 % ---------------------------------------------------------------------------------------------
-\section{Bearbeitungsliste und Rückgängig}\label{sec:liste}
+\section{Bearbeitungsoptionen und Rückgängig}\label{sec:liste}
 
-Die Bearbeitungsliste zeigt jede Änderung des aktuellen Bilds genau einmal, in der Reihenfolge,
+Die Liste der Bearbeitungsoptionen zeigt jede Änderung des aktuellen Bilds genau einmal, in der Reihenfolge,
 in der AutoNeg sie anwendet:
 \begin{description}
   \item[Änderung] zum Beispiel Belichtung, Zuschnitt, Gradation.
@@ -274,11 +283,16 @@ in der AutoNeg sie anwendet:
         Quellbilds) oder \enquote{Rollen-Standard}.
   \item[Aktiv] Häkchen entfernen schaltet die Änderung aus, ohne sie zu löschen (Vergleich).
 \end{description}
-\menu{Eintrag entfernen} löscht die markierte Änderung mit einem Klick.
+Mehrere Zeilen markiert man mit \taste{Strg} oder \taste{Umschalt}. \menu{Ausgewählte
+rückgängig machen} entfernt sie in einem Schritt, \menu{Ausgewählte kopieren} kopiert sie
+(ohne Markierung alle) zum Übernehmen auf andere Bilder.
 \menu{Bearbeiten \textrightarrow{} Bild zurücksetzen} (\taste{Strg+Umschalt+R}) entfernt alle
-Änderungen auf einmal. Alles lässt sich mit \menu{Rückgängig} (\taste{Strg+Z}) und
-\menu{Wiederholen} (\taste{Strg+Y}) zurücknehmen; der Verlauf gilt bis zum Schließen des
-Programms. Gespeichert ist jede Änderung sofort.
+Änderungen auf einmal. \menu{Rückgängig} (\taste{Strg+Z}) nimmt einen Schritt zurück,
+\menu{Wiederholen} (\taste{Strg+Y}) nimmt das Rückgängig wieder zurück. In \menu{Entwickeln}
+betrifft das nur das aktive Bild; nach einem Bildwechsel das neue. Auf dem \menu{Leuchttisch}
+betrifft es nur die dort ausgeführten Aktionen auf mehrere Bilder; Bilder, die danach einzeln
+bearbeitet wurden, bleiben unverändert. Der Verlauf gilt bis zum Schließen des Programms.
+Gespeichert ist jede Änderung sofort.
 
 % ---------------------------------------------------------------------------------------------
 \section{Mehrere Bilder bearbeiten}
@@ -286,10 +300,11 @@ Programms. Gespeichert ist jede Änderung sofort.
 Befehle wie Auto-Bildfeld, Einfügen, Bewerten, Vorlagen und Export wirken auf die im
 Filmstreifen markierten Bilder, ohne Markierung auf das aktuelle Bild.
 
-\paragraph{Mit einem Klick übernehmen} Am Filmstreifen überträgt \menu{Einstellungen
-übernehmen: auf Auswahl} (\taste{Strg+Umschalt+V}) die Bearbeitung des aktiven Bilds auf die
-markierten Bilder, \menu{auf alle} (\taste{Strg+Alt+V}) auf die ganze Rolle. Bildbezogene Werte
-(Zuschnitt, Feindrehung, Filmbasis, Tonwertgrenzen, Retusche) bleiben bei jedem Bild.
+\paragraph{Mit einem Klick übernehmen} Zuerst Bearbeitungsoptionen kopieren
+(\menu{Ausgewählte kopieren} oder \taste{Strg+C}). Dann am Filmstreifen bzw. auf dem
+Leuchttisch \menu{Kopierte Bearbeitungsoptionen übernehmen auf: Auswahl}
+(\taste{Strg+Umschalt+V}) oder \menu{alle} (\taste{Strg+Alt+V}). Automatisch ermittelte
+Optionen (Bildfeld, Basis, Tonwerte) werden dabei für jedes Bild neu berechnet, nicht kopiert.
 
 \paragraph{Kopieren und Einfügen} \menu{Bearbeitung kopieren} (\taste{Strg+C}) übernimmt die
 Liste des aktuellen Bilds. \menu{Einfügen …} (\taste{Strg+V}) öffnet einen Dialog: Dort wählt
@@ -463,8 +478,8 @@ weiter; nichts wird stillschweigend überschrieben.
   \taste{Strg+K} & Kontaktabzug           & \taste{\textbackslash} & Vorher/Nachher \\
   \taste{Strg+Z} & Rückgängig             & \taste{1}–\taste{5}    & Sterne (\taste{0}: keine) \\
   \taste{Strg+Y} & Wiederholen            & \taste{Strg+0}         & Einpassen \\
-  \taste{Strg+C} & Bearbeitung kopieren   & \taste{Strg+1}         & 100\,\% \\
-  \taste{Strg+V} & Einfügen               & \taste{Strg+2}         & 200\,\% \\
+  \taste{Strg+C} & Optionen kopieren      & \taste{Strg+1}         & 100\,\% \\
+  \taste{Strg+V} & Optionen einfügen      & \taste{Strg+2}         & 200\,\% \\
   \taste{Strg+L} & Synchronisieren        & \taste{Strg+[}         & 90\textdegree{} nach links \\
   \taste{Strg+Umschalt+R} & Bild zurücksetzen & \taste{Strg+]}      & 90\textdegree{} nach rechts \\
   \taste{P} & Behalten                    & \taste{Strg+H}         & waagerecht spiegeln \\

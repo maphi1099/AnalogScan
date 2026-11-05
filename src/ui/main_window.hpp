@@ -21,6 +21,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 
 class QAction;
 class QComboBox;
@@ -152,7 +153,9 @@ private:
     /// Filmtyp eines Bilds (Eintrag "Filmtyp" oder Rollen-Standard).
     [[nodiscard]] model::FilmType filmOf(const model::FrameId& f) const;
     void chooseFilm(const std::string& type);
-    void detect(const std::vector<model::FrameId>& frames, const QString& what);
+    /// Automatik für die Bilder; parts: Teile von AnalysisService::Part.
+    void detect(const std::vector<model::FrameId>& frames, const QString& what,
+                unsigned parts = application::AnalysisService::All);
     void onRollOpened(application::OpenedRoll r);
     /// Filmtyp der Rolle festlegen (Import, Übersicht): speichern, Miniaturen und Vorschau neu.
     void setRollFilm(model::FilmType film);
@@ -169,9 +172,16 @@ private:
     void doContactSheet();
     void contactSheetPdf();
     [[nodiscard]] std::vector<application::ContactSheetService::Item> sheetItems() const;
-    /// Bearbeitung des aktiven Bilds mit einem Klick auf andere Bilder übernehmen (ohne
-    /// Zuschnitt, Drehung, Basis, Tonwertgrenzen und Retusche, die gehören zum einzelnen Bild).
-    void applySettingsTo(std::vector<model::FrameId> frames);
+    /// Kopierte Bearbeitungsoptionen mit einem Klick auf Bilder übernehmen. Automatische
+    /// Optionen (Bildfeld, Basis, Tonwerte) werden je Bild neu berechnet statt kopiert.
+    /// batch: vom Leuchttisch (dort rückgängig zu machen).
+    void applyCopiedTo(std::vector<model::FrameId> frames, bool batch);
+    /// Markierte Bearbeitungsoptionen (oder alle) des aktiven Bilds kopieren.
+    void copyOptions();
+    /// Autokonvertierung des aktiven Bilds (alle Automatiken, nicht abgewählt).
+    [[nodiscard]] bool autoConverted(const model::FrameId& f) const;
+    void setAutoConvert(bool on);
+    void refreshLevelPresets();
     /// Beim Import abgewählte Scans aus der Rolle nehmen.
     void excludeFrames(const std::vector<model::FrameId>& frames);
     void setStars(int stars);
@@ -206,6 +216,7 @@ private:
     QComboBox* rollFilm_ = nullptr;
     QTabBar* viewTabs_ = nullptr;
     QWidget* emptyPage_ = nullptr;
+    QWidget* imageTools_ = nullptr;
     QLabel* exportFolder_ = nullptr;
     QComboBox* exportFormat_ = nullptr;
     QLabel* selectionInfo_ = nullptr;
@@ -228,6 +239,10 @@ private:
     std::map<model::FrameId, model::SourceInfo> sources_;
     bool readOnly_ = false;
     bool compare_ = false;
+    bool showArea_ = false; ///< ganzes Bild mit Messbereich der Basis
+    std::unique_ptr<RectPickerTool> areaTool_;
+    std::set<model::FrameId> manualConversion_; ///< Autokonvertierung abgewählt
+    std::optional<model::FrameId> copiedFrom_;
     std::uint64_t lastSeq_ = 0;
     std::uint64_t previewsShown_ = 0;
     QStringList messages_;

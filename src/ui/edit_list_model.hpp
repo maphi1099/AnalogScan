@@ -41,6 +41,8 @@ public:
 
     /// Entfernt den Eintrag der Zeile mit einem Klick (LF-LST-03).
     void removeEntry(int row);
+    /// Mehrere Zeilen in einem Schritt entfernen (ein Rückgängig).
+    void removeEntries(const std::vector<int>& rows);
     /// Schaltet den Eintrag aus bzw. ein, Werte bleiben (LF-LST-06).
     void toggleEntry(int row);
 

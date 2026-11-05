@@ -104,6 +104,36 @@ protected:
     CommandBus bus{registry, queue};
 };
 
+// K-M10-13 (Wunsch des Nutzers): Rückgängig in Entwickeln betrifft nur das aktive Bild; auf dem
+// Leuchttisch nur Aktionen auf mehrere Bilder, und dort keine Bilder, die danach einzeln
+// geändert wurden
+TEST_F(Commands, M10_UndoScopesFrameAndLightTable)
+{
+    openAll();
+    const std::vector<FrameId> all{frameId(1), frameId(2), frameId(3)};
+    bus.execute(SetEntryCommand(entry("autoneg.exposure", ParamSet{}.with("ev", 0.5))), all, roll, true);
+    const std::vector<FrameId> two{frameId(2)};
+    bus.execute(SetEntryCommand(entry("autoneg.contrast", ParamSet{}.with("amount", 0.2))), two, roll);
+
+    // Einzelbild: Bild 2 verliert nur seinen eigenen letzten Schritt
+    ASSERT_TRUE(bus.undoFrame(frameId(2)));
+    EXPECT_EQ(current(2).get(StepId("autoneg.contrast")), nullptr);
+    EXPECT_NE(current(2).get(StepId("autoneg.exposure")), nullptr);
+    EXPECT_NE(current(1).get(StepId("autoneg.exposure")), nullptr);
+    ASSERT_TRUE(bus.redoFrame(frameId(2)));
+    EXPECT_NE(current(2).get(StepId("autoneg.contrast")), nullptr);
+
+    // Leuchttisch: die Aktion auf alle; Bild 2 wurde danach einzeln geändert und bleibt
+    ASSERT_TRUE(bus.canUndoBatch());
+    ASSERT_TRUE(bus.undoBatch());
+    EXPECT_EQ(current(1).get(StepId("autoneg.exposure")), nullptr);
+    EXPECT_EQ(current(3).get(StepId("autoneg.exposure")), nullptr);
+    EXPECT_NE(current(2).get(StepId("autoneg.exposure")), nullptr);
+    EXPECT_FALSE(bus.canUndoBatch()); // Einzelschritte zählen hier nicht
+    ASSERT_TRUE(bus.redoBatch());
+    EXPECT_NE(current(1).get(StepId("autoneg.exposure")), nullptr);
+}
+
 // LF-LST-05
 TEST_F(Commands, U_APP_01_SetEntryIsManual)
 {

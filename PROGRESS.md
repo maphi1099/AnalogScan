@@ -275,6 +275,12 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - Oberfläche (K-M10-12): Leuchttisch/Entwickeln als Reiter am linken Rand, Export und Kontaktabzug rechts im Leuchttisch, Bildauswahl beim Import, Sterne und Verwerfen am Filmstreifen, Einstellungen mit einem Klick auf Auswahl/alle, Beschnittwarnung entfernt.
 - Tests: `M10_ImportWithoutDeselectedScans`, `M10_LightTableTabsRatingApplyAllAndExport`, `M10_NegativeWithoutBaseStaysScan`, `M10_ResultAfterShutdownIsDropped` (B-42), `M10_StarsAndExcludedScansRoundTrip`, `M10_ExcludedScansAreSkipped`.
 
+### Teil-Automatiken, Rückgängig je Ansicht, Bearbeitungsoptionen (05.11.2026)
+
+- K-M10-13: Auto-Bildfeld/-Basis/Tonwerte einzeln, Autokonvertierung, Filmvorgaben für Tonwerte, Rückgängig je Bild bzw. Leuchttisch, Bearbeitungsoptionen kopieren/übernehmen (Automatiken neu berechnet), Messbereich anzeigen, Reiter Zuschnitt und Retusche. B-43 (Miniatur-Cache).
+- Tests: `M10_UndoScopesFrameAndLightTable`, `M10_EachAutomaticWritesOnlyItsPart`; E-25 angepasst (T-23).
+- Offen: `K_01_ProbeAllOwnScans` erwartet ≥ 400 RAW-Dateien in `Testing/Data`, dort liegen derzeit 387 (Testdaten geändert).
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |

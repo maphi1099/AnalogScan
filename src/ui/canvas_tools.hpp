@@ -120,6 +120,8 @@ public:
     using Picked = std::function<void(const model::NormRect&)>;
     void setPicked(Picked p) { picked_ = std::move(p); }
     void setRect(std::optional<model::NormRect> r) { rect_ = r; }
+    /// Nur anzeigen (Messbereich), nicht neu aufziehen.
+    void setReadOnly(bool on) { readOnly_ = on; }
     [[nodiscard]] const std::optional<model::NormRect>& rect() const { return rect_; }
 
     void paint(QPainter& p, const ViewMapping& m) override;
@@ -129,6 +131,7 @@ private:
     std::optional<model::NormRect> rect_;
     std::optional<QPointF> start_;
     Picked picked_;
+    bool readOnly_ = false;
 };
 
 /// Reparaturpinsel für Staub (LF-EDT-12): jeder Klick setzt eine Stelle.

@@ -294,6 +294,9 @@ void CropRotateTool::paint(QPainter& p, const ViewMapping& m)
 
 bool RectPickerTool::mouse(QMouseEvent* e, const ViewMapping& m)
 {
+    if (readOnly_) {
+        return false;
+    }
     const QPointF n = m.toNorm(e->position());
     const auto rectFrom = [](QPointF a, QPointF b) {
         const double l = std::clamp(std::min(a.x(), b.x()), 0.0, 1.0);

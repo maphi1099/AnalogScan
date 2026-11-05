@@ -48,9 +48,10 @@ void BwMixStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,
 }
 
 FilmBaseStep::FilmBaseStep()
-    : DescribedPointwise(describe(id::filmbase, rank::filmbase, "Basiskorrektur", Phase::Conversion,
-                                  {vec3Param("base", {1, 1, 1}), stringParam("source", "")}, negatives,
-                                  Options{.neededToInvert = true}))
+    : DescribedPointwise(
+          describe(id::filmbase, rank::filmbase, "Basiskorrektur", Phase::Conversion,
+                   {vec3Param("base", {1, 1, 1}), stringParam("source", ""), rectParam("area")}, negatives,
+                   Options{.neededToInvert = true}))
 {}
 
 void FilmBaseStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& p,

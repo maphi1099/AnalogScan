@@ -52,6 +52,15 @@ struct AnalysisFunctions
 class AnalysisService
 {
 public:
+    /// Teile der Automatik: Bildfeld (Zuschnitt, Feindrehung), Filmbasis, Tonwertgrenzen.
+    enum Part : unsigned
+    {
+        Frame = 1U,
+        Base = 2U,
+        Levels = 4U,
+        All = 7U
+    };
+
     AnalysisService(JobScheduler& jobs, CommandBus& bus, UiDispatcher ui, AnalysisFunctions fns)
         : jobs_(jobs)
         , bus_(bus)
@@ -66,10 +75,12 @@ public:
         , fns_(std::move(fns))
     {}
 
-    /// Bildfeld, Schräglage und (bei Negativen) Basis eines Bildes. film ist der Filmtyp des Bilds
+    /// Automatik eines Bildes: nur die gewünschten Teile werden eingetragen (Auto-Bildfeld
+    /// schreibt nur den Zuschnitt). current ist der Stand des Bilds; Tonwerte nutzen dessen
+    /// Zuschnitt und Basis, sofern vorhanden. film ist der Filmtyp des Bilds
     /// (steps::FilmModeStep::effective); ohne festgelegten Filmtyp scheitert der Job (K-M10-08).
     JobHandle detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
-                          model::FilmType film);
+                          model::FilmType film, unsigned parts = All, model::EditList current = {});
     /// Basis im vom Anwender gezogenen Rechteck messen (LF-BAS-04); Eintrag mit Herkunft
     /// manuell und source = "manual".
     JobHandle measureBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,

@@ -213,6 +213,69 @@ TEST(AnalysisServiceTest, M10_ResultAfterShutdownIsDropped)
     EXPECT_TRUE(bus.history(f1.id).current().empty());
 }
 
+// K-M10-13 (Fehler des Nutzers: Auto-Bildfeld konvertierte das ganze Bild): jede Automatik
+// trägt nur ihren Teil ein
+TEST(AnalysisServiceTest, M10_EachAutomaticWritesOnlyItsPart)
+{
+    steps::FlatFieldCache flat;
+    pipeline::StepRegistry registry;
+    ASSERT_TRUE(steps::registerStandardSteps(registry, flat).has_value());
+    NullRepository repo;
+    PersistenceQueue queue(repo);
+    CommandBus bus(registry, queue);
+    mocks::FakeTaskExecutor executor(2);
+    JobScheduler jobs(executor);
+    std::deque<std::function<void()>> uiQueue;
+    std::mutex mutex;
+    const UiDispatcher ui = [&](std::function<void()> f) {
+        const std::scoped_lock lock(mutex);
+        uiQueue.push_back(std::move(f));
+    };
+    AnalysisFunctions fns;
+    fns.image = [](const model::Frame&) {
+        return image::ImageBuffer::fromFloats(
+            {32, 32, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+            std::vector<float>(32 * 32 * 3, 0.2F));
+    };
+    fns.detect = [](const image::ImageBuffer&, model::FilmType) -> base::Expected<analysis::FrameDetection> {
+        analysis::FrameDetection d;
+        d.frame = {0.1, 0.1, 0.8, 0.8};
+        return d;
+    };
+    fns.measureBase = [](const image::ImageBuffer&,
+                         const analysis::RegionMap&) -> base::Expected<analysis::BaseMeasurement> {
+        analysis::BaseMeasurement m;
+        m.transmission = {0.7, 0.42, 0.27};
+        return m;
+    };
+    AnalysisService service(jobs, bus, ui, fns);
+    auto roll = std::make_shared<model::Roll>();
+    roll->filmType = model::FilmType::ColorNegative;
+    const model::Frame f1 = frame(1);
+    bus.open(f1, {});
+    const auto run = [&](unsigned parts) {
+        ASSERT_TRUE(
+            service.detectFrame(f1, roll, roll->filmType, parts, bus.history(f1.id).current()).wait());
+        const std::scoped_lock lock(mutex);
+        for (auto& task : uiQueue) {
+            task();
+        }
+        uiQueue.clear();
+    };
+    const auto has = [&](const char* step) {
+        return bus.history(f1.id).current().get(StepId(step)) != nullptr;
+    };
+    run(AnalysisService::Frame);
+    EXPECT_TRUE(has("autoneg.crop"));
+    EXPECT_FALSE(has("autoneg.filmbase"));
+    EXPECT_FALSE(has("autoneg.densityrange"));
+    run(AnalysisService::Base);
+    EXPECT_TRUE(has("autoneg.filmbase"));
+    EXPECT_FALSE(has("autoneg.densityrange"));
+    run(AnalysisService::Levels);
+    EXPECT_TRUE(has("autoneg.densityrange"));
+}
+
 // K-M6-01
 TEST(StepCatalogTest, M6_CatalogFromRegistry)
 {

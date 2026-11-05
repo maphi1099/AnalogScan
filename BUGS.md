@@ -357,3 +357,11 @@ Format je Eintrag:
 - Abhilfe: `AnalysisService` verpackt den Dispatcher; ein `weak_ptr` auf ein Lebenszeichen des Dienstes verwirft verspätete Ergebnisse. Test `AnalysisServiceTest.M10_ResultAfterShutdownIsDropped`.
 - Status: behoben
 
+## B-43: Miniaturen bleiben blau, obwohl das Bild nicht konvertiert ist
+- Erstmals: 05.11.2026 (vom Nutzer gemeldet), zuletzt: 05.11.2026, Häufigkeit: 1
+- Plattform: alle
+- Symptom: Filmstreifen zeigt Negative blau, die Vorschau dagegen den unveränderten Scan.
+- Ursache: Der Miniatur-Cache auf der Platte war nur nach Bearbeitungsliste und Filmtyp geschlüsselt; nach K-M10-11 (ohne Basis keine Umkehrung) kamen alte, blaue Miniaturen aus dem Cache.
+- Abhilfe: Rechenstand `renderVersion` im Schlüssel (thumbnail_service.cpp); bei jeder Änderung, die Bilder anders rechnet, erhöhen.
+- Status: behoben
+

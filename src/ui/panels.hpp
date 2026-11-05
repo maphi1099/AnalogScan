@@ -118,6 +118,12 @@ public:
     void bindList(const model::EditList& l) override;
     void setFilm(model::FilmType film) override;
     [[nodiscard]] QComboBox* filmType() const { return filmType_; }
+    /// Autokonvertierung an: die einzelnen Einstellungen verschwinden (kommen beim Abwählen zurück).
+    void setAutoMode(bool on);
+    [[nodiscard]] bool autoMode() const;
+    /// Gespeicherte Filmvorgaben für die Tonwerte (Namen).
+    void setLevelPresets(const QStringList& names);
+    void setShowArea(bool on);
 
 Q_SIGNALS:
     /// Wahl im Feld Filmtyp: "color", "bw", "slide" oder "raw" (Filmtyp entfernen).
@@ -125,15 +131,21 @@ Q_SIGNALS:
     void autoFrameRequested();
     void autoBaseRequested();
     void autoLevelsRequested();
+    void levelPresetChosen(const QString& name);
+    void saveLevelsRequested();
     void pickBaseRequested();
     void showBaseAreaToggled(bool on);
+    void autoConvertToggled(bool on);
 
 private:
+    QCheckBox* auto_ = nullptr;
+    QWidget* manual_ = nullptr; ///< alles, was bei Autokonvertierung verschwindet
+    QComboBox* levels_ = nullptr;
     QComboBox* filmType_ = nullptr;
     QCheckBox* showArea_ = nullptr;
     QLabel* hint_ = nullptr;
-    std::vector<QPushButton*> filmButtons_; ///< Auto-Bildfeld, Auto-Tonwerte: nur mit Filmtyp
-    std::vector<QWidget*> baseControls_;    ///< Filmbasis: nur bei Negativen
+    std::vector<QWidget*> filmButtons_;  ///< Auto-Bildfeld, Autokonvertierung: nur mit Filmtyp
+    std::vector<QWidget*> baseControls_; ///< Filmbasis: nur bei Negativen
 };
 
 /// Regler der Bildbearbeitung (LF-EDT-04 … -11): Belichtung, Weißabgleich, Kontrast, Lichter/

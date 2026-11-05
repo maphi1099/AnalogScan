@@ -39,7 +39,8 @@ model::EditList UiController::currentList() const
 
 bool UiController::undo()
 {
-    const bool done = bus_ != nullptr && bus_->undo();
+    const bool done =
+        bus_ != nullptr && (batchScope_ ? bus_->undoBatch() : bus_->undoFrame(session_->current));
     if (done && preview_) {
         preview_(currentList());
     }
@@ -48,7 +49,8 @@ bool UiController::undo()
 
 bool UiController::redo()
 {
-    const bool done = bus_ != nullptr && bus_->redo();
+    const bool done =
+        bus_ != nullptr && (batchScope_ ? bus_->redoBatch() : bus_->redoFrame(session_->current));
     if (done && preview_) {
         preview_(currentList());
     }

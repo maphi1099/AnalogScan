@@ -158,16 +158,19 @@ model::EditList SetAutomaticEntriesCommand::apply(const model::EditList& l, cons
 }
 
 JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
-                                       model::FilmType film)
+                                       model::FilmType film, unsigned parts, model::EditList current)
 {
     class DetectJob final : public Job
     {
     public:
         DetectJob(model::Frame f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
-                  AnalysisFunctions fns, CommandBus& bus, UiDispatcher ui)
+                  unsigned parts, model::EditList current, AnalysisFunctions fns, CommandBus& bus,
+                  UiDispatcher ui)
             : f_(std::move(f))
             , roll_(std::move(roll))
             , film_(film)
+            , parts_(parts)
+            , current_(std::move(current))
             , fns_(std::move(fns))
             , bus_(bus)
             , ui_(std::move(ui))
@@ -195,16 +198,42 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
             // Zuschnitt 1 % innerhalb der Bildfeldkanten: kein Filmrand und kein Nachbarbild im Bild
             const model::NormRect& r = d->frame;
             const model::NormRect crop{r.x + 0.01 * r.w, r.y + 0.01 * r.h, 0.98 * r.w, 0.98 * r.h};
-            entries.push_back(automatic("autoneg.crop", model::ParamSet{}.with("rect", crop)));
-            if (std::abs(d->angleDeg) >= 0.01) {
-                entries.push_back(
-                    automatic("autoneg.rotation", model::ParamSet{}.with("angle", d->angleDeg)));
-            }
-            if (film != model::FilmType::Slide) {
-                if (auto b = fns_.measureBase(*img, d->regions)) {
+            if ((parts_ & Frame) != 0) {
+                entries.push_back(automatic("autoneg.crop", model::ParamSet{}.with("rect", crop)));
+                if (std::abs(d->angleDeg) >= 0.01) {
                     entries.push_back(
-                        automatic("autoneg.filmbase", model::ParamSet{}.with("base", b->transmission)));
-                    if (auto levels = negativeLevels(*img, d->frame, b->transmission)) {
+                        automatic("autoneg.rotation", model::ParamSet{}.with("angle", d->angleDeg)));
+                }
+            }
+            if (film != model::FilmType::Slide && (parts_ & (Base | Levels)) != 0) {
+                // Basis: neu messen oder die vorhandene des Bilds
+                std::optional<base::Vec3> base;
+                const model::EditEntry* own = current_.get(model::StepId("autoneg.filmbase"));
+                if ((parts_ & Base) == 0 && own != nullptr) {
+                    if (auto v = own->params.get<base::Vec3>("base")) {
+                        base = *v;
+                    }
+                }
+                if (!base) {
+                    if (auto b = fns_.measureBase(*img, d->regions)) {
+                        base = b->transmission;
+                        if ((parts_ & Base) != 0) {
+                            model::ParamSet p = model::ParamSet{}.with("base", b->transmission);
+                            if (!d->regions.rebate().empty()) {
+                                p = p.with("area", d->regions.rebate().front()); // Messbereich
+                            }
+                            entries.push_back(automatic("autoneg.filmbase", std::move(p)));
+                        }
+                    }
+                }
+                // Tonwerte im Bildfeld: vorhandener Zuschnitt des Bilds, sonst der erkannte
+                model::NormRect area = crop;
+                if (const model::EditEntry* c2 = current_.get(model::StepId("autoneg.crop"));
+                    c2 != nullptr && (parts_ & Frame) == 0) {
+                    area = c2->params.get<model::NormRect>("rect").value_or(crop);
+                }
+                if ((parts_ & Levels) != 0 && base) {
+                    if (auto levels = negativeLevels(*img, area, *base)) {
                         entries.push_back(automatic(
                             "autoneg.densityrange",
                             model::ParamSet{}.with("dMin", levels->dMin).with("dMax", levels->dMax)));
@@ -224,12 +253,15 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
         model::Frame f_;
         std::shared_ptr<const model::Roll> roll_;
         model::FilmType film_;
+        unsigned parts_;
+        model::EditList current_;
         AnalysisFunctions fns_;
         CommandBus& bus_;
         UiDispatcher ui_;
     };
-    return jobs_.submit(std::make_unique<DetectJob>(f, std::move(roll), film, fns_, bus_, ui_),
-                        ports::Priority::Background);
+    return jobs_.submit(
+        std::make_unique<DetectJob>(f, std::move(roll), film, parts, std::move(current), fns_, bus_, ui_),
+        ports::Priority::Background);
 }
 
 JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
@@ -264,7 +296,10 @@ JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<co
             c.progress(1, 1);
             model::EditEntry e;
             e.step = model::StepId("autoneg.filmbase");
-            e.params = model::ParamSet{}.with("base", b->transmission).with("source", std::string("manual"));
+            e.params = model::ParamSet{}
+                           .with("base", b->transmission)
+                           .with("source", std::string("manual"))
+                           .with("area", rect_); // Messbereich
             ui_([&bus = bus_, id = f_.id, roll = roll_, e = std::move(e)] {
                 const std::vector<model::FrameId> target{id};
                 bus.execute(SetEntryCommand(e), target, roll ? *roll : model::Roll{});

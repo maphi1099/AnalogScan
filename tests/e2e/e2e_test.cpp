@@ -451,6 +451,9 @@ TEST_F(E2E, E_25_CopyAndPasteToRollThenUndo)
     Q_EMIT window->adjustPanel()->slider("autoneg.sharpen", "amount")->committed(1.2);
     window->gradationPanel()->button(8)->click();
     action("copy")->trigger();
+    // Einfügen auf alle vom Leuchttisch: dort nimmt ein Rückgängig die ganze Aktion zurück
+    // (K-M10-13; in Entwickeln wirkt Rückgängig nur auf das aktive Bild)
+    action("viewOverview")->trigger();
     window->filmstrip()->selectAll();
     onNextDialog([](QDialog* d) {
         auto* box = d->findChild<QDialogButtonBox*>();
@@ -470,6 +473,7 @@ TEST_F(E2E, E_25_CopyAndPasteToRollThenUndo)
     // Hauptfenster wieder das aktive Fenster)
     window->activateWindow();
     ASSERT_TRUE(QTest::qWaitForWindowActive(window));
+    action("viewOverview")->trigger();
     QTest::keyClick(window, Qt::Key_Z, Qt::ControlModifier);
     for (int r = 1; r < 4; ++r) {
         window->selectFrame(window->filmstrip()->stripModel()->itemAt(r)->frame.id);
@@ -1120,12 +1124,13 @@ TEST_F(E2E, M10_LightTableTabsRatingApplyAllAndExport)
     crop.step = model::StepId("autoneg.crop");
     crop.params = model::ParamSet{}.with("rect", model::NormRect{0.1, 0.1, 0.8, 0.8});
     window->controller().apply(std::make_unique<application::SetEntryCommand>(crop));
+    action("copy")->trigger(); // ohne Markierung in der Liste: alle Bearbeitungsoptionen
     window->findChild<QPushButton*>(QStringLiteral("applyToAll"))->click();
     for (int r = 1; r < 3; ++r) {
         window->selectFrame(window->filmstrip()->stripModel()->itemAt(r)->frame.id);
         ASSERT_NE(entry("autoneg.exposure"), nullptr) << r;
         EXPECT_EQ(entry("autoneg.exposure")->origin, model::Origin::Copied);
-        EXPECT_EQ(entry("autoneg.crop"), nullptr) << "Zuschnitt gehört zum einzelnen Bild";
+        ASSERT_NE(entry("autoneg.crop"), nullptr) << "manueller Zuschnitt wird mitkopiert";
     }
 
     // Leuchttisch: alle exportieren, ohne Dialog

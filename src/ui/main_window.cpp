@@ -120,7 +120,9 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
     , cropTool_(std::make_unique<CropRotateTool>())
     , baseTool_(std::make_unique<RectPickerTool>())
     , retouchTool_(std::make_unique<RetouchTool>())
+    , areaTool_(std::make_unique<RectPickerTool>())
 {
+    areaTool_->setReadOnly(true);
     setObjectName(QStringLiteral("mainWindow"));
     setWindowTitle(QStringLiteral("AutoNeg"));
     setAcceptDrops(true);
@@ -255,7 +257,7 @@ void MainWindow::buildUi()
     filter_->addItem(tr("Verworfen"));
     filter_->addItem(tr("Unbewertet"));
     filter_->setToolTip(tr("Filmstreifen nach Bewertung filtern (LF-BAT-10)"));
-    // Leiste über dem Filmstreifen: Filter, Sterne, Verwerfen, Einstellungen übernehmen
+    // Leiste über dem Filmstreifen: Filter, Sterne, Verwerfen, kopierte Optionen übernehmen
     auto* stripBar = new QHBoxLayout;
     stripBar->addWidget(filter_);
     stripBar->addSpacing(12);
@@ -283,24 +285,21 @@ void MainWindow::buildUi()
             [this](bool on) { rate(on ? model::Rating::Reject : model::Rating::None); });
     stripBar->addWidget(rejectButton_);
     stripBar->addStretch(1);
-    stripBar->addWidget(new QLabel(tr("Einstellungen übernehmen:"), stripBox));
-    const QString nonFrame =
-        QStringLiteral(" (") + tr("ohne Zuschnitt, Basis und Retusche") + QLatin1Char(')');
-    auto* toSelection = new QPushButton(tr("auf Auswahl"), stripBox);
+    stripBar->addWidget(new QLabel(tr("Kopierte Bearbeitungsoptionen übernehmen auf:"), stripBox));
+    auto* toSelection = new QPushButton(tr("Auswahl"), stripBox);
     toSelection->setObjectName(QStringLiteral("applyToSelection"));
-    toSelection->setToolTip(tr("Bearbeitung des aktiven Bilds auf die markierten Bilder übernehmen") +
-                            nonFrame);
-    auto* toAll = new QPushButton(tr("auf alle"), stripBox);
+    toSelection->setToolTip(tr("Kopierte Bearbeitungsoptionen auf die markierten Bilder übernehmen"));
+    auto* toAll = new QPushButton(tr("alle"), stripBox);
     toAll->setObjectName(QStringLiteral("applyToAll"));
-    toAll->setToolTip(tr("Bearbeitung des aktiven Bilds auf alle Bilder der Rolle übernehmen") + nonFrame);
+    toAll->setToolTip(tr("Kopierte Bearbeitungsoptionen auf alle Bilder der Rolle übernehmen"));
     connect(toSelection, &QPushButton::clicked, this,
-            [this] { applySettingsTo(filmstrip_->selectedFrames()); });
+            [this] { applyCopiedTo(filmstrip_->selectedFrames(), false); });
     connect(toAll, &QPushButton::clicked, this, [this] {
         std::vector<model::FrameId> all;
         for (const model::Frame& f : frames_) {
             all.push_back(f.id);
         }
-        applySettingsTo(all);
+        applyCopiedTo(all, false);
     });
     stripBar->addWidget(toSelection);
     stripBar->addWidget(toAll);
@@ -370,6 +369,26 @@ void MainWindow::buildUi()
     exportLayout->addWidget(exportAll);
     exportLayout->addWidget(exportMore);
     sideLayout->addWidget(exportBox);
+    auto* copyBox = new QGroupBox(tr("Kopierte Bearbeitungsoptionen"), side);
+    auto* copyLayout = new QHBoxLayout(copyBox);
+    auto* lightSelection = new QPushButton(tr("auf Auswahl"), copyBox);
+    lightSelection->setObjectName(QStringLiteral("lightApplySelection"));
+    lightSelection->setToolTip(tr("Kopierte Bearbeitungsoptionen auf die markierten Bilder übernehmen"));
+    auto* lightAll = new QPushButton(tr("auf alle"), copyBox);
+    lightAll->setObjectName(QStringLiteral("lightApplyAll"));
+    lightAll->setToolTip(tr("Kopierte Bearbeitungsoptionen auf alle Bilder der Rolle übernehmen"));
+    copyLayout->addWidget(lightSelection);
+    copyLayout->addWidget(lightAll);
+    sideLayout->addWidget(copyBox);
+    connect(lightSelection, &QPushButton::clicked, this,
+            [this] { applyCopiedTo(filmstrip_->selectedFrames(), true); });
+    connect(lightAll, &QPushButton::clicked, this, [this] {
+        std::vector<model::FrameId> all;
+        for (const model::Frame& f : frames_) {
+            all.push_back(f.id);
+        }
+        applyCopiedTo(all, true);
+    });
     auto* sheetBox = new QGroupBox(tr("Kontaktabzug"), side);
     auto* sheetLayout = new QVBoxLayout(sheetBox);
     auto* sheetPdf = new QPushButton(tr("Als PDF speichern …"), sheetBox);
@@ -458,6 +477,9 @@ void MainWindow::buildUi()
     adjustScroll->setWidget(adjust_);
     adjustScroll->setWidgetResizable(true);
     tools_->addTab(adjustScroll, tr("Anpassen"));
+    imageTools_ = new QWidget(tools_);
+    imageTools_->setObjectName(QStringLiteral("imageTools"));
+    tools_->insertTab(0, imageTools_, tr("Zuschnitt und Retusche"));
     auto* toolDock = new QDockWidget(tr("Werkzeuge"), this);
     toolDock->setObjectName(QStringLiteral("toolsDock"));
     toolDock->setWidget(tools_);
@@ -478,35 +500,94 @@ void MainWindow::buildUi()
     editView_->setModel(editModel_);
     editView_->horizontalHeader()->setStretchLastSection(true);
     editView_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    editView_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     editView_->verticalHeader()->hide();
     auto* listBox = new QWidget(this);
     auto* listLayout = new QVBoxLayout(listBox);
     listLayout->setContentsMargins(2, 2, 2, 2);
     listLayout->addWidget(editView_);
-    auto* remove = new QPushButton(tr("Eintrag entfernen"), listBox);
+    auto* listButtons = new QHBoxLayout;
+    auto* remove = new QPushButton(tr("Ausgewählte rückgängig machen"), listBox);
     remove->setObjectName(QStringLiteral("removeEntry"));
-    remove->setToolTip(tr("Ausgewählte Änderung mit einem Klick entfernen (LF-LST-03)"));
-    listLayout->addWidget(remove);
-    auto* listDock = new QDockWidget(tr("Bearbeitungsliste"), this);
+    remove->setToolTip(tr("Ausgewählte Bearbeitungsoptionen mit einem Klick rückgängig machen (LF-LST-03)"));
+    auto* copyEntries = new QPushButton(tr("Ausgewählte kopieren"), listBox);
+    copyEntries->setObjectName(QStringLiteral("copyEntries"));
+    copyEntries->setToolTip(
+        tr("Ausgewählte Bearbeitungsoptionen kopieren (ohne Auswahl: alle); übernehmen am Filmstreifen"));
+    listButtons->addWidget(remove);
+    listButtons->addWidget(copyEntries);
+    listLayout->addLayout(listButtons);
+    auto* listDock = new QDockWidget(tr("Bearbeitungsoptionen"), this);
     listDock->setObjectName(QStringLiteral("editListDock"));
     listDock->setWidget(listBox);
     addDockWidget(Qt::RightDockWidgetArea, listDock);
     editorDocks_.push_back(listDock);
     connect(remove, &QPushButton::clicked, this, [this] {
-        const QModelIndex i = editView_->currentIndex();
-        if (i.isValid()) {
-            editModel_->removeEntry(i.row());
+        std::vector<int> rows;
+        for (const QModelIndex& i : editView_->selectionModel()->selectedRows()) {
+            rows.push_back(i.row());
         }
+        if (rows.empty() && editView_->currentIndex().isValid()) {
+            rows.push_back(editView_->currentIndex().row());
+        }
+        editModel_->removeEntries(rows); // ein Schritt im Verlauf
     });
+    connect(copyEntries, &QPushButton::clicked, this, [this] { copyOptions(); });
 
     connect(conversion_, &ConversionPanel::filmTypeChosen, this,
             [this](const QString& type) { chooseFilm(type.toStdString()); });
+    // jede Automatik macht nur ihren Schritt
     connect(conversion_, &ConversionPanel::autoFrameRequested, this,
-            [this] { detect(targets(), tr("Bildfeld erkennen")); });
+            [this] { detect(targets(), tr("Bildfeld erkennen"), application::AnalysisService::Frame); });
     connect(conversion_, &ConversionPanel::autoBaseRequested, this,
-            [this] { detect(targets(), tr("Basis messen")); });
+            [this] { detect(targets(), tr("Basis messen"), application::AnalysisService::Base); });
     connect(conversion_, &ConversionPanel::autoLevelsRequested, this,
-            [this] { report(tr("Auto-Tonwerte: die Tonwertgrenzen setzt die Konvertierung selbst.")); });
+            [this] { detect(targets(), tr("Tonwerte"), application::AnalysisService::Levels); });
+    connect(conversion_, &ConversionPanel::autoConvertToggled, this, [this](bool on) { setAutoConvert(on); });
+    connect(conversion_, &ConversionPanel::levelPresetChosen, this, [this](const QString& name) {
+        if (!roll_ || !s_.decodeEdits) {
+            return;
+        }
+        const auto j = s_.presets.load({ports::PresetKind::Base, name.toStdString()});
+        if (!j) {
+            report(QString::fromStdString(j.error().message));
+            return;
+        }
+        const model::EditList l = s_.decodeEdits(*j);
+        const model::EditEntry* e = l.get(model::StepId(std::string(id::densityrange)));
+        if (e == nullptr) {
+            report(tr("Die Filmvorgabe enthält keine Tonwerte."));
+            return;
+        }
+        model::EditEntry copy = *e;
+        copy.origin = model::Origin::Preset;
+        s_.bus.execute(application::SetEntryCommand(copy), targets(), *roll_);
+        refreshCurrent();
+    });
+    connect(conversion_, &ConversionPanel::saveLevelsRequested, this, [this] {
+        const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::densityrange)));
+        if (e == nullptr || !s_.encodeEdits) {
+            report(tr("Das Bild hat noch keine Tonwerte (Tonwerte: Automatisch)."));
+            return;
+        }
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("Filmvorgabe speichern"),
+                                                   tr("Name, z. B. der Film (Kodak Gold 200)"),
+                                                   QLineEdit::Normal, QString(), &ok);
+        if (!ok || name.trimmed().isEmpty()) {
+            return;
+        }
+        if (auto r = s_.presets.save(ports::PresetKind::Base, name.trimmed().toStdString(),
+                                     s_.encodeEdits(model::EditList{}.with(*e)));
+            !r) {
+            report(QString::fromStdString(r.error().message));
+        }
+        refreshLevelPresets();
+    });
+    connect(conversion_, &ConversionPanel::showBaseAreaToggled, this, [this](bool on) {
+        showArea_ = on;
+        setTool(on ? 4 : 0);
+    });
     connect(conversion_, &ConversionPanel::pickBaseRequested, this, [this] { setTool(2); });
 
     progress_ = new QProgressBar(this);
@@ -566,18 +647,15 @@ void MainWindow::buildActions()
     add(file, QStringLiteral("quit"), tr("Beenden"), QKeySequence::Quit, [this] { close(); });
 
     QMenu* edit = menuBar()->addMenu(tr("&Bearbeiten"));
-    add(edit, QStringLiteral("undo"), tr("Rückgängig"), QKeySequence(Qt::CTRL | Qt::Key_Z),
+    add(edit, QStringLiteral("undo"), tr("↶ Rückgängig"), QKeySequence(Qt::CTRL | Qt::Key_Z),
         [this] { ui_->undo(); });
-    add(edit, QStringLiteral("redo"), tr("Wiederholen"), QKeySequence(Qt::CTRL | Qt::Key_Y),
+    add(edit, QStringLiteral("redo"), tr("↷ Wiederholen"), QKeySequence(Qt::CTRL | Qt::Key_Y),
         [this] { ui_->redo(); });
     edit->addSeparator();
-    add(edit, QStringLiteral("copy"), tr("Bearbeitung kopieren"), QKeySequence::Copy, [this] {
-        if (s_.session.current != model::FrameId{}) {
-            s_.clipboard.copy(ui_->currentList(), s_.session.current);
-            report(tr("Bearbeitung kopiert"));
-        }
-    });
-    add(edit, QStringLiteral("paste"), tr("Einfügen …"), QKeySequence::Paste, [this] { doPaste(); });
+    add(edit, QStringLiteral("copy"), tr("Bearbeitungsoptionen kopieren"), QKeySequence::Copy,
+        [this] { copyOptions(); });
+    add(edit, QStringLiteral("paste"), tr("Bearbeitungsoptionen einfügen …"), QKeySequence::Paste,
+        [this] { doPaste(); });
     add(edit, QStringLiteral("resetAll"), tr("Bild zurücksetzen"),
         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R), [this] {
             // alle Einträge entfernen: ein Befehl je Eintrag wäre mehrstufig, deshalb einer für alle
@@ -643,16 +721,16 @@ void MainWindow::buildActions()
             [this, n] { setStars(n); });
     }
     edit->addSeparator();
-    add(edit, QStringLiteral("applyToSelection"), tr("Einstellungen auf Auswahl übernehmen"),
+    add(edit, QStringLiteral("applyToSelection"), tr("Kopierte Bearbeitungsoptionen auf Auswahl übernehmen"),
         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_V),
-        [this] { applySettingsTo(filmstrip_->selectedFrames()); });
-    add(edit, QStringLiteral("applyToAll"), tr("Einstellungen auf alle übernehmen"),
+        [this] { applyCopiedTo(filmstrip_->selectedFrames(), view_ == View::Overview); });
+    add(edit, QStringLiteral("applyToAll"), tr("Kopierte Bearbeitungsoptionen auf alle übernehmen"),
         QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_V), [this] {
             std::vector<model::FrameId> all;
             for (const model::Frame& f : frames_) {
                 all.push_back(f.id);
             }
-            applySettingsTo(all);
+            applyCopiedTo(all, view_ == View::Overview);
         });
 
     QMenu* view = menuBar()->addMenu(tr("&Ansicht"));
@@ -711,16 +789,40 @@ void MainWindow::buildActions()
 
     for (QAction* a : {action(QStringLiteral("openFolder")), action(QStringLiteral("undo")),
                        action(QStringLiteral("redo")), action(QStringLiteral("toolCrop")),
-                       action(QStringLiteral("compare")), action(QStringLiteral("export"))}) {
+                       action(QStringLiteral("toolRetouch")), action(QStringLiteral("compare")),
+                       action(QStringLiteral("export")), action(QStringLiteral("contactSheet"))}) {
         a->setToolTip(a->text() + QStringLiteral(" (") + a->shortcut().toString(QKeySequence::NativeText) +
                       QStringLiteral(")"));
     }
-    QToolBar* bar = addToolBar(tr("Werkzeuge"));
+    // Rückgängig/Wiederholen als Pfeile; Ordner öffnen und Kontaktabzug nur auf dem Leuchttisch
+    QToolBar* bar = addToolBar(tr("Werkzeugleiste"));
     bar->setObjectName(QStringLiteral("toolbar"));
-    for (const char* n :
-         {"openFolder", "undo", "redo", "toolCrop", "toolRetouch", "compare", "export", "contactSheet"}) {
+    for (const char* n : {"openFolder", "undo", "redo", "compare", "export", "contactSheet"}) {
         bar->addAction(action(QString::fromLatin1(n)));
     }
+    action(QStringLiteral("undo"))->setIconText(QStringLiteral("↶"));
+    action(QStringLiteral("redo"))->setIconText(QStringLiteral("↷"));
+    action(QStringLiteral("undo"))
+        ->setToolTip(tr("Rückgängig (Strg+Z)") + QStringLiteral(": ") + tr("in Entwickeln das aktive Bild") +
+                     QStringLiteral(", ") + tr("auf dem Leuchttisch Aktionen auf mehrere Bilder"));
+    action(QStringLiteral("redo"))
+        ->setToolTip(tr("Wiederholen (Strg+Y): nimmt das letzte Rückgängig zurück"));
+    if (auto* w = bar->widgetForAction(action(QStringLiteral("undo")))) {
+        QFont f = w->font();
+        f.setPointSizeF(f.pointSizeF() * 1.6);
+        w->setFont(f);
+        bar->widgetForAction(action(QStringLiteral("redo")))->setFont(f);
+    }
+    // Reiter „Zuschnitt und Retusche“ der Werkzeuge
+    auto* imageLayout = new QVBoxLayout(imageTools_);
+    for (const char* n : {"toolCrop", "rotateLeft", "rotateRight", "flipH", "toolRetouch"}) {
+        auto* b = new QToolButton(imageTools_);
+        b->setDefaultAction(action(QString::fromLatin1(n)));
+        b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        imageLayout->addWidget(b);
+    }
+    imageLayout->addStretch(1);
 
     // Leuchttisch / Entwickeln: Reiter am linken Rand, schließbar, hier wieder zu öffnen (K-M10-08)
     QMenu* views = menuBar()->addMenu(tr("&Fenster"));
@@ -782,6 +884,10 @@ void MainWindow::showView(View v)
     action(QStringLiteral("viewOverview"))->setChecked(v == View::Overview);
     action(QStringLiteral("viewImage"))->setChecked(v == View::Image);
     viewTabs_->setVisible(navigable);
+    // Leuchttisch: Rückgängig nur für Aktionen auf mehrere Bilder; Entwickeln: nur das aktive Bild
+    ui_->setBatchScope(v == View::Overview);
+    action(QStringLiteral("openFolder"))->setVisible(v != View::Image);
+    action(QStringLiteral("contactSheet"))->setVisible(v == View::Overview);
     // Bildwerkzeuge nur in der Bildansicht; Befehle für die Rolle nicht während des Imports
     for (const char* n : {"toolCrop", "toolRetouch", "compare", "zoomFit", "zoom100", "zoom200", "rotateLeft",
                           "rotateRight", "flipH"}) {
@@ -875,6 +981,10 @@ void MainWindow::closeRoll()
 
 void MainWindow::setTool(int which)
 {
+    if (which != 4 && showArea_) {
+        showArea_ = false;
+        conversion_->setShowArea(false);
+    }
     action(QStringLiteral("toolCrop"))->setChecked(which == 1);
     action(QStringLiteral("toolRetouch"))->setChecked(which == 3);
     switch (which) {
@@ -898,6 +1008,21 @@ void MainWindow::setTool(int which)
     case 2:
         canvas_->setTool(baseTool_.get());
         break;
+    case 4: {
+        // Messbereich der Basis auf dem ganzen, ungeschnittenen Bild
+        std::optional<model::NormRect> area;
+        if (const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::filmbase)))) {
+            if (auto a = e->params.get<model::NormRect>("area")) {
+                area = *a;
+            }
+        }
+        if (!area || area->w <= 0.0 || (area->w >= 1.0 && area->h >= 1.0)) {
+            report(tr("Kein Messbereich gespeichert: zuerst Auto-Basis oder Basis messen."));
+        }
+        areaTool_->setRect(area);
+        canvas_->setTool(areaTool_.get());
+        break;
+    }
     case 3: {
         model::SpotList spots;
         if (const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::retouch)))) {
@@ -984,6 +1109,7 @@ void MainWindow::onRollOpened(application::OpenedRoll r)
         filmstrip_->selectFrame(frames_.front().id);
     }
     report(tr("%n Bild(er) geöffnet", nullptr, static_cast<int>(frames_.size())));
+    refreshLevelPresets();
     // beide Ansichten als Reiter; Entwickeln ist danach aktiv
     showView(View::Overview);
     // Neue Rolle: erst der Import-Bildschirm (Filmtyp festlegen), sonst gleich die Bildansicht
@@ -1104,7 +1230,7 @@ void MainWindow::chooseFilm(const std::string& type)
     refreshCurrent();
 }
 
-void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString& what)
+void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString& what, unsigned parts)
 {
     // Erkennung braucht den Filmtyp; Bilder ohne Filmtyp werden übersprungen und gemeldet
     int skipped = 0;
@@ -1118,7 +1244,7 @@ void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString
             ++skipped;
             continue;
         }
-        trackJob(s_.analysis.detectFrame(*fr, roll_, film), what);
+        trackJob(s_.analysis.detectFrame(*fr, roll_, film, parts, s_.bus.history(f).current()), what);
     }
     if (skipped > 0) {
         report(tr("%1: %n Bild(er) ohne Filmtyp übersprungen – zuerst den Filmtyp wählen.", nullptr, skipped)
@@ -1137,6 +1263,7 @@ void MainWindow::refreshCurrent()
     // Bedienelemente nach Filmtyp: Gradation (Ilford Multigrade) nur bei S/W-Negativ
     const model::FilmType film = filmOf(s_.session.current);
     conversion_->setFilm(film);
+    conversion_->setAutoMode(autoConverted(s_.session.current));
     gradation_->setFilm(film);
     adjust_->setFilm(film);
     tools_->setTabVisible(tools_->indexOf(gradation_), film == model::FilmType::BwNegative);
@@ -1171,7 +1298,8 @@ void MainWindow::requestPreview(const model::EditList& l)
     r.frame = fr->id;
     r.path = fr->path;
     model::EditList list = l;
-    if (canvas_->tool() == cropTool_.get() || canvas_->tool() == baseTool_.get()) {
+    if (canvas_->tool() == cropTool_.get() || canvas_->tool() == baseTool_.get() ||
+        canvas_->tool() == areaTool_.get()) {
         // Rahmen bzw. Messrechteck auf dem ganzen, ungeschnittenen Bild
         list = list.without(model::StepId(std::string(id::crop)))
                    .without(model::StepId(std::string(id::rotation)));
@@ -1270,24 +1398,104 @@ void MainWindow::updateRatingButtons()
     rejectButton_->setChecked(f != nullptr && f->rating == model::Rating::Reject);
 }
 
-void MainWindow::applySettingsTo(std::vector<model::FrameId> frames)
+void MainWindow::copyOptions()
 {
-    if (!roll_ || s_.session.current == model::FrameId{}) {
+    if (s_.session.current == model::FrameId{}) {
         return;
     }
-    std::erase(frames, s_.session.current);
+    const model::EditList cur = ui_->currentList();
+    model::EditList chosen;
+    for (const QModelIndex& i : editView_->selectionModel()->selectedRows()) {
+        if (const model::EditEntry* e = editModel_->entryAt(i.row())) {
+            chosen = chosen.with(*e);
+        }
+    }
+    const bool all = chosen.empty();
+    s_.clipboard.copy(all ? cur : chosen, s_.session.current);
+    copiedFrom_ = s_.session.current;
+    report(all ? tr("Alle Bearbeitungsoptionen kopiert")
+               : tr("%n Bearbeitungsoption(en) kopiert", nullptr, static_cast<int>(chosen.size())));
+}
+
+void MainWindow::applyCopiedTo(std::vector<model::FrameId> frames, bool batch)
+{
+    if (!roll_) {
+        return;
+    }
+    if (s_.clipboard.empty()) {
+        report(tr("Zuerst Bearbeitungsoptionen kopieren (Liste: „Ausgewählte kopieren“ oder Strg+C)."));
+        return;
+    }
+    if (copiedFrom_) {
+        std::erase(frames, *copiedFrom_);
+    }
     if (frames.empty()) {
         report(tr("Keine anderen Bilder ausgewählt."));
         return;
     }
-    // eigene Zwischenablage: die des Anwenders (Strg+C) bleibt unberührt
-    application::EditClipboard clip;
-    clip.copy(ui_->currentList(), s_.session.current);
-    s_.bus.execute(clip.paste(clip.defaultSelection(), application::PasteMode::Values), frames, *roll_);
-    const model::Frame* src = frame(s_.session.current);
-    report(
-        tr("Einstellungen von Bild %1 auf %n Bild(er) übernommen", nullptr, static_cast<int>(frames.size()))
-            .arg(src != nullptr ? src->frameNo : 0));
+    // Automatische Optionen gehören zum einzelnen Bild: dort neu berechnen statt kopieren
+    std::set<model::StepId> values;
+    unsigned parts = 0;
+    for (const model::EditEntry& e : s_.clipboard.source().entries()) {
+        const std::string& step = e.step.value();
+        if (e.origin == model::Origin::Automatic && (step == id::crop || step == id::rotation)) {
+            parts |= application::AnalysisService::Frame;
+        } else if (e.origin == model::Origin::Automatic && step == id::filmbase) {
+            parts |= application::AnalysisService::Base;
+        } else if (e.origin == model::Origin::Automatic && step == id::densityrange) {
+            parts |= application::AnalysisService::Levels;
+        } else {
+            values.insert(e.step);
+        }
+    }
+    if (!values.empty()) {
+        s_.bus.execute(s_.clipboard.paste(values, application::PasteMode::Values), frames, *roll_, batch);
+    }
+    if (parts != 0) {
+        detect(frames, tr("Automatik neu berechnen"), parts);
+    }
+    refreshCurrent();
+    report(tr("Kopierte Bearbeitungsoptionen auf %n Bild(er) übernommen", nullptr,
+              static_cast<int>(frames.size())));
+}
+
+bool MainWindow::autoConverted(const model::FrameId& f) const
+{
+    if (f == model::FrameId{} || !s_.bus.isOpen(f) || manualConversion_.contains(f)) {
+        return false;
+    }
+    const model::EditList& l = s_.bus.history(f).current();
+    const auto automatic = [&l](std::string_view step) {
+        const model::EditEntry* e = l.get(model::StepId(std::string(step)));
+        return e != nullptr && e->origin == model::Origin::Automatic;
+    };
+    const model::FilmType film = filmOf(f);
+    const bool negative = film == model::FilmType::ColorNegative || film == model::FilmType::BwNegative;
+    return automatic(id::crop) && (!negative || (automatic(id::filmbase) && automatic(id::densityrange)));
+}
+
+void MainWindow::setAutoConvert(bool on)
+{
+    const auto t = targets();
+    for (const model::FrameId& f : t) {
+        if (on) {
+            manualConversion_.erase(f);
+        } else {
+            manualConversion_.insert(f);
+        }
+    }
+    if (on) {
+        detect(t, tr("Autokonvertierung"), application::AnalysisService::All);
+    }
+}
+
+void MainWindow::refreshLevelPresets()
+{
+    QStringList names;
+    for (const ports::PresetInfo& p : s_.presets.list(ports::PresetKind::Base)) {
+        names << QString::fromStdString(p.id.name);
+    }
+    conversion_->setLevelPresets(names);
 }
 
 void MainWindow::excludeFrames(const std::vector<model::FrameId>& frames)
@@ -1524,7 +1732,7 @@ void MainWindow::doPaste()
     }
     const application::PasteCommand cmd = s_.clipboard.paste(d.selection(), d.mode());
     const auto t = targets();
-    s_.bus.execute(cmd, t, *roll_);
+    s_.bus.execute(cmd, t, *roll_, view_ == View::Overview); // Leuchttisch: dort rückgängig
     if (d.mode() == application::PasteMode::Redetect && !cmd.redetect().empty()) {
         detect(t, tr("Erkennung"));
     }

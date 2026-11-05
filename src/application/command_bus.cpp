@@ -109,7 +109,7 @@ void CommandBus::notify(const model::FrameId& f, const model::Revision& rev)
 }
 
 model::UndoGroupId CommandBus::execute(const ICommand& c, std::span<const model::FrameId> targets,
-                                       const model::Roll& roll)
+                                       const model::Roll& roll, bool batch)
 {
     UndoGroup group;
     group.id = model::UndoGroupId{nextGroup_};
@@ -135,8 +135,84 @@ model::UndoGroupId CommandBus::execute(const ICommand& c, std::span<const model:
     }
     ++nextGroup_;
     const model::UndoGroupId id = group.id;
+    if (batch) {
+        batch_.push(group);
+    }
     undo_.push(std::move(group));
     return id;
+}
+
+bool CommandBus::undoFrame(const model::FrameId& f)
+{
+    const auto it = open_.find(f);
+    if (it == open_.end()) {
+        return false;
+    }
+    const auto rev = it->second.history.undo();
+    if (rev) {
+        persist(it->second);
+        notify(f, *rev);
+    }
+    return rev.has_value();
+}
+
+bool CommandBus::redoFrame(const model::FrameId& f)
+{
+    const auto it = open_.find(f);
+    if (it == open_.end()) {
+        return false;
+    }
+    const auto rev = it->second.history.redo();
+    if (rev) {
+        persist(it->second);
+        notify(f, *rev);
+    }
+    return rev.has_value();
+}
+
+bool CommandBus::undoBatch()
+{
+    const auto g = batch_.undo();
+    if (!g) {
+        return false;
+    }
+    for (const auto& [f, seq] : g->changes) {
+        const auto it = open_.find(f);
+        // nur, wenn das Bild seitdem nicht einzeln geändert wurde
+        if (it == open_.end() || it->second.history.currentRevision().seq != seq) {
+            continue;
+        }
+        if (const auto rev = it->second.history.undo()) {
+            persist(it->second);
+            notify(f, *rev);
+        }
+    }
+    return true;
+}
+
+bool CommandBus::redoBatch()
+{
+    const auto g = batch_.redo();
+    if (!g) {
+        return false;
+    }
+    for (const auto& [f, seq] : g->changes) {
+        const auto it = open_.find(f);
+        if (it == open_.end() || !it->second.history.canRedo()) {
+            continue;
+        }
+        const auto rev = it->second.history.redo();
+        if (!rev) {
+            continue;
+        }
+        if (rev->seq != seq) {
+            (void)it->second.history.undo(); // anderer Schritt: zurück
+            continue;
+        }
+        persist(it->second);
+        notify(f, *rev);
+    }
+    return true;
 }
 
 bool CommandBus::undo()

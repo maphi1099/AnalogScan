@@ -14,12 +14,25 @@ void ThumbnailService::request(const model::Frame& f, const model::EditList& edi
     (void)start(f, edits, film, size, std::move(done));
 }
 
+namespace {
+
+/// Rechenstand der Pipeline: bei jeder Änderung, die Bilder anders rechnet, erhöhen, sonst zeigt
+/// der Miniatur-Cache auf der Platte alte Ergebnisse (B-43: blaue Negative ohne Basis).
+constexpr std::uint64_t renderVersion = 2;
+
+std::uint64_t cacheKey(const model::EditList& edits, model::FilmType film)
+{
+    return (edits.hash() ^ (static_cast<std::uint64_t>(film) << 56U)) * 0x9E3779B97F4A7C15ULL + renderVersion;
+}
+
+} // namespace
+
 std::shared_future<ThumbnailService::Result> ThumbnailService::start(const model::Frame& f,
                                                                      const model::EditList& edits,
                                                                      model::FilmType film, int size,
                                                                      Done done)
 {
-    const std::uint64_t editHash = edits.hash() ^ (static_cast<std::uint64_t>(film) << 56U);
+    const std::uint64_t editHash = cacheKey(edits, film);
     const Key key{f.id, size, editHash};
     // Mit Rückruf prüft erst der Job den Cache: der Rückruf dekodiert das JPEG und soll nie
     // im UI-Thread laufen
@@ -111,7 +124,7 @@ ThumbnailService::Result ThumbnailService::make(const model::Frame& f, const mod
                                                 model::FilmType film, int size,
                                                 const image::CancelToken& cancel)
 {
-    const std::uint64_t editHash = edits.hash() ^ (static_cast<std::uint64_t>(film) << 56U);
+    const std::uint64_t editHash = cacheKey(edits, film);
     if (auto hit = cache_.thumbnail(f.id, size, editHash)) {
         return std::move(*hit);
     }

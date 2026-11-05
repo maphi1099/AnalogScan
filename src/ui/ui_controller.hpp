@@ -44,8 +44,12 @@ public:
     /// Aktuelle Liste des aktiven Bildes (leer ohne Bild).
     [[nodiscard]] virtual model::EditList currentList() const;
     [[nodiscard]] virtual const pipeline::StepRegistry& registry() const { return *registry_; }
+    /// Rückgängig/Wiederholen: in Entwickeln nur das aktive Bild, auf dem Leuchttisch nur
+    /// Aktionen auf mehrere Bilder (setBatchScope).
     virtual bool undo();
     virtual bool redo();
+    void setBatchScope(bool batch) { batchScope_ = batch; }
+    [[nodiscard]] bool batchScope() const { return batchScope_; }
 
     [[nodiscard]] application::Session& session() { return *session_; }
     void setPreviewRequest(PreviewRequest p) { preview_ = std::move(p); }
@@ -62,6 +66,7 @@ private:
     application::SyncController* sync_ = nullptr;
     const pipeline::StepRegistry* registry_;
     PreviewRequest preview_;
+    bool batchScope_ = false;
 };
 
 /// Anzeigename eines Schritts (aus der StepRegistry, sonst die Kennung).

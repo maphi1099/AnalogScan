@@ -86,9 +86,18 @@ public:
     /// Führt c auf allen Zielen aus; Bilder ohne Änderung erzeugen keine Revision.
     /// Liefert die Gruppe (leer, wenn sich nichts geändert hat).
     model::UndoGroupId execute(const ICommand& c, std::span<const model::FrameId> targets,
-                               const model::Roll& roll);
+                               const model::Roll& roll, bool batch = false);
     bool undo();
     bool redo();
+    /// Rückgängig nur für ein Bild (Entwickeln): sein letzter Schritt, egal wie er entstand.
+    bool undoFrame(const model::FrameId& f);
+    bool redoFrame(const model::FrameId& f);
+    /// Rückgängig für Aktionen auf mehrere Bilder vom Leuchttisch (execute mit batch). Bilder,
+    /// die danach einzeln weiterbearbeitet wurden, bleiben unverändert.
+    bool undoBatch();
+    bool redoBatch();
+    [[nodiscard]] bool canUndoBatch() const noexcept { return batch_.canUndo(); }
+    [[nodiscard]] bool canRedoBatch() const noexcept { return batch_.canRedo(); }
     /// Bewertung behalten/verwerfen (LF-BAT-10); wird sofort gespeichert, nicht im Verlauf.
     /// false, wenn das Bild nicht offen ist.
     bool setRating(const model::FrameId& f, model::Rating r);
@@ -115,6 +124,7 @@ private:
     PersistenceQueue& queue_;
     std::map<model::FrameId, Open> open_;
     UndoStack undo_;
+    UndoStack batch_; ///< nur Aktionen vom Leuchttisch
     std::vector<ISessionObserver*> observers_;
     std::uint64_t nextGroup_ = 1;
 };

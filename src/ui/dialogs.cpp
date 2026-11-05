@@ -12,6 +12,7 @@
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QInputDialog>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMessageBox>
@@ -390,7 +391,7 @@ PasteDialog::PasteDialog(const model::EditList& source, std::set<model::StepId> 
                          const pipeline::StepRegistry& registry, QWidget* parent)
     : QDialog(parent)
 {
-    setWindowTitle(tr("Einfügen"));
+    setWindowTitle(tr("Bearbeitungsoptionen einfügen"));
     setObjectName(QStringLiteral("pasteDialog"));
     list_ = new QListWidget(this);
     list_->setObjectName(QStringLiteral("pasteSelection"));
@@ -401,11 +402,12 @@ PasteDialog::PasteDialog(const model::EditList& source, std::set<model::StepId> 
         item->setCheckState(preselected.contains(e.step) ? Qt::Checked : Qt::Unchecked);
     }
     auto* values = new QRadioButton(tr("Werte übernehmen"), this);
-    values->setChecked(true);
-    redetect_ = new QRadioButton(tr("Bildfeld und Basis neu erkennen"), this);
+    redetect_ = new QRadioButton(tr("Automatische Optionen (Bildfeld, Basis) je Bild neu berechnen"), this);
     redetect_->setObjectName(QStringLiteral("redetect"));
+    redetect_->setChecked(true); // automatische Werte gehören zum einzelnen Bild
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     auto* layout = new QVBoxLayout(this);
+    layout->addWidget(new QLabel(tr("Welche Bearbeitungsoptionen sollen übernommen werden?"), this));
     layout->addWidget(list_);
     layout->addWidget(values);
     layout->addWidget(redetect_);

@@ -301,6 +301,13 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     : ToolPanel(ui, parent)
 {
     auto* layout = new QVBoxLayout(this);
+    auto_ = new QCheckBox(tr("Autokonvertierung"), this);
+    auto_->setObjectName(QStringLiteral("autoConvert"));
+    auto_->setToolTip(tr("Bildfeld, Filmbasis und Tonwerte vollautomatisch bestimmen"));
+    QFont bold = auto_->font();
+    bold.setBold(true);
+    auto_->setFont(bold);
+    layout->addWidget(auto_);
     filmType_ = new QComboBox(this);
     filmType_->setObjectName(QStringLiteral("filmType"));
     filmType_->addItem(tr("– Filmtyp wählen –"), QStringLiteral("raw"));
@@ -316,37 +323,97 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     hint_->setObjectName(QStringLiteral("filmHint"));
     hint_->setWordWrap(true);
     layout->addWidget(hint_);
-    const auto button = [this, layout](const QString& text, const QString& name, const QString& tip) {
-        auto* b = new QPushButton(text, this);
+    // Einzelne Schritte; bei Autokonvertierung ausgeblendet
+    manual_ = new QWidget(this);
+    auto* m = new QVBoxLayout(manual_);
+    m->setContentsMargins(0, 0, 0, 0);
+    const auto button = [this](const QString& text, const QString& name, const QString& tip) {
+        auto* b = new QPushButton(text, manual_);
         b->setObjectName(name);
         b->setToolTip(tip);
-        layout->addWidget(b);
         return b;
     };
-    QPushButton* autoFrame =
-        button(tr("Auto-Bildfeld"), QStringLiteral("autoFrame"), tr("Bildfeld automatisch erkennen"));
+    QPushButton* autoFrame = button(tr("Auto-Bildfeld"), QStringLiteral("autoFrame"),
+                                    tr("Nur das Bildfeld (Zuschnitt und Feindrehung) automatisch erkennen"));
     QPushButton* autoBase =
-        button(tr("Auto-Basis"), QStringLiteral("autoBase"), tr("Filmbasis im Filmrand messen"));
+        button(tr("Auto-Basis"), QStringLiteral("autoBase"), tr("Nur die Filmbasis im Filmrand messen"));
     QPushButton* pickBase =
         button(tr("Basis messen"), QStringLiteral("pickBase"), tr("Messrechteck in den Filmrand ziehen"));
-    QPushButton* autoLevels =
-        button(tr("Auto-Tonwerte"), QStringLiteral("autoLevels"), tr("Tonwertgrenzen automatisch setzen"));
+    m->addWidget(autoFrame);
+    auto* baseRow = new QHBoxLayout;
+    baseRow->addWidget(autoBase);
+    baseRow->addWidget(pickBase);
+    m->addLayout(baseRow);
+    auto* levelRow = new QHBoxLayout;
+    auto* levelLabel = new QLabel(tr("Tonwerte"), manual_);
+    levels_ = new QComboBox(manual_);
+    levels_->setObjectName(QStringLiteral("levelsSource"));
+    levels_->setToolTip(
+        tr("Tonwertgrenzen automatisch aus dem Bild oder aus einer gespeicherten Filmvorgabe"));
+    QPushButton* saveLevels =
+        button(tr("Speichern …"), QStringLiteral("saveLevels"),
+               tr("Tonwerte des Bilds als Filmvorgabe speichern, z. B. unter dem Filmnamen"));
+    levelRow->addWidget(levelLabel);
+    levelRow->addWidget(levels_, 1);
+    levelRow->addWidget(saveLevels);
+    m->addLayout(levelRow);
+    showArea_ = new QCheckBox(tr("Messbereich anzeigen"), manual_);
+    showArea_->setObjectName(QStringLiteral("showBaseArea"));
+    showArea_->setToolTip(tr("Zeigt das ganze Bild mit dem Bereich, in dem die Filmbasis gemessen wurde"));
+    m->addWidget(showArea_);
+    layout->addWidget(manual_);
+    layout->addStretch(1);
+    setLevelPresets({});
     connect(autoFrame, &QPushButton::clicked, this, &ConversionPanel::autoFrameRequested);
     connect(autoBase, &QPushButton::clicked, this, &ConversionPanel::autoBaseRequested);
     connect(pickBase, &QPushButton::clicked, this, &ConversionPanel::pickBaseRequested);
-    connect(autoLevels, &QPushButton::clicked, this, &ConversionPanel::autoLevelsRequested);
-    filmButtons_ = {autoFrame, autoLevels};
-    showArea_ = new QCheckBox(tr("Messbereich anzeigen"), this);
-    showArea_->setObjectName(QStringLiteral("showBaseArea"));
-    showArea_->setToolTip(tr("Zeigt den Bereich, in dem die Filmbasis gemessen wurde"));
-    layout->addWidget(showArea_);
-    layout->addStretch(1);
+    connect(saveLevels, &QPushButton::clicked, this, &ConversionPanel::saveLevelsRequested);
+    connect(levels_, &QComboBox::activated, this, [this](int i) {
+        const QString name = levels_->itemData(i).toString();
+        if (name.isEmpty()) {
+            Q_EMIT autoLevelsRequested();
+        } else {
+            Q_EMIT levelPresetChosen(name);
+        }
+    });
+    connect(auto_, &QCheckBox::toggled, this, [this](bool on) {
+        manual_->setVisible(!on);
+        Q_EMIT autoConvertToggled(on);
+    });
+    filmButtons_ = {autoFrame, auto_};
     baseControls_ = {autoBase, pickBase, showArea_};
     connect(showArea_, &QCheckBox::toggled, this, &ConversionPanel::showBaseAreaToggled);
     // Die Wahl gilt für alle markierten Bilder; der MainWindow trägt sie ein
     connect(filmType_, &QComboBox::activated, this,
             [this](int i) { Q_EMIT filmTypeChosen(filmType_->itemData(i).toString()); });
     setFilm(model::FilmType::Unconverted);
+}
+
+void ConversionPanel::setAutoMode(bool on)
+{
+    const QSignalBlocker block(auto_);
+    auto_->setChecked(on);
+    manual_->setVisible(!on);
+}
+
+bool ConversionPanel::autoMode() const
+{
+    return auto_->isChecked();
+}
+
+void ConversionPanel::setLevelPresets(const QStringList& names)
+{
+    levels_->clear();
+    levels_->addItem(tr("Automatisch"), QString());
+    for (const QString& n : names) {
+        levels_->addItem(n, n);
+    }
+}
+
+void ConversionPanel::setShowArea(bool on)
+{
+    const QSignalBlocker block(showArea_);
+    showArea_->setChecked(on);
 }
 
 void ConversionPanel::bindList(const model::EditList& /*l*/)
@@ -362,9 +429,10 @@ void ConversionPanel::setFilm(model::FilmType film)
     const bool chosen = film != model::FilmType::Unconverted;
     const bool negative = film == model::FilmType::ColorNegative || film == model::FilmType::BwNegative;
     hint_->setVisible(!chosen);
-    for (QPushButton* b : filmButtons_) {
+    for (QWidget* b : filmButtons_) {
         b->setEnabled(chosen);
     }
+    levels_->setEnabled(negative);
     for (QWidget* w : baseControls_) {
         w->setEnabled(negative);
     }

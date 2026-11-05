@@ -133,6 +133,40 @@ void EditListModel::removeEntry(int row)
     }
 }
 
+void EditListModel::removeEntries(const std::vector<int>& rows)
+{
+    // ein Befehl für alle Zeilen: ein Schritt im Verlauf
+    class RemoveSteps final : public application::ICommand
+    {
+    public:
+        explicit RemoveSteps(std::vector<model::StepId> steps)
+            : steps_(std::move(steps))
+        {}
+        [[nodiscard]] std::string label() const override { return "Entfernen"; }
+        [[nodiscard]] model::EditList apply(const model::EditList& l,
+                                            const application::CommandContext& /*c*/) const override
+        {
+            model::EditList out = l;
+            for (const model::StepId& s : steps_) {
+                out = out.without(s);
+            }
+            return out;
+        }
+
+    private:
+        std::vector<model::StepId> steps_;
+    };
+    std::vector<model::StepId> steps;
+    for (const int r : rows) {
+        if (const model::EditEntry* e = entryAt(r)) {
+            steps.push_back(e->step);
+        }
+    }
+    if (!steps.empty()) {
+        ui_.apply(std::make_unique<RemoveSteps>(std::move(steps)));
+    }
+}
+
 void EditListModel::toggleEntry(int row)
 {
     if (const model::EditEntry* e = entryAt(row)) {
