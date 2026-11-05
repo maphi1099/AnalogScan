@@ -63,9 +63,10 @@ application::UiDispatcher GuiApplication::dispatcher()
 MainWindow& GuiApplication::createWindow(const GuiServices& s)
 {
     impl_->window = std::make_unique<MainWindow>(AppServices{
-        s.registry, s.jobs,        s.bus,        s.session,        s.sync,         s.clipboard,   s.render,
-        s.rolls,    s.thumbnails,  s.analysis,   s.exports,        s.contactSheet, s.color,       s.presets,
-        s.settings, impl_->bridge, s.sourceInfo, s.currentChanged, s.encodeEdits,  s.decodeEdits, s.logger});
+        s.registry,    s.jobs,        s.bus,        s.session,       s.sync,       s.clipboard,
+        s.render,      s.rolls,       s.thumbnails, s.analysis,      s.exports,    s.contactSheet,
+        s.color,       s.presets,     s.settings,   impl_->bridge,   s.sourceInfo, s.currentChanged,
+        s.encodeEdits, s.decodeEdits, s.logger,     s.physicalMemory});
     return *impl_->window;
 }
 

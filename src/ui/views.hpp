@@ -42,7 +42,8 @@ public:
     enum Role
     {
         FrameIdRole = Qt::UserRole + 1,
-        RatingRole
+        RatingRole,
+        ActiveRole ///< das geöffnete Bild (Entwickeln)
     };
     struct Item
     {
@@ -57,6 +58,8 @@ public:
     void setFailed(const model::FrameId& f);
     void setRating(const model::FrameId& f, model::Rating r);
     void setStars(const model::FrameId& f, int stars);
+    /// Geöffnetes Bild: im Filmstreifen farbig umrandet.
+    void setActive(const model::FrameId& f);
     /// Filter nach Bewertung (LF-BAT-10); leer = alle.
     void setFilter(std::optional<model::Rating> r);
 
@@ -71,6 +74,7 @@ private:
     std::vector<Item> all_;
     std::vector<int> visible_; ///< Indizes in all_
     std::optional<model::Rating> filter_;
+    model::FrameId active_;
 };
 
 /// Filmstreifen: waagerechte Liste der Miniaturen mit Mehrfachauswahl.
@@ -84,8 +88,13 @@ public:
     using QStyledItemDelegate::QStyledItemDelegate;
     void paint(QPainter* p, const QStyleOptionViewItem& option, const QModelIndex& index) const override;
     /// Auswahl als Kästchen mit Haken oben rechts, ausgewählte Bilder hellgrau hinterlegt
-    /// (Import-Bildschirm).
+    /// (Import-Bildschirm, Filmstreifen, Leuchttisch).
     void setCheckable(bool on) { checkable_ = on; }
+    /// Lage des Kästchens in einer Zelle.
+    [[nodiscard]] static QRect checkBoxRect(const QRect& cell)
+    {
+        return {cell.right() - 22, cell.top() + 6, 16, 16};
+    }
     [[nodiscard]] QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 
 private:
@@ -94,6 +103,8 @@ private:
     bool checkable_ = false;
 };
 
+/// Filmstreifen wie ein Explorer-Fenster: Klick wählt aus, Strg+Klick mehrere, Klick auf das
+/// Kästchen schaltet ein Bild dazu oder weg; erst ein Doppelklick öffnet das Bild.
 class FilmstripView final : public QListView
 {
     Q_OBJECT
@@ -103,11 +114,15 @@ public:
     void setStripModel(FilmstripModel* m);
     [[nodiscard]] FilmstripModel* stripModel() const { return model_; }
     [[nodiscard]] std::vector<model::FrameId> selectedFrames() const;
+    /// Bild öffnen (wie Doppelklick) und allein auswählen.
     void selectFrame(const model::FrameId& f);
 
 Q_SIGNALS:
     void currentFrameChanged(const autoneg::model::FrameId& f);
     void selectionChangedFrames();
+
+protected:
+    void mousePressEvent(QMouseEvent* e) override;
 
 private:
     FilmstripModel* model_ = nullptr;
@@ -126,6 +141,9 @@ public:
 
 Q_SIGNALS:
     void openFrame(const autoneg::model::FrameId& f);
+
+protected:
+    void mousePressEvent(QMouseEvent* e) override;
 
 private:
     FilmstripModel* model_ = nullptr;

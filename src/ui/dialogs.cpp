@@ -458,7 +458,21 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     memory_->setToolTip(tr("Arbeitsspeicher für Zwischenbilder bei Export und Stapelverarbeitung"));
     form->addRow(tr("Sprache"), language_);
     form->addRow(tr("Threads"), threads_);
-    form->addRow(tr("Speicherbudget"), memory_);
+    unlimited_ = new QCheckBox(tr("Unbegrenzt (ganzer Arbeitsspeicher, ohne Auslagerung)"), this);
+    unlimited_->setObjectName(QStringLiteral("memoryUnlimited"));
+    auto* memoryBox = new QWidget(this);
+    auto* memoryLayout = new QVBoxLayout(memoryBox);
+    memoryLayout->setContentsMargins(0, 0, 0, 0);
+    memoryLayout->addWidget(unlimited_);
+    memoryLayout->addWidget(memory_);
+    form->addRow(tr("Speicherbudget"), memoryBox);
+    // Haken raus: Vorschlag die Hälfte des Arbeitsspeichers
+    connect(unlimited_, &QCheckBox::toggled, this, [this](bool on) {
+        memory_->setEnabled(!on);
+        if (!on && ramMb_ > 0) {
+            memory_->setValue(ramMb_ / 2);
+        }
+    });
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     auto* layout = new QVBoxLayout(this);
     layout->addLayout(form);
@@ -471,12 +485,17 @@ void SettingsDialog::setValues(const Values& v)
 {
     language_->setCurrentIndex(std::max(0, language_->findData(QString::fromStdString(v.language))));
     threads_->setValue(v.threads);
-    memory_->setValue(v.memoryMb);
+    ramMb_ = v.ramMb;
+    const QSignalBlocker block(unlimited_);
+    unlimited_->setChecked(v.memoryMb <= 0);
+    memory_->setEnabled(v.memoryMb > 0);
+    memory_->setValue(v.memoryMb > 0 ? v.memoryMb : (ramMb_ > 0 ? ramMb_ / 2 : 4096));
 }
 
 SettingsDialog::Values SettingsDialog::values() const
 {
-    return {language_->currentData().toString().toStdString(), threads_->value(), memory_->value()};
+    return {language_->currentData().toString().toStdString(), threads_->value(),
+            unlimited_->isChecked() ? 0 : memory_->value(), ramMb_};
 }
 
 } // namespace autoneg::ui

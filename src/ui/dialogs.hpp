@@ -112,7 +112,8 @@ public:
     {
         std::string language = "de"; ///< "de" oder "en"
         int threads = 0;             ///< 0 = alle Kerne
-        int memoryMb = 4096;         ///< Budget für Zwischenbilder
+        int memoryMb = 0;            ///< Budget für Zwischenbilder; 0 = unbegrenzt
+        int ramMb = 0;               ///< Arbeitsspeicher des Rechners (Vorschlag: die Hälfte)
     };
 
     explicit SettingsDialog(QWidget* parent = nullptr);
@@ -123,6 +124,8 @@ private:
     QComboBox* language_ = nullptr;
     QSpinBox* threads_ = nullptr;
     QSpinBox* memory_ = nullptr;
+    QCheckBox* unlimited_ = nullptr;
+    int ramMb_ = 0;
 };
 
 } // namespace autoneg::ui

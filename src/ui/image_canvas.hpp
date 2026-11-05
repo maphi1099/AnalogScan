@@ -37,6 +37,7 @@ public:
 
     /// Größe des Quellbildes in Pixeln (nach Geometrie: Drehung, Zuschnitt), für Zoom und Werkzeuge.
     void setSourceSize(QSize px);
+    [[nodiscard]] QSize sourceSize() const { return source_; }
     /// Neues Bild. drawRect: wohin es im Widget gehört (logische Pixel); bei Einpassen das
     /// ganze Bild, in der Detailansicht der sichtbare Ausschnitt. Das Bild hat bereits die
     /// Pixelgröße von drawRect × Gerätepixelverhältnis.

@@ -511,10 +511,13 @@ void MainWindow::buildUi()
     auto* adjustScroll = new QScrollArea(tools_);
     adjustScroll->setWidget(adjust_);
     adjustScroll->setWidgetResizable(true);
-    tools_->addTab(adjustScroll, tr("Anpassen"));
+    tools_->addTab(adjustScroll, tr("Licht und Farbe"));
     imageTools_ = new QWidget(tools_);
     imageTools_->setObjectName(QStringLiteral("imageTools"));
-    tools_->insertTab(1, imageTools_, tr("Zuschnitt und Retusche")); // Konvertierung bleibt vorn
+    tools_->insertTab(1, imageTools_, tr("Zuschnitt")); // Konvertierung bleibt vorn
+    retouchTab_ = new QWidget(tools_);
+    retouchTab_->setObjectName(QStringLiteral("retouchTools"));
+    tools_->insertTab(2, retouchTab_, tr("Staubretusche"));
     auto* toolDock = new QDockWidget(tr("Werkzeuge"), this);
     toolDock->setObjectName(QStringLiteral("toolsDock"));
     toolDock->setWidget(tools_);
@@ -887,7 +890,7 @@ void MainWindow::buildActions()
     }
     // Reiter „Zuschnitt und Retusche“ der Werkzeuge
     auto* imageLayout = new QVBoxLayout(imageTools_);
-    for (const char* n : {"toolCrop", "rotateLeft", "rotateRight", "flipH", "toolRetouch"}) {
+    for (const char* n : {"toolCrop", "rotateLeft", "rotateRight", "flipH"}) {
         auto* b = new QToolButton(imageTools_);
         b->setDefaultAction(action(QString::fromLatin1(n)));
         b->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -895,6 +898,20 @@ void MainWindow::buildActions()
         imageLayout->addWidget(b);
     }
     imageLayout->addStretch(1);
+    // Reiter Staubretusche
+    auto* retouchLayout = new QVBoxLayout(retouchTab_);
+    auto* retouchButton = new QToolButton(retouchTab_);
+    retouchButton->setDefaultAction(action(QStringLiteral("toolRetouch")));
+    retouchButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    retouchButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    retouchLayout->addWidget(retouchButton);
+    auto* retouchHint =
+        new QLabel(tr("Eingeschaltet setzt jeder Klick auf ein Staubkorn eine Retuschestelle.") +
+                       QLatin1Char(' ') + tr("Alle Stellen eines Bilds sind eine Bearbeitungsoption."),
+                   retouchTab_);
+    retouchHint->setWordWrap(true);
+    retouchLayout->addWidget(retouchHint);
+    retouchLayout->addStretch(1);
 
     // Leuchttisch / Entwickeln: Reiter am linken Rand, schließbar, hier wieder zu öffnen (K-M10-08)
     QMenu* views = menuBar()->addMenu(tr("&Fenster"));
@@ -1245,6 +1262,7 @@ void MainWindow::selectFrame(const model::FrameId& f)
         return;
     }
     s_.session.current = f;
+    stripModel_->setActive(f);
     if (s_.currentChanged) {
         s_.currentChanged(f);
     }
@@ -1419,6 +1437,16 @@ void MainWindow::onPreview(const PreviewFrame& p)
     }
     if (!sources_.contains(p.frame) && canvas_->zoom() == ImageCanvas::Zoom::Fit) {
         canvas_->setSourceSize(p.image.size()); // bis die Kopfdaten da sind
+    }
+    // Seitenverhältnis der Vorschau gilt (Feindrehung mit Füllen, Vierteldrehung): sonst wird das
+    // Bild verschoben bzw. verzerrt gezeichnet
+    if (!p.image.isNull() && p.image.height() > 0) {
+        const QSize src = canvas_->sourceSize();
+        const double aspect = static_cast<double>(p.image.width()) / p.image.height();
+        if (src.height() > 0 && std::abs(static_cast<double>(src.width()) / src.height() - aspect) > 0.005) {
+            canvas_->setSourceSize(
+                QSize(src.width(), std::max(1, static_cast<int>(std::lround(src.width() / aspect)))));
+        }
     }
     canvas_->setImage(p.image, canvas_->mapping().imageRect);
     canvas_->setClipping(p.clipping, false);
@@ -1901,8 +1929,8 @@ void MainWindow::doSettings()
         before.language = *v->asString();
     }
     before.threads = num("threads", 0);
-    before.memoryMb =
-        num("memoryBudgetMb", static_cast<int>(s_.jobs.budget().total() >> 20U)); // Standard: 40 %
+    before.memoryMb = num("memoryBudgetMb", 0); // Standard: unbegrenzt
+    before.ramMb = static_cast<int>(s_.physicalMemory >> 20U);
     SettingsDialog d(this);
     d.setValues(before);
     if (d.exec() != QDialog::Accepted) {
@@ -1914,7 +1942,10 @@ void MainWindow::doSettings()
     s_.settings.set("memoryBudgetMb", model::JsonValue(std::int64_t{v.memoryMb}));
     application::ThreadConfig c;
     c.workers = v.threads;
-    c.memoryBudget = static_cast<std::size_t>(v.memoryMb) << 20U;
+    c.memoryBudget =
+        v.memoryMb > 0
+            ? static_cast<std::size_t>(v.memoryMb) << 20U
+            : static_cast<std::size_t>(s_.physicalMemory > 0 ? s_.physicalMemory : std::uint64_t{8} << 30U);
     s_.jobs.configure(c);
     if (v.language != before.language) {
         report(tr("Die Sprache wird nach einem Neustart umgestellt."));

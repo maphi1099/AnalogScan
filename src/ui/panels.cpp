@@ -365,6 +365,11 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     baseRow->addWidget(autoBase);
     baseRow->addWidget(pickBase);
     m->addLayout(baseRow);
+    // direkt unter der Basis: wo sie gemessen wurde
+    showArea_ = new QCheckBox(tr("Messbereich anzeigen"), manual_);
+    showArea_->setObjectName(QStringLiteral("showBaseArea"));
+    showArea_->setToolTip(tr("Zeigt das ganze Bild mit dem Bereich, in dem die Filmbasis gemessen wurde"));
+    m->addWidget(showArea_);
     auto* levelRow = new QHBoxLayout;
     auto* levelLabel = new QLabel(tr("Tonwerte"), manual_);
     levels_ = new QComboBox(manual_);
@@ -379,10 +384,6 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     levelRow->addWidget(saveLevels);
     m->addLayout(levelRow);
     m->addWidget(convert_);
-    showArea_ = new QCheckBox(tr("Messbereich anzeigen"), manual_);
-    showArea_->setObjectName(QStringLiteral("showBaseArea"));
-    showArea_->setToolTip(tr("Zeigt das ganze Bild mit dem Bereich, in dem die Filmbasis gemessen wurde"));
-    m->addWidget(showArea_);
     layout->addWidget(manual_);
     layout->addStretch(1);
     setLevelPresets({});

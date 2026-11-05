@@ -3,6 +3,7 @@
 #include "ui/qt_session_bridge.hpp"
 
 #include <QtCore/QItemSelectionModel>
+#include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QPixmap>
@@ -147,6 +148,17 @@ void FilmstripModel::setFailed(const model::FrameId& f)
     }
 }
 
+void FilmstripModel::setActive(const model::FrameId& f)
+{
+    const int before = rowOf(active_);
+    active_ = f;
+    for (const int r : {before, rowOf(f)}) {
+        if (r >= 0) {
+            Q_EMIT dataChanged(index(r), index(r));
+        }
+    }
+}
+
 void FilmstripModel::setStars(const model::FrameId& f, int stars)
 {
     for (Item& it : all_) {
@@ -218,6 +230,8 @@ QVariant FilmstripModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(it->frame.id);
     case RatingRole:
         return static_cast<int>(it->frame.rating);
+    case ActiveRole:
+        return it->frame.id == active_;
     default:
         return {};
     }
@@ -235,9 +249,17 @@ FilmstripView::FilmstripView(QWidget* parent)
     setIconSize(QSize(160, 120));
     setGridSize(QSize(176, 150)); // feste Zellen, auch bevor Miniaturen da sind
     setUniformItemSizes(true);
-    setItemDelegate(new ThumbnailDelegate(this));
+    auto* delegate = new ThumbnailDelegate(this);
+    delegate->setCheckable(true);
+    setItemDelegate(delegate);
     setSelectionMode(QAbstractItemView::ExtendedSelection);
     setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    // erst der Doppelklick öffnet
+    connect(this, &QListView::doubleClicked, this, [this](const QModelIndex& i) {
+        if (const FilmstripModel::Item* it = model_ != nullptr ? model_->itemAt(i.row()) : nullptr) {
+            Q_EMIT currentFrameChanged(it->frame.id);
+        }
+    });
     setMinimumHeight(170);
     setObjectName(QStringLiteral("filmstrip"));
 }
@@ -246,11 +268,6 @@ void FilmstripView::setStripModel(FilmstripModel* m)
 {
     model_ = m;
     setModel(m);
-    connect(selectionModel(), &QItemSelectionModel::currentChanged, this, [this](const QModelIndex& cur) {
-        if (const FilmstripModel::Item* it = model_->itemAt(cur.row())) {
-            Q_EMIT currentFrameChanged(it->frame.id);
-        }
-    });
     connect(selectionModel(), &QItemSelectionModel::selectionChanged, this,
             [this] { Q_EMIT selectionChangedFrames(); });
 }
@@ -326,9 +343,17 @@ void ThumbnailDelegate::paint(QPainter* p, const QStyleOptionViewItem& option, c
                          imageArea.top() + (imageArea.height() - logical.height()) / 2.0);
         p->drawPixmap(at, *it);
     }
+    if (index.data(FilmstripModel::ActiveRole).toBool()) {
+        // geöffnetes Bild: farbiger Rahmen
+        p->save();
+        p->setPen(QPen(option.palette.color(QPalette::Highlight), 3));
+        p->setBrush(Qt::NoBrush);
+        p->drawRect(option.rect.adjusted(2, 2, -3, -3));
+        p->restore();
+    }
     if (checkable_) {
         // Kästchen oben rechts, mit Haken wenn ausgewählt
-        const QRect checkBox(cell.right() - 20, cell.top() + 4, 16, 16);
+        const QRect checkBox = checkBoxRect(cell);
         p->save();
         p->setRenderHint(QPainter::Antialiasing);
         p->setPen(QPen(option.palette.color(QPalette::Light), 1.5));
@@ -369,7 +394,9 @@ OverviewView::OverviewView(QWidget* parent)
     setUniformItemSizes(true);
     setSelectionMode(QAbstractItemView::ExtendedSelection);
     setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    setItemDelegate(new ThumbnailDelegate(this));
+    auto* delegate = new ThumbnailDelegate(this);
+    delegate->setCheckable(true);
+    setItemDelegate(delegate);
     setObjectName(QStringLiteral("overview"));
     connect(this, &QListView::doubleClicked, this, [this](const QModelIndex& i) {
         if (model_ != nullptr) {
@@ -395,6 +422,40 @@ void FilmstripView::selectFrame(const model::FrameId& f)
     const int r = model_->rowOf(f);
     if (r >= 0) {
         selectionModel()->setCurrentIndex(model_->index(r), QItemSelectionModel::ClearAndSelect);
+        Q_EMIT currentFrameChanged(f);
+    }
+}
+
+namespace {
+
+/// Klick auf das Kästchen einer Zelle: Bild zur Auswahl dazu oder weg (wie Strg+Klick).
+bool toggleByCheckBox(QListView* view, QMouseEvent* e)
+{
+    const QModelIndex i = view->indexAt(e->position().toPoint());
+    if (!i.isValid() || e->button() != Qt::LeftButton) {
+        return false;
+    }
+    const QRect cell = view->visualRect(i).adjusted(2, 2, -2, -2);
+    if (!ThumbnailDelegate::checkBoxRect(cell).adjusted(-3, -3, 3, 3).contains(e->position().toPoint())) {
+        return false;
+    }
+    view->selectionModel()->select(i, QItemSelectionModel::Toggle);
+    return true;
+}
+
+} // namespace
+
+void FilmstripView::mousePressEvent(QMouseEvent* e)
+{
+    if (!toggleByCheckBox(this, e)) {
+        QListView::mousePressEvent(e);
+    }
+}
+
+void OverviewView::mousePressEvent(QMouseEvent* e)
+{
+    if (!toggleByCheckBox(this, e)) {
+        QListView::mousePressEvent(e);
     }
 }
 

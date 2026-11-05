@@ -50,6 +50,7 @@ struct GuiServices
     std::function<model::EditList(const model::JsonValue&)> decodeEdits;
     /// Protokoll (NF-REL-03); Meldungen der Oberfläche landen auch dort.
     ports::ILogger* logger = nullptr;
+    std::uint64_t physicalMemory = 0; ///< Arbeitsspeicher (Einstellung Speicherbudget)
 };
 
 /// Qt-Anwendung der Oberfläche: besitzt QApplication, die Brücke (QtSessionBridge) und das

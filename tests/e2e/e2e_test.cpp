@@ -1146,6 +1146,26 @@ TEST_F(E2E, M10_LightTableTabsRatingApplyAllAndExport)
         60000));
 }
 
+// K-M10-15 (Wunsch des Nutzers): Filmstreifen wie ein Explorer-Fenster – Klick wählt aus, ohne
+// zu öffnen; das Kästchen oben rechts schaltet ein Bild dazu; erst der Doppelklick öffnet
+TEST_F(E2E, M10_FilmstripSelectsLikeExplorer)
+{
+    start(3);
+    ui::FilmstripView* strip = window->filmstrip();
+    const model::FrameId opened = window->controller().session().current;
+    const QModelIndex second = strip->model()->index(1, 0);
+    const QModelIndex third = strip->model()->index(2, 0);
+    QTest::mouseClick(strip->viewport(), Qt::LeftButton, {}, strip->visualRect(second).center());
+    EXPECT_EQ(window->controller().session().current, opened) << "Klick öffnet nicht";
+    EXPECT_EQ(strip->selectedFrames().size(), 1U);
+    const QRect cell = strip->visualRect(third).adjusted(2, 2, -2, -2);
+    QTest::mouseClick(strip->viewport(), Qt::LeftButton, {},
+                      ui::ThumbnailDelegate::checkBoxRect(cell).center());
+    EXPECT_EQ(strip->selectedFrames().size(), 2U) << "Kästchen wählt dazu";
+    Q_EMIT strip->doubleClicked(third);
+    EXPECT_EQ(window->controller().session().current, strip->stripModel()->itemAt(2)->frame.id);
+}
+
 // K-M10-08: Abbrechen auf dem Import-Bildschirm schließt die Rolle wieder
 TEST_F(E2E, M10_ImportCancelClosesRoll)
 {
@@ -1166,7 +1186,14 @@ TEST_F(E2E, E_48_SettingsPersist)
     launch();
     onNextDialog([](QDialog* d) {
         d->findChild<QSpinBox*>(QStringLiteral("threads"))->setValue(3);
-        d->findChild<QSpinBox*>(QStringLiteral("memoryMb"))->setValue(2048);
+        // K-M10-15: Standard unbegrenzt; Haken raus stellt die Hälfte des Arbeitsspeichers ein
+        auto* unlimited = d->findChild<QCheckBox*>(QStringLiteral("memoryUnlimited"));
+        auto* memory = d->findChild<QSpinBox*>(QStringLiteral("memoryMb"));
+        EXPECT_TRUE(unlimited->isChecked());
+        EXPECT_FALSE(memory->isEnabled());
+        unlimited->click();
+        EXPECT_TRUE(memory->isEnabled());
+        memory->setValue(2048);
         d->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
     });
     action("settings")->trigger();

@@ -84,6 +84,8 @@ struct AppServices
     std::function<model::EditList(const model::JsonValue&)> decodeEdits;
     /// Protokoll (NF-REL-03); Meldungen der Oberfläche landen auch dort.
     ports::ILogger* logger = nullptr;
+    /// Arbeitsspeicher des Rechners (0 = unbekannt), für die Einstellung Speicherbudget.
+    std::uint64_t physicalMemory = 0;
 };
 
 /// Hauptfenster (Architektur 9.14, LF-UI-01): Filmstreifen, Arbeitsfläche, Werkzeuge,
@@ -228,6 +230,7 @@ private:
     QTabBar* viewTabs_ = nullptr;
     QWidget* emptyPage_ = nullptr;
     QWidget* imageTools_ = nullptr;
+    QWidget* retouchTab_ = nullptr;
     QLabel* exportFolder_ = nullptr;
     QComboBox* exportFormat_ = nullptr;
     QLabel* selectionInfo_ = nullptr;

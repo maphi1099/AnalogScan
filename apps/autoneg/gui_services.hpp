@@ -2,6 +2,7 @@
 
 // Dienste der gemeinsamen Komposition für die Oberfläche (GUI-Programm und E2E-Tests).
 
+#include "adapters/tbb/system_memory.hpp"
 #include "shared/composition.hpp"
 #include "ui/gui_application.hpp"
 
@@ -30,6 +31,7 @@ namespace autoneg::app {
         [&c](const model::EditList& l) { return c.encodeEdits(l); },
         [&c](const model::JsonValue& j) { return c.decodeEdits(j); },
         &c.logger(),
+        adapter::tbb::physicalMemoryBytes(),
     };
 }
 

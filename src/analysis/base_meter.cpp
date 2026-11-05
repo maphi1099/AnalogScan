@@ -95,11 +95,28 @@ base::Expected<BaseMeasurement> BaseMeter::measureRect(const image::ImageBuffer&
     const int x1 = std::clamp(static_cast<int>(std::ceil((r.x + r.w) * s.width)), 0, s.width);
     const int y0 = std::clamp(static_cast<int>(std::floor(r.y * s.height)), 0, s.height);
     const int y1 = std::clamp(static_cast<int>(std::ceil((r.y + r.h) * s.height)), 0, s.height);
+    // Perforationslöcher und Leuchtfläche ausschließen: Pixel ab 75 % des Lichtpegels (hellste
+    // Stellen des ganzen Scans), wie bei der Bildfelderkennung
+    const auto v = img.host();
+    const auto ch = static_cast<std::size_t>(s.channels);
+    const auto lumAt = [&](std::size_t i) {
+        return ch == 1 ? v[i] : 0.2627F * v[i * ch] + 0.6780F * v[i * ch + 1] + 0.0593F * v[i * ch + 2];
+    };
+    std::vector<float> all;
+    all.reserve(static_cast<std::size_t>(s.width) * static_cast<std::size_t>(s.height) / 16 + 1);
+    for (std::size_t i = 0; i < static_cast<std::size_t>(s.width) * static_cast<std::size_t>(s.height);
+         i += 16) {
+        all.push_back(lumAt(i));
+    }
+    const double light = all.empty() ? 1.0 : detail::percentile(all, 0.998);
     std::vector<std::size_t> pixels;
     for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
-            pixels.push_back(static_cast<std::size_t>(y) * static_cast<std::size_t>(s.width) +
-                             static_cast<std::size_t>(x));
+            const std::size_t i =
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(s.width) + static_cast<std::size_t>(x);
+            if (lumAt(i) < 0.75 * light) {
+                pixels.push_back(i);
+            }
         }
     }
     return robustBase(img, pixels, BaseMethod::Manual);
