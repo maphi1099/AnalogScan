@@ -6,16 +6,22 @@
 #include "pipeline/step_registry.hpp"
 #include "ports/repositories.hpp"
 
+#include <QtGui/QKeySequence>
 #include <QtWidgets/QDialog>
 
 #include <set>
+#include <vector>
 
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QFormLayout;
+class QKeySequenceEdit;
+class QLabel;
 class QLineEdit;
 class QListWidget;
 class QPlainTextEdit;
+class QPushButton;
 class QRadioButton;
 class QSpinBox;
 
@@ -108,12 +114,22 @@ class SettingsDialog final : public QDialog
     Q_OBJECT
 
 public:
+    /// Tastenkürzel einer Aktion; frei belegbar, "Standard" stellt den Werkszustand her.
+    struct Shortcut
+    {
+        QString action; ///< Objektname der Aktion
+        QString text;
+        QKeySequence key;
+        QKeySequence standard;
+    };
+
     struct Values
     {
         std::string language = "de"; ///< "de" oder "en"
         int threads = 0;             ///< 0 = alle Kerne
         int memoryMb = 0;            ///< Budget für Zwischenbilder; 0 = unbegrenzt
         int ramMb = 0;               ///< Arbeitsspeicher des Rechners (Vorschlag: die Hälfte)
+        std::vector<Shortcut> shortcuts;
     };
 
     explicit SettingsDialog(QWidget* parent = nullptr);
@@ -126,6 +142,12 @@ private:
     QSpinBox* memory_ = nullptr;
     QCheckBox* unlimited_ = nullptr;
     int ramMb_ = 0;
+    std::vector<Shortcut> shortcuts_;
+    std::vector<QKeySequenceEdit*> keys_;
+    QFormLayout* keyForm_ = nullptr;
+    QLabel* keyConflict_ = nullptr;
+    QPushButton* ok_ = nullptr;
+    void checkConflicts();
 };
 
 } // namespace autoneg::ui

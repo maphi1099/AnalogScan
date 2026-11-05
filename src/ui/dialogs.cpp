@@ -12,6 +12,7 @@
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QInputDialog>
+#include <QtWidgets/QKeySequenceEdit>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
@@ -19,7 +20,9 @@
 #include <QtWidgets/QPlainTextEdit>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QRadioButton>
+#include <QtWidgets/QScrollArea>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QTabWidget>
 #include <QtWidgets/QVBoxLayout>
 
 namespace autoneg::ui {
@@ -473,12 +476,56 @@ SettingsDialog::SettingsDialog(QWidget* parent)
             memory_->setValue(ramMb_ / 2);
         }
     });
+    auto* general = new QWidget(this);
+    general->setLayout(form);
+    // Tastenkürzel: jede Aktion frei belegbar
+    auto* keys = new QWidget(this);
+    auto* keyLayout = new QVBoxLayout(keys);
+    auto* keyList = new QWidget(keys);
+    keyForm_ = new QFormLayout(keyList);
+    auto* scroll = new QScrollArea(keys);
+    scroll->setWidget(keyList);
+    scroll->setWidgetResizable(true);
+    keyConflict_ = new QLabel(keys);
+    keyConflict_->setObjectName(QStringLiteral("shortcutConflict"));
+    keyConflict_->setStyleSheet(QStringLiteral("color: #c0392b"));
+    auto* reset = new QPushButton(tr("Alle auf Standard"), keys);
+    reset->setObjectName(QStringLiteral("shortcutsReset"));
+    keyLayout->addWidget(scroll, 1);
+    keyLayout->addWidget(keyConflict_);
+    keyLayout->addWidget(reset, 0, Qt::AlignLeft);
+    connect(reset, &QPushButton::clicked, this, [this] {
+        for (std::size_t i = 0; i < keys_.size(); ++i) {
+            keys_[i]->setKeySequence(shortcuts_[i].standard);
+        }
+    });
+    auto* tabs = new QTabWidget(this);
+    tabs->setObjectName(QStringLiteral("settingsTabs"));
+    tabs->addTab(general, tr("Allgemein"));
+    tabs->addTab(keys, tr("Tastenkürzel"));
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    ok_ = buttons->button(QDialogButtonBox::Ok);
     auto* layout = new QVBoxLayout(this);
-    layout->addLayout(form);
+    layout->addWidget(tabs);
     layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    resize(480, 560);
+}
+
+void SettingsDialog::checkConflicts()
+{
+    QStringList clashes;
+    for (std::size_t i = 0; i < keys_.size(); ++i) {
+        const QKeySequence k = keys_[i]->keySequence();
+        for (std::size_t j = i + 1; j < keys_.size() && !k.isEmpty(); ++j) {
+            if (keys_[j]->keySequence() == k) {
+                clashes << tr("%1 ist doppelt belegt").arg(k.toString(QKeySequence::NativeText));
+            }
+        }
+    }
+    keyConflict_->setText(clashes.join(QStringLiteral(", ")));
+    ok_->setEnabled(clashes.isEmpty());
 }
 
 void SettingsDialog::setValues(const Values& v)
@@ -490,12 +537,32 @@ void SettingsDialog::setValues(const Values& v)
     unlimited_->setChecked(v.memoryMb <= 0);
     memory_->setEnabled(v.memoryMb > 0);
     memory_->setValue(v.memoryMb > 0 ? v.memoryMb : (ramMb_ > 0 ? ramMb_ / 2 : 4096));
+    shortcuts_ = v.shortcuts;
+    for (QKeySequenceEdit* e : keys_) {
+        keyForm_->removeRow(e);
+    }
+    keys_.clear();
+    for (const Shortcut& sc : shortcuts_) {
+        auto* edit = new QKeySequenceEdit(sc.key, this);
+        edit->setObjectName(QStringLiteral("key_") + sc.action);
+        edit->setMaximumSequenceLength(1);
+        edit->setClearButtonEnabled(true);
+        QString text = sc.text;
+        keyForm_->addRow(text.remove(QLatin1Char('&')), edit);
+        keys_.push_back(edit);
+        connect(edit, &QKeySequenceEdit::keySequenceChanged, this, &SettingsDialog::checkConflicts);
+    }
+    checkConflicts();
 }
 
 SettingsDialog::Values SettingsDialog::values() const
 {
-    return {language_->currentData().toString().toStdString(), threads_->value(),
-            unlimited_->isChecked() ? 0 : memory_->value(), ramMb_};
+    Values v{language_->currentData().toString().toStdString(), threads_->value(),
+             unlimited_->isChecked() ? 0 : memory_->value(), ramMb_, shortcuts_};
+    for (std::size_t i = 0; i < keys_.size(); ++i) {
+        v.shortcuts[i].key = keys_[i]->keySequence();
+    }
+    return v;
 }
 
 } // namespace autoneg::ui

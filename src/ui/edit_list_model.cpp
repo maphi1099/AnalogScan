@@ -5,8 +5,125 @@
 #include <QtGui/QColor>
 
 #include <algorithm>
+#include <cmath>
 
 namespace autoneg::ui {
+
+namespace {
+
+QString number(double v, int decimals, bool sign)
+{
+    QString s = QString::number(v, 'f', decimals).replace('.', ',');
+    return sign && v >= 0.0 ? QStringLiteral("+") + s : s;
+}
+
+QString percent(double v, bool sign)
+{
+    const int p = static_cast<int>(std::lround(v * 100.0));
+    return (sign && p >= 0 ? QStringLiteral("+") : QString()) + QString::number(p) + QStringLiteral(" %");
+}
+
+QString filmName(const std::string& type)
+{
+    if (type == "bw") {
+        return EditListModel::tr("S/W-Negativ");
+    }
+    if (type == "slide") {
+        return EditListModel::tr("Dia");
+    }
+    return EditListModel::tr("Farbnegativ");
+}
+
+// Ein Parameter als "Bezeichnung Wert"; leer, wenn er in der Liste nichts aussagt
+QString describe(const std::string& name, const model::ParamValue& value)
+{
+    const auto* d = std::get_if<double>(&value);
+    const auto* i = std::get_if<int>(&value);
+    const auto* b = std::get_if<bool>(&value);
+    const auto* str = std::get_if<std::string>(&value);
+    const auto labelled = [](const QString& label, const QString& v) { return label + QStringLiteral(" ") + v; };
+    if (name == "on" && b != nullptr) {
+        return *b ? EditListModel::tr("an") : EditListModel::tr("aus");
+    }
+    if (name == "type" && str != nullptr) {
+        return filmName(*str);
+    }
+    if (name == "flipH" && b != nullptr) {
+        return *b ? EditListModel::tr("horizontal gespiegelt") : QString();
+    }
+    if (name == "flipV" && b != nullptr) {
+        return *b ? EditListModel::tr("vertikal gespiegelt") : QString();
+    }
+    if (name == "quarterTurns" && i != nullptr) {
+        return *i != 0 ? labelled(EditListModel::tr("Drehung"), QString::number(*i * 90) + QStringLiteral("°"))
+                       : QString();
+    }
+    if (const auto* r = std::get_if<model::NormRect>(&value); r != nullptr && name == "rect") {
+        return labelled(EditListModel::tr("Fläche"), percent(r->w * r->h, false));
+    }
+    if (const auto* spots = std::get_if<model::SpotList>(&value)) {
+        return EditListModel::tr("%n Stelle(n)", nullptr, static_cast<int>(spots->size()));
+    }
+    if (str != nullptr && name == "aspect") {
+        return str->empty() ? QString() : labelled(EditListModel::tr("Format"), QString::fromStdString(*str));
+    }
+    if (i != nullptr && name == "level") {
+        return labelled(EditListModel::tr("Stufe"), QString::number(*i));
+    }
+    if (d == nullptr) {
+        return {}; // interne Werte (Basis, Messfläche, Kurven, Herkunft)
+    }
+    if (name == "angle") {
+        return labelled(EditListModel::tr("Winkel"), number(*d, 2, false) + QStringLiteral("°"));
+    }
+    if (name == "ev") {
+        return number(*d, 2, true) + QStringLiteral(" EV");
+    }
+    if (name == "temperature") {
+        return labelled(EditListModel::tr("Temperatur"), number(*d, 0, true));
+    }
+    if (name == "tint") {
+        return labelled(EditListModel::tr("Tönung"), number(*d, 0, true));
+    }
+    if (name == "grade") {
+        return labelled(EditListModel::tr("Gradation"), number(*d, 1, false));
+    }
+    if (name == "radius") {
+        return labelled(EditListModel::tr("Radius"), number(*d, 1, false) + QStringLiteral(" px"));
+    }
+    if (name == "pivot") {
+        return labelled(EditListModel::tr("Mitte"), number(*d, 2, false));
+    }
+    const std::pair<const char*, QString> shares[] = {
+        {"saturation", EditListModel::tr("Sättigung")}, {"vibrance", EditListModel::tr("Dynamik")},
+        {"amount", EditListModel::tr("Stärke")},        {"strength", EditListModel::tr("Stärke")},
+        {"shadows", EditListModel::tr("Tiefen")},       {"highlights", EditListModel::tr("Lichter")},
+        {"splitSoft", EditListModel::tr("weich")},      {"splitHard", EditListModel::tr("hart")},
+        {"black", EditListModel::tr("Schwarz")},        {"white", EditListModel::tr("Weiß")},
+        {"inset", EditListModel::tr("Rand")},           {"clip", EditListModel::tr("Beschnitt")},
+        {"threshold", EditListModel::tr("Schwelle")},
+    };
+    const bool sign = name == "saturation" || name == "vibrance" || name == "amount";
+    for (const auto& [key, label] : shares) {
+        if (name == key) {
+            return labelled(label, percent(*d, sign));
+        }
+    }
+    return labelled(QString::fromStdString(name), number(*d, 2, true));
+}
+
+QString describeParams(const model::EditEntry& e)
+{
+    QStringList parts;
+    for (const auto& [name, value] : e.params.entries()) {
+        if (QString text = describe(name, value); !text.isEmpty()) {
+            parts << text;
+        }
+    }
+    return parts.join(QStringLiteral(", "));
+}
+
+} // namespace
 
 EditListModel::EditListModel(UiController& ui, QObject* parent)
     : QAbstractTableModel(parent)
@@ -66,7 +183,7 @@ QVariant EditListModel::data(const QModelIndex& index, int role) const
         case Name:
             return translated(stepName(ui_.registry(), e->step));
         case Value:
-            return QString::fromStdString(describeParams(*e));
+            return describeParams(*e);
         case Origin:
             return translated(originName(e->origin));
         default:

@@ -139,13 +139,34 @@ TEST(EditListModelTest, U_UI_01_TableInPipelineOrder)
     for (int r = 0; r + 1 < 5; ++r) {
         EXPECT_LE(m.entryAt(r)->rank, m.entryAt(r + 1)->rank);
     }
-    EXPECT_EQ(text(1, EditListModel::Value), "ev +0,50");
+    EXPECT_EQ(text(1, EditListModel::Value), "+0,50 EV");
     EXPECT_EQ(text(0, EditListModel::Origin), "automatisch");
     EXPECT_EQ(text(1, EditListModel::Origin), "manuell");
     EXPECT_EQ(text(2, EditListModel::Origin), "kopiert");
     EXPECT_EQ(text(3, EditListModel::Origin), "Rollen-Standard");
     EXPECT_EQ(text(4, EditListModel::Origin), "Vorlage");
     EXPECT_EQ(m.data(m.index(0, EditListModel::Active), Qt::CheckStateRole).toInt(), Qt::Checked);
+}
+
+// LF-LST-01: die Werte sind ohne interne Parameternamen lesbar
+TEST(EditListModelTest, M10_ReadableValues)
+{
+    ensureApp();
+    RecordingController ui;
+    EditListModel m(ui);
+    const auto value = [&m](const char* id, model::ParamSet p) {
+        m.setList(model::EditList{}.with(entry(id, std::move(p), model::Origin::Manual)));
+        return m.data(m.index(0, EditListModel::Value)).toString().toStdString();
+    };
+    EXPECT_EQ(value("autoneg.rotation", model::ParamSet{}.with("angle", -0.55).with("autoFill", true)),
+              "Winkel -0,55°");
+    EXPECT_EQ(value("autoneg.crop", model::ParamSet{}.with("rect", model::NormRect{0.1, 0.1, 0.9, 0.9})),
+              "Fläche 81 %");
+    EXPECT_EQ(value("autoneg.convert", model::ParamSet{}.with("on", true).with("auto", false)), "an");
+    EXPECT_EQ(value("autoneg.saturation", model::ParamSet{}.with("saturation", 0.1).with("vibrance", -0.2)),
+              "Sättigung +10 %, Dynamik -20 %");
+    EXPECT_EQ(value("autoneg.orientation", model::ParamSet{}.with("quarterTurns", 1).with("flipH", true).with("flipV", false)),
+              "horizontal gespiegelt, Drehung 90°");
 }
 
 // U-UI-02: LF-LST-03

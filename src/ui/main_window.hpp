@@ -159,10 +159,15 @@ private:
     /// Filmtyp eines Bilds (Eintrag "Filmtyp" oder Rollen-Standard).
     [[nodiscard]] model::FilmType filmOf(const model::FrameId& f) const;
     void chooseFilm(const std::string& type);
-    /// Automatik für die Bilder; parts: Teile von AnalysisService::Part.
+    /// Automatik für die Bilder; parts: Teile von AnalysisService::Part. button: Schalter der
+    /// Konvertierung, der bis zum Ende ein drehendes Symbol zeigt.
     void detect(const std::vector<model::FrameId>& frames, const QString& what,
-                unsigned parts = application::AnalysisService::All);
+                unsigned parts = application::AnalysisService::All, const QString& button = {});
     void onRollOpened(application::OpenedRoll r);
+    /// Tastenkürzel: Standard, überschrieben durch die Einstellungen ("shortcuts").
+    void applyShortcuts();
+    /// Vorheriges (-1) bzw. nächstes (+1) Bild der Rolle.
+    void stepImage(int delta);
     /// Filmtyp der Rolle festlegen (Import, Übersicht): speichern, Miniaturen und Vorschau neu.
     void setRollFilm(model::FilmType film);
     void closeRoll();
@@ -197,7 +202,7 @@ private:
     void applyFrameHint();
     /// Weißabgleich so setzen, dass die Stelle norm (0–1 im gezeigten Bild) neutral wird.
     void pickWhite(QPointF norm);
-    void onFrameReport(const model::FrameId& f, double quality, std::vector<std::string> notes);
+    void onFrameReport(const model::FrameId& f, const application::AnalysisService::FrameReport& r);
     /// Beim Import abgewählte Scans aus der Rolle nehmen.
     void excludeFrames(const std::vector<model::FrameId>& frames);
     void setStars(int stars);
@@ -272,6 +277,7 @@ private:
     layout::ContactSheetSpec sheetSpec_;
     std::string sheetFormat_ = "Kleinbild 24×36";
     std::vector<application::JobHandle> running_;
+    std::map<QString, std::vector<application::JobHandle>> busy_; ///< Schalter → laufende Automatiken
 };
 
 } // namespace autoneg::ui

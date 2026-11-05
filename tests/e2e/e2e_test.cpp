@@ -38,6 +38,7 @@
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QInputDialog>
+#include <QtWidgets/QKeySequenceEdit>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListView>
@@ -1251,6 +1252,21 @@ TEST_F(E2E, M10_ManualStepsKeepManualMode)
     EXPECT_FALSE(window->findChild<QCheckBox*>(QStringLiteral("autoConvert"))->isChecked());
 }
 
+// LF-UI-01: eine laufende Automatik zeigt am Schalter ein drehendes Symbol und sperrt ihn bis zum Ende
+TEST_F(E2E, M10_AutomaticShowsBusyButton)
+{
+    start(1);
+    auto* button = window->findChild<QPushButton*>(QStringLiteral("autoBase"));
+    button->click();
+    EXPECT_TRUE(window->conversionPanel()->busy(QStringLiteral("autoBase")));
+    EXPECT_FALSE(button->isEnabled());
+    ASSERT_TRUE(waitFor([&] { return !button->icon().isNull(); }));
+    ASSERT_TRUE(waitFor([&] { return !window->conversionPanel()->busy(QStringLiteral("autoBase")); }, 30000));
+    EXPECT_TRUE(button->isEnabled());
+    EXPECT_TRUE(button->icon().isNull());
+    EXPECT_NE(entry("autoneg.filmbase"), nullptr);
+}
+
 // Fehler: "Messbereich anzeigen" ohne gemessene Basis blieb angehakt und zeigte den ganzen Scan
 TEST_F(E2E, M10_ShowAreaWithoutBaseStaysOff)
 {
@@ -1306,6 +1322,69 @@ TEST_F(E2E, E_48_SettingsPersist)
     EXPECT_EQ(seen->second, 2048);
 }
 
+// LF-UI-07: Strg+Pfeil wechselt das Bild; Tastenkürzel sind in den Einstellungen frei belegbar,
+// doppelte Belegung sperrt OK, die Belegung bleibt über einen Neustart erhalten
+TEST_F(E2E, M10_ImageNavigationAndCustomShortcuts)
+{
+    start(3);
+    const model::FrameId first = window->controller().session().current;
+    EXPECT_EQ(action("nextImage")->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Right));
+    action("prevImage")->trigger(); // am Anfang: bleibt
+    EXPECT_EQ(window->controller().session().current, first);
+    action("nextImage")->trigger();
+    action("nextImage")->trigger();
+    action("nextImage")->trigger(); // am Ende: bleibt beim dritten
+    const model::FrameId third = window->controller().session().current;
+    EXPECT_NE(third, first);
+    action("prevImage")->trigger();
+    action("prevImage")->trigger();
+    EXPECT_EQ(window->controller().session().current, first);
+
+    onNextDialog([](QDialog* d) {
+        auto* next = d->findChild<QKeySequenceEdit*>(QStringLiteral("key_nextImage"));
+        auto* undo = d->findChild<QKeySequenceEdit*>(QStringLiteral("key_undo"));
+        ASSERT_NE(next, nullptr);
+        auto* ok = d->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+        next->setKeySequence(undo->keySequence()); // doppelt: OK gesperrt
+        EXPECT_FALSE(ok->isEnabled());
+        EXPECT_FALSE(d->findChild<QLabel*>(QStringLiteral("shortcutConflict"))->text().isEmpty());
+        next->setKeySequence(QKeySequence(Qt::Key_N));
+        EXPECT_TRUE(ok->isEnabled());
+        ok->click();
+    });
+    action("settings")->trigger();
+    EXPECT_EQ(action("nextImage")->shortcut(), QKeySequence(Qt::Key_N));
+    restart();
+    EXPECT_EQ(action("nextImage")->shortcut(), QKeySequence(Qt::Key_N));
+    EXPECT_EQ(action("prevImage")->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Left));
+    onNextDialog([](QDialog* d) {
+        d->findChild<QPushButton*>(QStringLiteral("shortcutsReset"))->click();
+        d->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    });
+    action("settings")->trigger();
+    EXPECT_EQ(action("nextImage")->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Right));
+}
+
+// LF-EDT-01: die Drehung eines Bilds lässt sich auf die ganze Rolle übernehmen
+TEST_F(E2E, M10_ApplyRotationToAll)
+{
+    start(3);
+    action("rotateRight")->trigger();
+    ASSERT_NE(entry("autoneg.orientation"), nullptr);
+    action("orientAll")->trigger();
+    for (int r = 0; r < 3; ++r) {
+        window->selectFrame(window->filmstrip()->stripModel()->itemAt(r)->frame.id);
+        ASSERT_NE(entry("autoneg.orientation"), nullptr) << r;
+        EXPECT_EQ(entry("autoneg.orientation")->params.get<int>("quarterTurns"), 1) << r;
+    }
+    action("rotateLeft")->trigger(); // zurück auf neutral: übernehmen entfernt die Drehung überall
+    action("orientAll")->trigger();
+    for (int r = 0; r < 3; ++r) {
+        window->selectFrame(window->filmstrip()->stripModel()->itemAt(r)->frame.id);
+        EXPECT_EQ(entry("autoneg.orientation"), nullptr) << r;
+    }
+}
+
 // E-44: LF-UI-03 – Sprache Englisch: keine unübersetzten Texte
 TEST_F(E2E, E_44_EnglishUserInterface)
 {
@@ -1347,6 +1426,27 @@ TEST_F(E2E, E_44_EnglishUserInterface)
         ++checked;
     }
     EXPECT_GT(checked, 50);
+}
+
+// LF-EXP-01: Zielordner ist standardmäßig <Importordner>/export, auch nach Wechsel der Rolle;
+// die Anzeige kürzt lange Pfade, der Tooltip zeigt den vollen Pfad
+TEST_F(E2E, M10_ExportFolderFollowsImportFolder)
+{
+    start(2);
+    action("viewOverview")->trigger();
+    auto* label = window->findChild<QLabel*>(QStringLiteral("exportFolder"));
+    ASSERT_NE(label, nullptr);
+    const auto shown = [label] { return fs::path(label->toolTip().toStdU16String()); };
+    EXPECT_EQ(shown(), rollDir / "export");
+
+    const fs::path second = tmp.path() / "zweite Rolle mit einem recht langen Ordnernamen";
+    writeRoll(second, 2, model::FilmType::ColorNegative);
+    window->openFolder(second);
+    ASSERT_TRUE(waitFor([this] { return window->view() == ui::MainWindow::View::Import; }));
+    importAs(model::FilmType::ColorNegative);
+    action("viewOverview")->trigger();
+    EXPECT_EQ(shown(), second / "export");
+    EXPECT_TRUE(label->text().contains(QStringLiteral("export")));
 }
 
 } // namespace

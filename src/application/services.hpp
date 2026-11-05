@@ -85,8 +85,14 @@ public:
                           model::FilmType film, unsigned parts = All, model::EditList current = {});
     /// Hinweis für die Bildfelderkennung (Format, Lage); gilt für folgende Aufträge.
     void setFrameHint(const analysis::FrameHint& h) { hint_ = h; }
-    /// Meldung je Bild nach der Erkennung (im UI-Thread): Bewertung 0…1 und Gründe.
-    using Report = std::function<void(const model::FrameId&, double quality, std::vector<std::string> notes)>;
+    /// Meldung je Bild nach der Erkennung (im UI-Thread).
+    struct FrameReport
+    {
+        double quality = 0.0;           ///< Bewertung der Bildfelderkennung 0…1
+        std::vector<std::string> notes; ///< Gründe der Bewertung (technisch, nur Debug-Anzeige)
+        std::vector<std::string> hints; ///< Hinweise für den Anwender, z. B. "Basis geschätzt"
+    };
+    using Report = std::function<void(const model::FrameId&, FrameReport)>;
     void setReport(Report r) { report_ = std::move(r); }
     /// Basis im vom Anwender gezogenen Rechteck messen (LF-BAS-04); Eintrag mit Herkunft
     /// manuell und source = "manual".

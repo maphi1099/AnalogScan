@@ -9,6 +9,7 @@
 #include "ui/edit_list_model.hpp"
 #include "ui/image_canvas.hpp"
 #include "ui/import_page.hpp"
+#include "ui/translations.hpp"
 #include "ui/panels.hpp"
 #include "ui/views.hpp"
 
@@ -152,12 +153,12 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
     defaultLayout_ = saveState();
     applyFrameHint();
     // QPointer: Meldungen können nach dem Schließen des Fensters ankommen
-    s_.analysis.setReport([self = QPointer<MainWindow>(this)](const model::FrameId& f, double quality,
-                                                              std::vector<std::string> notes) {
-        if (self) {
-            self->onFrameReport(f, quality, std::move(notes));
-        }
-    });
+    s_.analysis.setReport(
+        [self = QPointer<MainWindow>(this)](const model::FrameId& f, application::AnalysisService::FrameReport r) {
+            if (self) {
+                self->onFrameReport(f, r);
+            }
+        });
     s_.bus.subscribe(&s_.bridge);
 
     connect(&s_.bridge, &QtSessionBridge::previewReady, this, &MainWindow::onPreview);
@@ -212,22 +213,24 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
     });
 }
 
-void MainWindow::onFrameReport(const model::FrameId& f, double quality, std::vector<std::string> notes)
+void MainWindow::onFrameReport(const model::FrameId& f, const application::AnalysisService::FrameReport& r)
 {
-    {
-        QString text = tr("Erkennung: %1 %").arg(static_cast<int>(std::lround(quality * 100.0)));
-        text += quality >= 0.8 ? tr(" – gut") : quality >= 0.5 ? tr(" – prüfen") : tr(" – unsicher");
-        for (const std::string& n : notes) {
-            text += QStringLiteral("\n• ") + QString::fromStdString(n);
-        }
-        frameReports_[f] = text;
-        if (f == s_.session.current) {
-            conversion_->setQuality(text);
-            if (showFrameAfterDetect_ == f) {
-                showFrameAfterDetect_.reset();
-                setTool(1); // erkannten Rahmen zeigen; der Nutzer kann ihn ziehen
-            }
-        }
+    QString text = tr("Erkennung: %1 %").arg(static_cast<int>(std::lround(r.quality * 100.0)));
+    text += r.quality >= 0.8 ? tr(" – gut") : r.quality >= 0.5 ? tr(" – prüfen") : tr(" – unsicher");
+    for (const std::string& n : r.notes) {
+        text += QStringLiteral("\n• ") + QString::fromStdString(n);
+    }
+    frameReports_[f] = text;
+    if (f != s_.session.current) {
+        return;
+    }
+    conversion_->setQuality(text);
+    for (const std::string& h : r.hints) {
+        report(translated(h));
+    }
+    if (showFrameAfterDetect_ == f) {
+        showFrameAfterDetect_.reset();
+        setTool(1); // erkannten Rahmen zeigen; der Nutzer kann ihn ziehen
     }
 }
 
@@ -398,7 +401,6 @@ void MainWindow::buildUi()
     auto* exportLayout = new QVBoxLayout(exportBox);
     exportFolder_ = new QLabel(exportBox);
     exportFolder_->setObjectName(QStringLiteral("exportFolder"));
-    exportFolder_->setWordWrap(true);
     auto* folderButton = new QPushButton(tr("Zielordner …"), exportBox);
     folderButton->setObjectName(QStringLiteral("exportFolderButton"));
     exportFormat_ = new QComboBox(exportBox);
@@ -596,7 +598,8 @@ void MainWindow::buildUi()
         removeSteps({id::crop, id::rotation}); // auch einen eigenen Zuschnitt ersetzen
         if (on) {
             showFrameAfterDetect_ = s_.session.current; // erkannten Rahmen zeigen, ziehbar
-            detect(targets(), tr("Bildfeld erkennen"), application::AnalysisService::Frame);
+            detect(targets(), tr("Bildfeld erkennen"), application::AnalysisService::Frame,
+                   QStringLiteral("autoFrame"));
         }
     });
     connect(conversion_, &ConversionPanel::autoBaseToggled, this, [this](bool on) {
@@ -606,7 +609,7 @@ void MainWindow::buildUi()
         // Einträge des Anwenders, sonst bliebe die alte Basis stehen
         removeSteps({id::filmbase});
         if (on) {
-            detect(targets(), tr("Basis messen"), application::AnalysisService::Base);
+            detect(targets(), tr("Basis messen"), application::AnalysisService::Base, QStringLiteral("autoBase"));
         }
     });
     connect(conversion_, &ConversionPanel::pickBaseToggled, this, [this](bool on) {
@@ -633,7 +636,8 @@ void MainWindow::buildUi()
         }
         // Tonwerte aus Bild und Basis, dann umkehren
         detect(targets(), tr("Konvertieren"),
-               application::AnalysisService::Levels | application::AnalysisService::Convert);
+               application::AnalysisService::Levels | application::AnalysisService::Convert,
+               QStringLiteral("convert"));
     });
     connect(conversion_, &ConversionPanel::frameOptionsRequested, this, [this] { doFrameOptions(); });
     connect(conversion_, &ConversionPanel::autoLevelsRequested, this,
@@ -833,6 +837,11 @@ void MainWindow::buildActions()
         });
 
     QMenu* view = menuBar()->addMenu(tr("&Ansicht"));
+    add(view, QStringLiteral("prevImage"), tr("Vorheriges Bild"), QKeySequence(Qt::CTRL | Qt::Key_Left),
+        [this] { stepImage(-1); });
+    add(view, QStringLiteral("nextImage"), tr("Nächstes Bild"), QKeySequence(Qt::CTRL | Qt::Key_Right),
+        [this] { stepImage(1); });
+    view->addSeparator();
     add(view, QStringLiteral("zoomFit"), tr("Einpassen"), QKeySequence(Qt::CTRL | Qt::Key_0), [this] {
         s_.bridge.setUpscale(1);
         canvas_->setZoom(ImageCanvas::Zoom::Fit);
@@ -885,6 +894,24 @@ void MainWindow::buildActions()
         QKeySequence(Qt::CTRL | Qt::Key_BracketRight), [orient] { orient(1, false); });
     add(view, QStringLiteral("flipH"), tr("Waagerecht spiegeln"), QKeySequence(Qt::CTRL | Qt::Key_H),
         [orient] { orient(0, true); });
+    // Kamera-Scans einer Rolle liegen meist alle gleich: Drehung des Bilds auf die ganze Rolle
+    add(view, QStringLiteral("orientAll"), tr("Drehung für alle übernehmen"), QKeySequence(), [this] {
+        if (!roll_ || frames_.empty()) {
+            return;
+        }
+        const model::StepId step{std::string(id::orientation)};
+        std::vector<model::FrameId> all;
+        for (const model::Frame& f : frames_) {
+            all.push_back(f.id);
+        }
+        if (const model::EditEntry* e = ui_->currentList().get(step)) {
+            s_.bus.execute(application::SetEntryCommand(*e), all, *roll_, true);
+        } else {
+            s_.bus.execute(application::RemoveEntryCommand(step), all, *roll_, true);
+        }
+        refreshAllThumbnails();
+        report(tr("Drehung auf %n Bild(er) übernommen", nullptr, static_cast<int>(all.size())));
+    });
 
     for (QAction* a : {action(QStringLiteral("openFolder")), action(QStringLiteral("undo")),
                        action(QStringLiteral("redo")), action(QStringLiteral("toolCrop")),
@@ -962,7 +989,36 @@ void MainWindow::buildActions()
     }
     add(views, QStringLiteral("arrangeWindows"), tr("Automatisch anordnen"),
         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), [this] { arrangeWindows(); });
+    for (auto& [name, a] : actions_) {
+        a->setProperty("standardShortcut", a->shortcut());
+    }
+    applyShortcuts();
     showView(View::Start);
+}
+
+void MainWindow::applyShortcuts()
+{
+    const auto saved = s_.settings.get("shortcuts");
+    for (auto& [name, a] : actions_) {
+        QKeySequence key = a->property("standardShortcut").value<QKeySequence>();
+        if (const model::JsonValue* v = saved ? saved->find(name.toStdString()) : nullptr;
+            v != nullptr && v->asString() != nullptr) {
+            key = QKeySequence(QString::fromStdString(*v->asString()), QKeySequence::PortableText);
+        }
+        a->setShortcut(key);
+    }
+}
+
+void MainWindow::stepImage(int delta)
+{
+    const auto it = std::ranges::find(frames_, s_.session.current, &model::Frame::id);
+    if (it == frames_.end()) {
+        return;
+    }
+    const auto i = std::clamp<std::ptrdiff_t>(it - frames_.begin() + delta, 0,
+                                              static_cast<std::ptrdiff_t>(frames_.size()) - 1);
+    s_.session.selection.clear();
+    selectFrame(frames_[static_cast<std::size_t>(i)].id);
 }
 
 void MainWindow::showView(View v)
@@ -1206,6 +1262,7 @@ void MainWindow::onRollOpened(application::OpenedRoll r)
     }
     roll_ = std::make_shared<const model::Roll>(r.roll);
     s_.session.roll = roll_;
+    exportSettings_.folder = roll_->folder / "export";
     s_.session.current = {};
     s_.session.selection.clear();
     readOnly_ = r.readOnly;
@@ -1355,7 +1412,8 @@ void MainWindow::chooseFilm(const std::string& type)
     refreshCurrent();
 }
 
-void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString& what, unsigned parts)
+void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString& what, unsigned parts,
+                        const QString& button)
 {
     // Erkennung braucht den Filmtyp; Bilder ohne Filmtyp werden übersprungen und gemeldet
     int skipped = 0;
@@ -1369,7 +1427,12 @@ void MainWindow::detect(const std::vector<model::FrameId>& frames, const QString
             ++skipped;
             continue;
         }
-        trackJob(s_.analysis.detectFrame(*fr, roll_, film, parts, s_.bus.history(f).current()), what);
+        application::JobHandle h = s_.analysis.detectFrame(*fr, roll_, film, parts, s_.bus.history(f).current());
+        if (!button.isEmpty()) {
+            busy_[button].push_back(h);
+            conversion_->setBusy(button, true);
+        }
+        trackJob(h, what);
     }
     if (skipped > 0) {
         report(tr("%1: %n Bild(er) ohne Filmtyp übersprungen – zuerst den Filmtyp wählen.", nullptr, skipped)
@@ -1858,7 +1921,11 @@ void MainWindow::updateExportPanel()
     if (exportSettings_.folder.empty()) {
         exportSettings_.folder = roll_->folder / "export";
     }
-    exportFolder_->setText(tr("Ziel: %1").arg(qs(exportSettings_.folder)));
+    const QString folder = qs(exportSettings_.folder);
+    const QFontMetrics fm = exportFolder_->fontMetrics();
+    const int width = std::max(exportFolder_->width(), 200) - fm.horizontalAdvance(tr("Ziel: %1").arg(QString()));
+    exportFolder_->setText(tr("Ziel: %1").arg(fm.elidedText(folder, Qt::ElideLeft, width)));
+    exportFolder_->setToolTip(folder);
     const int format = exportSettings_.write.format == ports::FileFormat::Jpeg  ? 0
                        : exportSettings_.write.format == ports::FileFormat::Png ? 2
                                                                                 : 1;
@@ -1882,6 +1949,10 @@ void MainWindow::trackJob(application::JobHandle h, const QString& what)
         }
         timer->stop();
         timer->deleteLater();
+        for (auto& [button, jobs] : busy_) {
+            std::erase_if(jobs, [](const application::JobHandle& j) { return j.done(); });
+            conversion_->setBusy(button, !jobs.empty());
+        }
         refreshCurrent(); // Schalter zeigen, was tatsächlich eingetragen ist
         std::erase_if(running_, [](const application::JobHandle& j) { return j.done(); });
         if (std::ranges::none_of(running_, [](const application::JobHandle& j) { return !j.done(); })) {
@@ -2028,6 +2099,14 @@ void MainWindow::doSettings()
     before.threads = num("threads", 0);
     before.memoryMb = num("memoryBudgetMb", 0); // Standard: unbegrenzt
     before.ramMb = static_cast<int>(s_.physicalMemory >> 20U);
+    for (const QAction* menu : menuBar()->actions()) {
+        for (const QAction* a : menu->menu()->actions()) {
+            if (actions_.contains(a->objectName())) {
+                before.shortcuts.push_back({a->objectName(), a->text(), a->shortcut(),
+                                            a->property("standardShortcut").value<QKeySequence>()});
+            }
+        }
+    }
     SettingsDialog d(this);
     d.setValues(before);
     if (d.exec() != QDialog::Accepted) {
@@ -2037,6 +2116,15 @@ void MainWindow::doSettings()
     s_.settings.set("language", model::JsonValue(v.language));
     s_.settings.set("threads", model::JsonValue(std::int64_t{v.threads}));
     s_.settings.set("memoryBudgetMb", model::JsonValue(std::int64_t{v.memoryMb}));
+    // nur Abweichungen vom Standard speichern; leer = ohne Kürzel
+    model::JsonValue keys = model::JsonValue::object({});
+    for (const SettingsDialog::Shortcut& sc : v.shortcuts) {
+        if (sc.key != sc.standard) {
+            keys.set(sc.action.toStdString(), model::JsonValue(sc.key.toString(QKeySequence::PortableText).toStdString()));
+        }
+    }
+    s_.settings.set("shortcuts", keys);
+    applyShortcuts();
     application::ThreadConfig c;
     c.workers = v.threads;
     c.memoryBudget =

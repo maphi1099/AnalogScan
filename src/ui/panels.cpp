@@ -4,7 +4,9 @@
 #include "steps/step_ids.hpp"
 
 #include <QtCore/QEvent>
+#include <QtCore/QTimer>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QPainter>
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -422,6 +424,45 @@ void ConversionPanel::setAutoMode(bool on)
     manual_->setVisible(!on);
 }
 
+void ConversionPanel::setBusy(const QString& button, bool on)
+{
+    auto* b = manual_->findChild<QPushButton*>(button);
+    if (b == nullptr || busy(button) == on) {
+        return;
+    }
+    if (on) {
+        busy_ << button;
+    } else {
+        busy_.removeAll(button);
+        b->setIcon({});
+    }
+    b->setEnabled(!on);
+    if (spin_ == nullptr) {
+        spin_ = new QTimer(this);
+        spin_->setInterval(80);
+        connect(spin_, &QTimer::timeout, this, [this] {
+            angle_ = (angle_ + 30) % 360;
+            QPixmap icon(32, 32);
+            icon.fill(Qt::transparent);
+            QPainter p(&icon);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(QPen(palette().color(QPalette::Highlight), 4, Qt::SolidLine, Qt::RoundCap));
+            p.drawArc(QRectF(4, 4, 24, 24), -angle_ * 16, 270 * 16);
+            p.end();
+            for (const QString& name : busy_) {
+                if (auto* busyButton = manual_->findChild<QPushButton*>(name)) {
+                    busyButton->setIcon(QIcon(icon));
+                }
+            }
+        });
+    }
+    if (busy_.isEmpty()) {
+        spin_->stop();
+    } else {
+        spin_->start();
+    }
+}
+
 bool ConversionPanel::autoMode() const
 {
     return auto_->isChecked();
@@ -444,6 +485,11 @@ void ConversionPanel::setShowArea(bool on)
 
 void ConversionPanel::setQuality(const QString& text)
 {
+#ifdef NDEBUG
+    // Die Bewertung ist noch nicht verlässlich genug für Anwender (Version 1.1)
+    quality_->hide();
+    return;
+#endif
     quality_->setText(text);
     quality_->setVisible(!text.isEmpty());
 }
@@ -473,11 +519,11 @@ void ConversionPanel::setFilm(model::FilmType film)
     const bool negative = film == model::FilmType::ColorNegative || film == model::FilmType::BwNegative;
     hint_->setVisible(!chosen);
     for (QWidget* b : filmButtons_) {
-        b->setEnabled(chosen);
+        b->setEnabled(chosen && !busy(b->objectName()));
     }
     levels_->setEnabled(negative);
     for (QWidget* w : baseControls_) {
-        w->setEnabled(negative);
+        w->setEnabled(negative && !busy(w->objectName()));
     }
 }
 

@@ -2,6 +2,7 @@
 
 #include "ui/ui_controller.hpp"
 
+#include <QtCore/QStringList>
 #include <QtWidgets/QWidget>
 
 #include <array>
@@ -13,6 +14,7 @@ class QAbstractButton;
 class QButtonGroup;
 class QCheckBox;
 class QComboBox;
+class QTimer;
 class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
@@ -128,6 +130,9 @@ public:
     void setQuality(const QString& text);
     /// Basis messen läuft (Rechteck wird gezogen): Schalter bleibt an.
     void setPickActive(bool on) { pickActive_ = on; }
+    /// Automatik läuft: drehendes Symbol am Schalter (Objektname), der Schalter ist so lange gesperrt.
+    void setBusy(const QString& button, bool on);
+    [[nodiscard]] bool busy(const QString& button) const { return busy_.contains(button); }
 
 Q_SIGNALS:
     /// Wahl im Feld Filmtyp: "color", "bw", "slide" oder "raw" (Filmtyp entfernen).
@@ -154,6 +159,9 @@ private:
     QPushButton* convert_ = nullptr;
     QLabel* quality_ = nullptr;
     bool pickActive_ = false;
+    QStringList busy_;
+    QTimer* spin_ = nullptr;
+    int angle_ = 0;
     QComboBox* filmType_ = nullptr;
     QCheckBox* showArea_ = nullptr;
     QLabel* hint_ = nullptr;

@@ -89,6 +89,22 @@ TEST(ExportNaming, U_APP_14_PatternAndNoSilentOverwrite)
     EXPECT_TRUE(ExportService::target(s, roll, f).has_value());
 }
 
+// LF-EXP-07: leeres Muster und unter Windows ungültige Namen ergeben trotzdem eine gültige Datei
+TEST(ExportNaming, M10_EmptyPatternAndReservedNames)
+{
+    model::Roll roll;
+    const model::Frame f = frame(12);
+    EXPECT_EQ(exportName("", roll, f), "DSC07012");
+    EXPECT_EQ(exportName("   ", roll, f), "DSC07012");
+    EXPECT_EQ(exportName("..", roll, f), "DSC07012");
+    EXPECT_EQ(exportName("CON", roll, f), "CON_");
+    EXPECT_EQ(exportName("nul", roll, f), "nul_");
+    EXPECT_EQ(exportName("COM1", roll, f), "COM1_");
+    EXPECT_EQ(exportName("LPT9", roll, f), "LPT9_");
+    EXPECT_EQ(exportName("CONSOLE", roll, f), "CONSOLE");
+    EXPECT_EQ(exportName("Bild. ", roll, f), "Bild");
+}
+
 // LF-DAT-04, NF-REL-02: gespeicherte Vorlagen sind von Hand änderbar; Werte außerhalb der
 // Grenzen der Eingabemasken werden beim Laden begrenzt, unbekannte Aufzählungswerte fallen auf
 // den Standard zurück (beide Seiten jeder Grenze)
@@ -325,6 +341,68 @@ TEST(AnalysisServiceTest, M10_EachAutomaticWritesOnlyItsPart)
     EXPECT_FALSE(has("autoneg.densityrange"));
     run(AnalysisService::Levels);
     EXPECT_TRUE(has("autoneg.densityrange"));
+}
+
+// LF-BAS-05 c: ohne Filmrand schätzt Auto-Basis die Basis aus dem Bild und sagt das dazu
+TEST(AnalysisServiceTest, M10_BaseWithoutRebateIsEstimated)
+{
+    steps::FlatFieldCache flat;
+    pipeline::StepRegistry registry;
+    ASSERT_TRUE(steps::registerStandardSteps(registry, flat).has_value());
+    NullRepository repo;
+    PersistenceQueue queue(repo);
+    CommandBus bus(registry, queue);
+    mocks::FakeTaskExecutor executor(2);
+    JobScheduler jobs(executor);
+    std::deque<std::function<void()>> uiQueue;
+    std::mutex mutex;
+    const UiDispatcher ui = [&](std::function<void()> f) {
+        const std::scoped_lock lock(mutex);
+        uiQueue.push_back(std::move(f));
+    };
+    AnalysisFunctions fns;
+    fns.image = [](const model::Frame&) {
+        std::vector<float> px(32 * 32 * 3, 0.2F);
+        for (std::size_t i = 0; i < 32 * 3; i += 3) { // hellste Stellen: nahe der Basis
+            px[i] = 0.8F;
+            px[i + 1] = 0.5F;
+            px[i + 2] = 0.3F;
+        }
+        return image::ImageBuffer::fromFloats({32, 32, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+                                              std::move(px));
+    };
+    fns.detect = [](const image::ImageBuffer&, model::FilmType,
+                    const analysis::FrameHint&) -> base::Expected<analysis::FrameDetection> {
+        analysis::FrameDetection d;
+        d.frame = {0.0, 0.0, 1.0, 1.0};
+        return d;
+    };
+    fns.measureBase = [](const image::ImageBuffer&,
+                         const analysis::RegionMap&) -> base::Expected<analysis::BaseMeasurement> {
+        return base::makeError(base::ErrorCode::NotFound, "kein Filmrand");
+    };
+    AnalysisService service(jobs, bus, ui, fns);
+    std::vector<std::string> notes;
+    service.setReport([&](const model::FrameId&, AnalysisService::FrameReport r) { notes = std::move(r.hints); });
+    auto roll = std::make_shared<model::Roll>();
+    roll->filmType = model::FilmType::ColorNegative;
+    const model::Frame f1 = frame(1);
+    bus.open(f1, {});
+    ASSERT_TRUE(service.detectFrame(f1, roll, roll->filmType, AnalysisService::Base).wait());
+    {
+        const std::scoped_lock lock(mutex);
+        for (auto& task : uiQueue) {
+            task();
+        }
+    }
+    const model::EditEntry* base = bus.history(f1.id).current().get(StepId("autoneg.filmbase"));
+    ASSERT_NE(base, nullptr);
+    const base::Vec3 b = base->params.get<base::Vec3>("base").value();
+    EXPECT_GT(b.x, b.y); // Orange-Maske: rot > grün > blau
+    EXPECT_GT(b.y, b.z);
+    EXPECT_FALSE(base->params.contains("area")); // kein Messbereich
+    ASSERT_EQ(notes.size(), 1U);
+    EXPECT_NE(notes[0].find("geschätzt"), std::string::npos);
 }
 
 // K-M6-01

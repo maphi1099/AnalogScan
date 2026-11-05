@@ -71,8 +71,6 @@ private:
 
 /// Anzeigename eines Schritts (aus der StepRegistry, sonst die Kennung).
 [[nodiscard]] std::string stepName(const pipeline::StepRegistry& r, const model::StepId& id);
-/// Kurzform der Parameter eines Eintrags für die Bearbeitungsliste, z. B. "ev +0,50".
-[[nodiscard]] std::string describeParams(const model::EditEntry& e);
 /// Anzeigename der Herkunft (LF-LST-05).
 [[nodiscard]] std::string originName(model::Origin o);
 

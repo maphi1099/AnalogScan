@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <mutex>
@@ -197,6 +198,7 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                 return std::unexpected(d.error()); // Oberfläche meldet, Zuschnitt bleibt (LF-GEO-05)
             }
             std::vector<model::EditEntry> entries;
+            std::vector<std::string> hints;
             // Zuschnitt 1 % innerhalb der Bildfeldkanten: kein Filmrand und kein Nachbarbild im Bild
             const model::NormRect& r = d->frame;
             const model::NormRect crop{r.x + 0.01 * r.w, r.y + 0.01 * r.h, 0.98 * r.w, 0.98 * r.h};
@@ -218,10 +220,16 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                     }
                 }
                 if (!base) {
-                    if (auto b = fns_.measureBase(*img, d->regions)) {
+                    auto b = fns_.measureBase(*img, d->regions);
+                    if (!b) {
+                        // ohne Filmrand: Basis aus den hellsten Stellen des Negativs (LF-BAS-05 c)
+                        b = analysis::BaseEstimator{}.estimate(*img);
+                        hints.emplace_back("Kein Filmrand gefunden, Basis aus dem Bild geschätzt");
+                    }
+                    if (b) {
                         base = b->transmission;
                         if (b->rejected > 0.5) {
-                            d->notes.emplace_back("Filmrand ungleichmäßig (Fehlfarben), Basis prüfen");
+                            hints.emplace_back("Filmrand ungleichmäßig (Fehlfarben), Basis prüfen");
                         }
                         if ((parts_ & Base) != 0) {
                             model::ParamSet p = model::ParamSet{}.with("base", b->transmission);
@@ -254,11 +262,11 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
             c.progress(1, 1);
             // Ergebnis im UI-Thread über den CommandBus eintragen
             ui_([&bus = bus_, id = f_.id, roll = roll_, entries = std::move(entries), report = report_,
-                 quality = d->quality, notes = d->notes] {
+                 r = FrameReport{d->quality, d->notes, std::move(hints)}] {
                 const std::vector<model::FrameId> target{id};
                 bus.execute(SetAutomaticEntriesCommand(entries), target, roll ? *roll : model::Roll{});
                 if (report) {
-                    report(id, quality, notes);
+                    report(id, r);
                 }
             });
             return {};
@@ -369,6 +377,23 @@ std::string exportName(const std::string& pattern, const model::Roll& roll, cons
             c == '|' || static_cast<unsigned char>(c) < 0x20) {
             c = '_';
         }
+    }
+    // Windows: keine Punkte/Leerzeichen am Ende, keine Gerätenamen
+    while (!out.empty() && (out.back() == '.' || out.back() == ' ')) {
+        out.pop_back();
+    }
+    if (out.find_first_not_of(" .") == std::string::npos) {
+        return frame.path.stem().string();
+    }
+    std::string upper;
+    for (char c : out) {
+        upper += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+    const bool device = upper == "CON" || upper == "PRN" || upper == "AUX" || upper == "NUL" ||
+                        (upper.size() == 4 && (upper.starts_with("COM") || upper.starts_with("LPT")) &&
+                         upper[3] >= '1' && upper[3] <= '9');
+    if (device) {
+        out += '_';
     }
     return out;
 }
