@@ -7,7 +7,7 @@
 #     als vollständige Ziele (z. B. Qt6::Widgets).
 #
 #   autoneg_add_program(<ziel> SOURCES <dateien> DEPS <module>)
-#     Programm der Kompositionswurzel (autoneg, autoneg-cli).
+#     Programm der Kompositionswurzel (autoneg).
 
 define_property(GLOBAL PROPERTY AUTONEG_ARCH_TARGETS
     BRIEF_DOCS "Ziele, die die Architekturprüfung auswertet"

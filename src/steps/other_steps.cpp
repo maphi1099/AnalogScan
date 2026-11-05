@@ -36,8 +36,9 @@ void FilmModeStep::configure(pipeline::StepContext& ctx, const model::ParamSet& 
 }
 
 ConvertStep::ConvertStep()
-    : d_(describe(id::convert, rank::convert, "Konvertierung", Phase::Conversion, {boolParam("on", false)},
-                  pipeline::FilmTypeMask::any(), Options{.neededToInvert = true}))
+    : d_(describe(id::convert, rank::convert, "Konvertierung", Phase::Conversion,
+                  {boolParam("on", false), boolParam("auto", false)}, pipeline::FilmTypeMask::any(),
+                  Options{.neededToInvert = true}))
 {}
 
 model::FilmType FilmModeStep::fromString(std::string_view t) noexcept

@@ -314,6 +314,23 @@ TEST(PipelineCompiler, M2_InvalidParameterIsSkippedAndReported)
     EXPECT_EQ(cp.warnings.size(), 1U);
 }
 
+// Gegenstück zur Obergrenze: unter dem Minimum ebenso verworfen, die Grenzen selbst gelten
+TEST(PipelineCompiler, M10_ParameterLimitsBothSides)
+{
+    const auto reg = autoneg::testing::standardRegistry();
+    const PipelineCompiler compiler(*reg);
+    const auto compiled = [&](double ev) {
+        const EditList list = withFilm(EditList{}, "slide").with(entry("exposure", rank::exposure, "ev", ev));
+        return compiler.compile(list, FilmType::Slide, exportProfile(), source);
+    };
+    EXPECT_EQ(shape(compiled(-5.01)), "");
+    EXPECT_EQ(compiled(-5.01).warnings.size(), 1U);
+    EXPECT_EQ(shape(compiled(5.01)), "");
+    EXPECT_EQ(shape(compiled(-5.0)), "P(exposure)");
+    EXPECT_EQ(shape(compiled(5.0)), "P(exposure)");
+    EXPECT_TRUE(compiled(5.0).warnings.empty());
+}
+
 TEST(PipelineCompiler, M2_UnfusedCompilesOneStagePerStep)
 {
     const auto reg = autoneg::testing::standardRegistry();

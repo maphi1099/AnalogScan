@@ -1,10 +1,12 @@
 # Grafische Anwendung, Kompositionswurzel: erzeugt die Adapter und reicht sie nach innen.
 autoneg_add_program(autoneg
-    SOURCES main.cpp ${PROJECT_SOURCE_DIR}/apps/shared/composition.cpp
-        $<$<BOOL:${WIN32}>:${PROJECT_SOURCE_DIR}/apps/shared/utf8.manifest>
+    SOURCES main.cpp composition.cpp
+        $<$<BOOL:${WIN32}>:utf8.manifest>
     DEPS ui base model image layout ports pipeline steps analysis application adapter_libraw adapter_oiio adapter_lcms adapter_opencv adapter_json adapter_xxhash adapter_qtprint adapter_spdlog adapter_tbb backend_cpu
 )
 target_include_directories(autoneg PRIVATE ${PROJECT_SOURCE_DIR}/apps)
+# Das Programm liegt oben im Build-Ordner: build/<Bau>/autoneg/autoneg(.exe)
+set_target_properties(autoneg PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 if(WIN32)
     set_target_properties(autoneg PROPERTIES WIN32_EXECUTABLE ON) # kein Konsolenfenster
 endif()

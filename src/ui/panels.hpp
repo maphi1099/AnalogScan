@@ -141,7 +141,6 @@ Q_SIGNALS:
     void autoLevelsRequested();
     void levelPresetChosen(const QString& name);
     void saveLevelsRequested();
-    void pickBaseRequested();
     void showBaseAreaToggled(bool on);
     void autoConvertToggled(bool on);
 

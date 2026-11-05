@@ -1,8 +1,8 @@
 #pragma once
 
-// Gemeinsame Kompositionswurzel von autoneg und autoneg-cli (Architektur 4, Regel 4): erzeugt
-// alle Adapter und Dienste ohne Oberfläche und verdrahtet sie über Konstruktor-Injektion.
-// Beide Programme nutzen damit dieselbe Befehls- und Dienstschicht (K-17). Ohne Qt.
+// Kompositionswurzel (Architektur 4, Regel 4): erzeugt alle Adapter und Dienste ohne
+// Oberfläche und verdrahtet sie über Konstruktor-Injektion. Ohne Qt, damit auch Komponenten-
+// und Lasttests sie nutzen können.
 
 #include "adapters/json/atomic_file_writer.hpp"
 #include "adapters/json/file_thumbnail_cache.hpp"

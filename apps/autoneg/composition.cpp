@@ -1,4 +1,4 @@
-#include "shared/composition.hpp"
+#include "autoneg/composition.hpp"
 
 #include "adapters/tbb/system_memory.hpp"
 
@@ -109,7 +109,7 @@ Composition::Composition(Directories dirs, application::RenderService::ReadyHand
     application::ThreadConfig c;
     c.memoryBudget = defaultMemoryBudget();
     if (const auto v = config_.get("threads"); v && v->number()) {
-        c.workers = static_cast<int>(*v->number());
+        c.workers = std::clamp(static_cast<int>(*v->number()), 0, 256); // wie im Dialog
     }
     if (const auto v = config_.get("memoryBudgetMb");
         v && v->number() && *v->number() > 0) { // 0 = unbegrenzt

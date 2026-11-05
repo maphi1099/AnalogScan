@@ -1,6 +1,7 @@
 // Unit-Tests der Dienste (Architektur 9.13): Export-Dateinamen und -Job, Automatiken über den
 // CommandBus, Schrittkatalog, Platzhalter für Version 1.1. Ports durch Fakes ersetzt.
 
+#include "application/presets.hpp"
 #include "application/services.hpp"
 #include "mocks/fake_task_executor.hpp"
 #include "mocks/fakes.hpp"
@@ -86,6 +87,53 @@ TEST(ExportNaming, U_APP_14_PatternAndNoSilentOverwrite)
     EXPECT_EQ(again.error().code, base::ErrorCode::Conflict);
     s.overwrite = OverwritePolicy::Overwrite; // nach Bestätigung
     EXPECT_TRUE(ExportService::target(s, roll, f).has_value());
+}
+
+// LF-DAT-04, NF-REL-02: gespeicherte Vorlagen sind von Hand änderbar; Werte außerhalb der
+// Grenzen der Eingabemasken werden beim Laden begrenzt, unbekannte Aufzählungswerte fallen auf
+// den Standard zurück (beide Seiten jeder Grenze)
+TEST(PresetLimits, M10_ExportValuesAreClampedOnBothSides)
+{
+    const auto load = [](int quality, int longEdge, int bitDepth, int format) {
+        model::JsonValue j;
+        j.set("quality", quality);
+        j.set("longEdge", longEdge);
+        j.set("bitDepth", bitDepth);
+        j.set("format", format);
+        return exportFromJson(j);
+    };
+    const ExportSettings standard;
+    EXPECT_EQ(load(0, -1, 7, -1).write.quality, 1);
+    EXPECT_EQ(load(101, 0, 8, 0).write.quality, 100);
+    EXPECT_EQ(load(1, 0, 8, 0).write.quality, 1);
+    EXPECT_EQ(load(100, 0, 8, 0).write.quality, 100);
+    EXPECT_EQ(load(90, -1, 8, 0).longEdge, 0);
+    EXPECT_EQ(load(90, 20001, 8, 0).longEdge, 20000);
+    EXPECT_EQ(load(90, 20000, 8, 0).longEdge, 20000);
+    EXPECT_EQ(load(90, 0, 7, 0).write.bitDepth, standard.write.bitDepth);
+    EXPECT_EQ(load(90, 0, 16, 0).write.bitDepth, 16);
+    EXPECT_EQ(load(90, 0, 8, -1).write.format, standard.write.format);
+    EXPECT_EQ(load(90, 0, 8, 5).write.format, standard.write.format);
+    EXPECT_EQ(load(90, 0, 8, 4).write.format, ports::FileFormat::LinearDng);
+}
+
+TEST(PresetLimits, M10_SheetValuesAreClampedOnBothSides)
+{
+    const auto load = [](double binding, int perStrip, int paper) {
+        model::JsonValue j;
+        j.set("bindingMm", binding);
+        j.set("framesPerStrip", perStrip);
+        j.set("paper", paper);
+        return sheetFromJson(j).spec;
+    };
+    EXPECT_EQ(load(-0.1, 6, 0).bindingMm, 0.0);
+    EXPECT_EQ(load(50.1, 6, 0).bindingMm, 50.0);
+    EXPECT_EQ(load(50.0, 6, 0).bindingMm, 50.0);
+    EXPECT_EQ(load(25, -1, 0).framesPerStrip, 0); // 0 = nach Format
+    EXPECT_EQ(load(25, 21, 0).framesPerStrip, 20);
+    EXPECT_EQ(load(25, 1, 0).framesPerStrip, 1);
+    EXPECT_EQ(load(25, 6, 3).paper, layout::ContactSheetSpec{}.paper);
+    EXPECT_EQ(load(25, 6, 2).paper, layout::PaperSize::Letter);
 }
 
 // LF-GEO-01, LF-BAS-01

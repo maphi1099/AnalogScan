@@ -2,7 +2,7 @@
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Test Widgets)
 autoneg_add_test(e2e
     LABEL e2e
-    SOURCES e2e_test.cpp ${PROJECT_SOURCE_DIR}/apps/shared/composition.cpp
+    SOURCES e2e_test.cpp ${PROJECT_SOURCE_DIR}/apps/autoneg/composition.cpp
     DEPS ui base model image layout ports pipeline steps analysis application adapter_libraw adapter_oiio
          adapter_lcms adapter_opencv adapter_json adapter_xxhash adapter_qtprint adapter_spdlog adapter_tbb backend_cpu
          test_synthetic

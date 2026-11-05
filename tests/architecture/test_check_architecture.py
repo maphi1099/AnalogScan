@@ -31,7 +31,7 @@ BASE_TARGETS = {
     "pipeline": ("src/pipeline", ["autoneg_base", "autoneg_model", "autoneg_image", "autoneg_ports"]),
     "application": ("src/application", ["autoneg_pipeline", "autoneg_ports"]),
     "adapter_opencv": ("src/adapters/opencv", ["autoneg_ports", "opencv_core"]),
-    "autoneg-cli": ("apps/autoneg-cli", ["autoneg_application", "autoneg_adapter_opencv"]),
+    "autoneg": ("apps/autoneg", ["autoneg_application", "autoneg_adapter_opencv"]),
 }
 
 
@@ -124,8 +124,8 @@ class ArchitectureCheckTest(unittest.TestCase):
         self.assertViolation(self.run_check(), "[Fremd-Header]", "gtest")
 
     def test_foreign_header_in_program_is_reported(self) -> None:
-        self.write("apps/autoneg-cli/main.cpp", "#include <opencv2/core.hpp>\n")
-        self.assertViolation(self.run_check(), "[Fremd-Header]", "apps/autoneg-cli/main.cpp")
+        self.write("apps/autoneg/main.cpp", "#include <opencv2/core.hpp>\n")
+        self.assertViolation(self.run_check(), "[Fremd-Header]", "apps/autoneg/main.cpp")
 
     def test_unknown_header_is_reported(self) -> None:
         self.write("src/model/bad.cpp", "#include <boost/optional.hpp>\n")

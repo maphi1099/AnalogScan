@@ -365,3 +365,19 @@ Format je Eintrag:
 - Abhilfe: Rechenstand `renderVersion` im Schlüssel (thumbnail_service.cpp); bei jeder Änderung, die Bilder anders rechnet, erhöhen.
 - Status: behoben
 
+
+## B-44: Linux-Build bricht ab, Windows baut (fehlender Standard-Header)
+- Erstmals: 05.11.2026, zuletzt: 05.11.2026, Häufigkeit: 1 (frühere Fälle siehe Include-Fehler unter Linux)
+- Plattform: Linux (libstdc++)
+- Symptom: `no member named 'any_of' in namespace 'std::ranges'` in `pipeline_compiler.cpp`.
+- Ursache: Die MSVC-Standardbibliothek bindet `<algorithm>` indirekt ein, libstdc++ nicht.
+- Abhilfe: Jeden benutzten Standard-Header direkt einbinden; nach Änderungen unter Windows den Linux-Build laufen lassen, bevor gepusht wird.
+- Status: behoben
+
+## B-45: Signal der Oberfläche ohne Empfänger fällt nicht auf
+- Erstmals: 05.11.2026, Häufigkeit: 2 (`whitePickerRequested`, `pickBaseRequested`)
+- Plattform: alle
+- Symptom: Knopf ohne Wirkung (Weißabgleich-Pipette), kein Build- oder Testfehler.
+- Ursache: Qt-Signale dürfen unverbunden sein; E2E-Tests prüften die Pipette nicht.
+- Abhilfe: Für jeden Knopf einen E2E-Test, der seine Wirkung prüft (`M10_WhitePickerSetsWhiteBalance`); Vorschlag in der Reflexion: Test, der Empfänger aller Panel-Signale verlangt.
+- Status: behoben (Pipette), Vorbeugung offen

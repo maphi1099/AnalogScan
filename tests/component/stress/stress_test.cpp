@@ -7,7 +7,7 @@
 // Dauer: AUTONEG_STRESS_SECONDS (Standard 10 s; Szenario: 600 s unter TSan).
 
 #include "adapters/oiio/oiio_image_io.hpp"
-#include "shared/composition.hpp"
+#include "autoneg/composition.hpp"
 #include "support/synthetic.hpp"
 #include "support/temp_dir.hpp"
 

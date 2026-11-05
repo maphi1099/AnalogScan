@@ -3,7 +3,7 @@
 // Dienste der gemeinsamen Komposition für die Oberfläche (GUI-Programm und E2E-Tests).
 
 #include "adapters/tbb/system_memory.hpp"
-#include "shared/composition.hpp"
+#include "autoneg/composition.hpp"
 #include "ui/gui_application.hpp"
 
 namespace autoneg::app {

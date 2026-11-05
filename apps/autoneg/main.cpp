@@ -6,7 +6,7 @@
 
 #include "adapters/qtprint/qt_document_renderer.hpp"
 #include "autoneg/gui_services.hpp"
-#include "shared/composition.hpp"
+#include "autoneg/composition.hpp"
 
 #include <optional>
 #include <span>

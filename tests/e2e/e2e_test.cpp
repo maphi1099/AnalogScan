@@ -6,8 +6,8 @@
 
 #include "adapters/oiio/oiio_image_io.hpp"
 #include "adapters/qtprint/qt_document_renderer.hpp"
+#include "autoneg/composition.hpp"
 #include "autoneg/gui_services.hpp"
-#include "shared/composition.hpp"
 #include "support/synthetic.hpp"
 #include "support/temp_dir.hpp"
 #include "ui/canvas_tools.hpp"
@@ -1198,6 +1198,68 @@ TEST_F(E2E, M10_AutoBaseAndPickBaseExclusive)
     pickBase->click(); // abwählen
     EXPECT_FALSE(pickBase->isChecked());
     EXPECT_FALSE(autoBase->isChecked());
+}
+
+// LF-EDT-06, U-STP-15 (Fehler: die Weißabgleich-Pipette war nicht angeschlossen): Knopf, dann
+// Klick ins Bild setzt Farbtemperatur und Tönung; ein zweiter Klick an derselben Stelle ändert
+// kaum noch etwas
+TEST_F(E2E, M10_WhitePickerSetsWhiteBalance)
+{
+    start(1, model::FilmType::Slide);
+    ASSERT_EQ(entry("autoneg.whitebalance"), nullptr);
+    window->findChild<QPushButton*>(QStringLiteral("whitePicker"))->click();
+    const auto before = window->previewsShown();
+    Q_EMIT window->canvas()->picked(QPointF(0.5, 0.5));
+    const model::EditEntry* wb = entry("autoneg.whitebalance");
+    ASSERT_NE(wb, nullptr) << "Pipette setzt den Weißabgleich";
+    const double t1 = wb->params.get<double>("temperature").value_or(0.0);
+    const double u1 = wb->params.get<double>("tint").value_or(0.0);
+    EXPECT_GT(std::abs(t1) + std::abs(u1), 1.0);
+    ASSERT_TRUE(waitFor([&] { return window->previewsShown() > before; }));
+    window->findChild<QPushButton*>(QStringLiteral("whitePicker"))->click();
+    Q_EMIT window->canvas()->picked(QPointF(0.5, 0.5));
+    wb = entry("autoneg.whitebalance");
+    const double t2 = wb->params.get<double>("temperature").value_or(0.0);
+    const double u2 = wb->params.get<double>("tint").value_or(0.0);
+    EXPECT_LT(std::abs(t2 - t1) + std::abs(u2 - u1), 0.5 * (std::abs(t1) + std::abs(u1)))
+        << t1 << " " << u1 << " -> " << t2 << " " << u2;
+    // ohne Knopf bleibt ein Klick ins Bild wirkungslos
+    Q_EMIT window->canvas()->picked(QPointF(0.2, 0.2));
+    EXPECT_EQ(entry("autoneg.whitebalance")->params.get<double>("temperature").value_or(0.0), t2);
+}
+
+// Fehler: nach Auto-Bildfeld, Auto-Basis und Konvertieren von Hand sprang die Konvertierung auf
+// "Autokonvertierung" um und versteckte die Schalter (auch nach erneutem Öffnen der Rolle)
+TEST_F(E2E, M10_ManualStepsKeepManualMode)
+{
+    start(1);
+    auto* autoConvert = window->findChild<QCheckBox*>(QStringLiteral("autoConvert"));
+    const auto click = [this](const char* name) {
+        window->findChild<QPushButton*>(QString::fromLatin1(name))->click();
+    };
+    click("autoFrame");
+    ASSERT_TRUE(waitFor([&] { return entry("autoneg.crop") != nullptr; }, 30000));
+    click("autoBase");
+    ASSERT_TRUE(waitFor([&] { return entry("autoneg.filmbase") != nullptr; }, 30000));
+    click("convert");
+    ASSERT_TRUE(waitFor([&] { return entry("autoneg.convert") != nullptr; }, 30000));
+    EXPECT_FALSE(autoConvert->isChecked());
+    EXPECT_TRUE(window->findChild<QPushButton*>(QStringLiteral("convert"))->isVisibleTo(window));
+    restart();
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->previewsShown() > 0; }));
+    EXPECT_FALSE(window->findChild<QCheckBox*>(QStringLiteral("autoConvert"))->isChecked());
+}
+
+// Fehler: "Messbereich anzeigen" ohne gemessene Basis blieb angehakt und zeigte den ganzen Scan
+TEST_F(E2E, M10_ShowAreaWithoutBaseStaysOff)
+{
+    start(1);
+    auto* show = window->findChild<QCheckBox*>(QStringLiteral("showBaseArea"));
+    ASSERT_NE(show, nullptr);
+    show->click();
+    EXPECT_FALSE(show->isChecked());
+    EXPECT_EQ(window->canvas()->tool(), nullptr);
 }
 
 // K-M10-08: Abbrechen auf dem Import-Bildschirm schließt die Rolle wieder

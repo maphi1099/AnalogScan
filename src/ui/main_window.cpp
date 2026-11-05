@@ -2,6 +2,7 @@
 
 #include "application/presets.hpp"
 #include "steps/other_steps.hpp"
+#include "steps/pointwise_steps.hpp"
 #include "steps/step_ids.hpp"
 #include "ui/canvas_tools.hpp"
 #include "ui/dialogs.hpp"
@@ -171,6 +172,16 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
         }
     });
     connect(canvas_, &ImageCanvas::viewChanged, this, [this] { requestPreview(ui_->currentList()); });
+    connect(canvas_, &ImageCanvas::picked, this, [this](QPointF norm) {
+        if (pickWhite_) {
+            pickWhite_ = false;
+            pickWhite(norm);
+        }
+    });
+    connect(adjust_, &AdjustPanel::whitePickerRequested, this, [this] {
+        pickWhite_ = true;
+        report(tr("Auf eine Stelle klicken, die neutral grau oder weiß sein soll."));
+    });
 
     cropTool_->setCommit([this](const model::NormRect& r, double angle) {
         const model::EditList cur = ui_->currentList();
@@ -1129,6 +1140,8 @@ void MainWindow::setTool(int which)
         }
         if (!area || area->w <= 0.0 || (area->w >= 1.0 && area->h >= 1.0)) {
             report(tr("Kein Messbereich gespeichert: zuerst Auto-Basis oder Basis messen."));
+            setTool(0); // Häkchen zurück, Ansicht bleibt beim zugeschnittenen Bild
+            return;
         }
         areaTool_->setRect(area);
         canvas_->setTool(areaTool_.get());
@@ -1479,6 +1492,7 @@ void MainWindow::onPreview(const PreviewFrame& p)
                        place.center().y() - logical.height() / 2.0, logical.width(), logical.height());
     }
     canvas_->setImage(p.image, place);
+    shown_ = p.image;
     canvas_->setClipping(p.clipping, false);
     histogram_->setHistogram(p.histogram);
     ++previewsShown_;
@@ -1608,14 +1622,10 @@ bool MainWindow::autoConverted(const model::FrameId& f) const
         return false;
     }
     const model::EditList& l = s_.bus.history(f).current();
-    const auto automatic = [&l](std::string_view step) {
-        const model::EditEntry* e = l.get(model::StepId(std::string(step)));
-        return e != nullptr && e->origin == model::Origin::Automatic;
-    };
-    const model::FilmType film = filmOf(f);
-    const bool negative = film == model::FilmType::ColorNegative || film == model::FilmType::BwNegative;
-    return automatic(id::crop) &&
-           (!negative || (automatic(id::filmbase) && automatic(id::densityrange) && automatic(id::convert)));
+    // Nur die Autokonvertierung markiert ihren Eintrag; dieselben Schritte von Hand bleiben manuell
+    const model::EditEntry* e = l.get(model::StepId(std::string(id::convert)));
+    return e != nullptr && e->origin == model::Origin::Automatic &&
+           e->params.get<bool>("auto").value_or(false);
 }
 
 void MainWindow::setAutoConvert(bool on)
@@ -1673,6 +1683,46 @@ void MainWindow::arrangeWindows()
         d->setFloating(false);
         d->setVisible(view_ == View::Image);
     }
+}
+
+void MainWindow::pickWhite(QPointF norm)
+{
+    if (shown_.isNull() || !roll_) {
+        return;
+    }
+    // Mittel über 5 × 5 Pixel der Vorschau, sRGB zurück nach linear
+    const int cx = std::clamp(static_cast<int>(norm.x() * shown_.width()), 2, shown_.width() - 3);
+    const int cy = std::clamp(static_cast<int>(norm.y() * shown_.height()), 2, shown_.height() - 3);
+    const auto linear = [](int v) {
+        const double c = v / 255.0;
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    base::Vec3 sum{0, 0, 0};
+    for (int y = cy - 2; y <= cy + 2; ++y) {
+        for (int x = cx - 2; x <= cx + 2; ++x) {
+            const QColor c = shown_.pixelColor(x, y);
+            sum = {sum.x + linear(c.red()), sum.y + linear(c.green()), sum.z + linear(c.blue())};
+        }
+    }
+    // Die Vorschau zeigt das Bild mit dem jetzigen Weißabgleich: ihn herausrechnen, dann für die
+    // Farbe davor neu bestimmen (ein zweiter Klick an derselben Stelle ändert nichts mehr)
+    const model::EditList cur = ui_->currentList();
+    double t = 0.0;
+    double u = 0.0;
+    if (const model::EditEntry* old = cur.get(model::StepId(std::string(id::whitebalance)))) {
+        t = old->params.get<double>("temperature").value_or(0.0) / 100.0;
+        u = old->params.get<double>("tint").value_or(0.0) / 100.0;
+    }
+    // Vorschau in sRGB, gerechnet wird in Rec. 2020 (linear)
+    const base::Vec3 w{0.6274 * sum.x + 0.3293 * sum.y + 0.0433 * sum.z,
+                       0.0691 * sum.x + 0.9195 * sum.y + 0.0114 * sum.z,
+                       0.0164 * sum.x + 0.0880 * sum.y + 0.8956 * sum.z};
+    const base::Vec3 before{w.x / std::exp2(t), w.y / std::exp2(-u), w.z / std::exp2(-t)};
+    const auto [nt, nu] = steps::WhiteBalanceStep::fromNeutral(before);
+    model::EditEntry e = entryWith(cur, id::whitebalance, "temperature", std::clamp(nt, -300.0, 300.0));
+    e.params = e.params.with("tint", std::clamp(nu, -300.0, 300.0));
+    ui_->apply(std::make_unique<application::SetEntryCommand>(e));
+    refreshCurrent();
 }
 
 void MainWindow::applyFrameHint()

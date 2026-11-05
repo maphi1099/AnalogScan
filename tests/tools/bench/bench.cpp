@@ -8,7 +8,7 @@
 // unberührt). --big erzeugt zusätzlich ein künstliches 100-MP-Negativ (TIFF 16 bit).
 // Nur im Release-Bau aussagekräftig.
 
-#include "shared/composition.hpp"
+#include "autoneg/composition.hpp"
 #include "steps/step_ids.hpp"
 #include "support/synthetic.hpp"
 

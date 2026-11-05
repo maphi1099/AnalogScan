@@ -15,6 +15,7 @@
 #include "ui/ui_controller.hpp"
 
 #include <QtCore/QByteArray>
+#include <QtGui/QImage>
 #include <QtWidgets/QMainWindow>
 
 #include <filesystem>
@@ -194,6 +195,8 @@ private:
     void doFrameOptions();
     /// Hinweis (Format, Lage) aus den Einstellungen an die Erkennung geben.
     void applyFrameHint();
+    /// Weißabgleich so setzen, dass die Stelle norm (0–1 im gezeigten Bild) neutral wird.
+    void pickWhite(QPointF norm);
     void onFrameReport(const model::FrameId& f, double quality, std::vector<std::string> notes);
     /// Beim Import abgewählte Scans aus der Rolle nehmen.
     void excludeFrames(const std::vector<model::FrameId>& frames);
@@ -258,6 +261,8 @@ private:
     std::set<model::FrameId> manualConversion_; ///< Autokonvertierung abgewählt
     std::optional<model::FrameId> copiedFrom_;
     std::optional<model::FrameId> showFrameAfterDetect_;
+    bool pickWhite_ = false;                         ///< Weißabgleich-Pipette wartet auf einen Klick ins Bild
+    QImage shown_;                                   ///< zuletzt gezeigte Vorschau (für die Pipette)
     std::map<model::FrameId, QString> frameReports_; ///< Bewertung der Bildfelderkennung
     QByteArray defaultLayout_;
     std::uint64_t lastSeq_ = 0;

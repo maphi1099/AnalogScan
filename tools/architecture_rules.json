@@ -44,8 +44,7 @@
     "adapter_tbb":     { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["tbb", "platform"], "externalTargets": ["^TBB::"] },
     "backend_cpu":     { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["tbb", "simd", "platform"], "externalTargets": ["^TBB::", "^hwy::", "^Halide::"] },
 
-    "autoneg":         { "layer": "program", "deps": ["*"] },
-    "autoneg-cli":     { "layer": "program", "deps": ["*"] }
+    "autoneg":         { "layer": "program", "deps": ["*"] }
   },
 
   "includeRoots": {

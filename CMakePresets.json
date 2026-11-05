@@ -35,14 +35,14 @@
       "name": "windows-debug",
       "displayName": "Windows, clang-cl, Debug",
       "inherits": "windows-base",
-      "binaryDir": "${sourceDir}/build/Debug_Win",
+      "binaryDir": "${sourceDir}/build/Debug_Win/autoneg",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
     },
     {
       "name": "windows-release",
       "displayName": "Windows, clang-cl, Release",
       "inherits": "windows-base",
-      "binaryDir": "${sourceDir}/build/Release_Win",
+      "binaryDir": "${sourceDir}/build/Release_Win/autoneg",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {
@@ -63,14 +63,14 @@
       "name": "linux-debug",
       "displayName": "Linux, clang, Debug",
       "inherits": "linux-base",
-      "binaryDir": "${sourceDir}/build/Debug_Linux",
+      "binaryDir": "${sourceDir}/build/Debug_Linux/autoneg",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
     },
     {
       "name": "linux-release",
       "displayName": "Linux, clang, Release",
       "inherits": "linux-base",
-      "binaryDir": "${sourceDir}/build/Release_Linux",
+      "binaryDir": "${sourceDir}/build/Release_Linux/autoneg",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
     {

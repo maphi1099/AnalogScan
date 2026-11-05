@@ -247,7 +247,9 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                 }
             }
             if ((parts_ & Convert) != 0) {
-                entries.push_back(automatic("autoneg.convert", model::ParamSet{}.with("on", true)));
+                // "auto": aus der Autokonvertierung, nicht vom Schalter Konvertieren
+                entries.push_back(automatic("autoneg.convert",
+                                            model::ParamSet{}.with("on", true).with("auto", parts_ == All)));
             }
             c.progress(1, 1);
             // Ergebnis im UI-Thread über den CommandBus eintragen

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=AutoNeg
+Comment=Filmnegative und Dias in Positive umwandeln
+Exec=autoneg %F
+Terminal=false
+Categories=Graphics;Photography;

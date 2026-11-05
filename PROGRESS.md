@@ -3,14 +3,14 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 23.10.2026 – **M7, M8 und M9 fertig; danach Leistung nach Auftrag des Nutzers (paralleler Stapelexport und Kontaktabzug, SIMD-Farbumrechnung, Quantisierung im Backend, Speicherbudget für Miniaturen).** Wartet auf Nutzer: Bestätigung von D-15…D-18 und der K-M7…K-M10/T-16…T-18-Einträge, Annotationen für K-11 (L-06/L-07), OE-03 (Lizenz), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`).
+Stand: 05.11.2026 – **Aufgeräumt (nur noch Programm `autoneg`, Build `build/<Bau>/autoneg` und `installer`), Planungsdokumente und Handbuch als LaTeX aktualisiert, kritische Reflexion in `../Planning/reflexion_autoneg.tex` mit Verbesserungsliste für den Nutzer.** Wartet auf Nutzer: Bestätigung von D-15…D-18 und der K-M7…K-M10/T-16…T-18-Einträge, Annotationen für K-11 (L-06/L-07), OE-03 (Lizenz), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`).
 
 ## Ablage
 
 | Ort | Inhalt |
 |---|---|
 | `D:\Development\AutoNeg\AnalogScan\` | Git-Repository (Remote `github.com/maphi1099/AnalogScan`, Zweig `main`, Autor Max Philipp): gesamter Quellcode, `PROGRESS.md`, `BUGS.md` |
-| `..\Planning\` | `lastenheft_autoneg.pdf` (0.5), `architektur_autoneg.pdf` (0.3), `abweichungen_planung.txt` |
+| `..\Planning\` | `lastenheft_autoneg.tex` (0.6), `architektur_autoneg.tex` (0.4), `Handbuch-Autoneg.tex` (Kopie von `docs/handbuch/handbuch.tex`), `reflexion_autoneg.tex` mit `reflexion_bilder/`, `abweichungen_planung.txt`; PDFs älterer Stände |
 | `..\Testing\` | `testszenarien_autoneg.xlsx` (126 U, 20 K, 50 E), `Data\` (nur lesen) |
 | `..\CLAUDE.md` | Projektregeln (liegt außerhalb des Repositorys) |
 
@@ -53,7 +53,7 @@ Vorläufige Einordnung nach dem eingebetteten Vorschaubild des jeweils ersten Sc
 | M6 | Datenhaltung und Anwendung | Fertig (autonom, D-15) | U-DAT-01…15, U-APP-01…16, K-14 (ITaskExecutor) |
 | M7 | Kontaktabzug | Fertig (autonom, D-15) | U-LAY-01…09, K-15 |
 | M8 | Oberfläche, E2E | Fertig (autonom, D-15); Lücken siehe K-M8-11 | U-UI-01…05, K-14 (Repositories, Cache), E-01…03, E-05, E-09, E-10, E-12, E-13 (Teil), E-15, E-17…E-19, E-21…E-29, E-30, E-31…E-34, E-36, E-38, E-39, E-41…E-46, E-48 |
-| M9 | CLI, Leistung, Abschluss | Fertig (autonom, D-15) | K-16, K-17, K-18 (Messprogramm, T-17), K-20, E-49 (über K-18) |
+| M9 | CLI (am 05.11.2026 entfernt, K-M10-18), Leistung, Abschluss | Fertig (autonom, D-15) | K-16, K-17 (entfallen), K-18 (Messprogramm, T-17), K-20, E-49 (über K-18) |
 
 ### M0 – Ergebnis
 
@@ -250,8 +250,8 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 
 ### Auslieferung Windows und Handbuch
 
-- Installer: `installer/windows/build_installer.ps1` baut Release, installiert mit `cmake --install` nach `build/Release_Win/install` und erzeugt mit Inno Setup `build/Installer/AutoNeg-<Version>-Setup-x64.exe` (K-M10-06). Inno Setup: `winget install JRSoftware.InnoSetup`.
-- Installationsregeln: `cmake/AutoNegInstall.cmake` (nur Windows).
+- Installer: CMake-Ziel `installer` im Release (`cmake --build --preset windows-release --target installer`): `cmake --install` nach `build/Release_Win/autoneg/stage`, Inno Setup nach `build/Release_Win/installer/AutoNeg-<Version>-Setup-x64.exe`; unter Linux CPack STGZ `build/Release_Linux/installer/AutoNeg-<Version>-Linux.sh` (K-M10-18). Inno Setup: `winget install JRSoftware.InnoSetup`.
+- Installationsregeln: `cmake/AutoNegInstall.cmake` (Windows und Linux).
 - Geprüft (23.10.2026): stille Installation für den eigenen Benutzer, `autoneg-cli` export und contact-sheet ohne Entwicklungsumgebung im PATH, Start der Oberfläche mit Rolle, stille Deinstallation ohne Rückstände.
 - Handbuch: `docs/handbuch/handbuch.tex` (K-M10-07); setzen mit `pdflatex handbuch.tex` (zweimal). Abschnitt „Einschränkungen“ nennt die Bedienelemente ohne Funktion (Weißabgleich-Pipette, Messbereich anzeigen, Auto-Tonwerte).
 
@@ -267,7 +267,7 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 
 - Quellcode flach: Jedes Modul ist ein Ordner mit seinen Headern, Quelldateien und einer `CMakeLists.txt`, ohne `include/autoneg/...` und `src/` darunter (`src/model/roll.hpp`, `src/adapters/json/json_codec.cpp`). Gleiches gilt für `apps/` und die Testhilfen (`tests/mocks`, `tests/support`, `tests/reference`).
 - Includes relativ zu `src/`, `apps/` bzw. `tests/`: `#include "model/roll.hpp"`, `"adapters/json/json_codec.hpp"`, `"shared/composition.hpp"`, `"mocks/ports.hpp"`. Die Architekturprüfung ordnet Header über diese Ordner zu (`includeRoots` in `tools/architecture_rules.json`, je Modul auch mehrere).
-- Build-Ordner: `build/Debug_Win`, `build/Release_Win`, `build/Debug_Linux`, `build/Release_Linux`, `build/Installer` (nur die Setup-Datei). Presets `windows-debug`, `windows-release`, `linux-debug`, `linux-release` mit Ninja (eine Konfiguration je Ordner). Die Prüfbauten `linux-gcc`, `linux-asan`, `linux-tsan` liegen außerhalb von `build/` unter `~/autoneg-checks/<preset>` in WSL.
+- Build-Ordner (seit 05.11.2026, K-M10-18): `build/<Bau>/autoneg` (ganzer CMake-Bau, Programm oben) und im Release `build/<Bau>/installer`; `<Bau>` = `Debug_Win`, `Release_Win`, `Debug_Linux`, `Release_Linux`. Presets `windows-debug`, `windows-release`, `linux-debug`, `linux-release` mit Ninja (eine Konfiguration je Ordner). Die Prüfbauten `linux-gcc`, `linux-asan`, `linux-tsan` liegen außerhalb von `build/` unter `~/autoneg-checks/<preset>` in WSL.
 
 ### Erkennung, Leuchttisch und Bewertung (30.10.2026)
 
@@ -285,6 +285,14 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 
 - K-M10-14: Schritt autoneg.convert, Schalter mit Zustand (hellblau), Format-/Lagehinweis und Qualitätsbewertung der Bildfelderkennung, Fenster einzeln und automatisch anordnen, Erkennung mit Stapel-Priorität und Quellfreigabe.
 - Tests: `M10_DetectionQualityAndHint`, `M10_NegativeWithoutConvertStaysScan`; Anpassungen T-24.
+
+### Aufräumen und Reflexion (05.11.2026)
+
+- K-M10-18: `autoneg-cli` entfernt (Komposition jetzt `apps/autoneg/composition.*`, Lasttest K-16 in `tests/component/stress`), Build-Struktur `build/<Bau>/autoneg` + `installer`, Installer als CMake-Ziel, entfernt: `build_installer.ps1`, `tools/visual_check`, `tests/tools/render_pfm`, `prototypes/oe01-benchmark`.
+- K-M10-17 (Basis je Kanal/Farbton, Vorschau nach Zuschnitt), K-M10-19 (Pipette, Modus der Autokonvertierung, Messbereich, Grenzen beim Laden).
+- Tests neu: T-26, T-28. Windows: alle Tests grün. Linux: siehe unten.
+- Planung: Lastenheft 0.6, Architektur 0.4 und Handbuch als `.tex` aktualisiert (nicht gesetzt, kein LaTeX installiert).
+- Reflexion: `../Planning/reflexion_autoneg.tex` (Fehler, Schwächen, Testbewertung, Verbesserungsliste zum Ankreuzen).
 
 ## Entscheidungen
 

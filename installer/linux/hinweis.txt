@@ -1,0 +1,8 @@
+AutoNeg 1.0
+
+Das Archiv enthält das Programm (bin/autoneg), einen Starteintrag
+(share/applications/autoneg.desktop), das Handbuch und die Lizenztexte der
+mitgelieferten Bibliotheken (share/doc/autoneg/licenses).
+
+Empfohlene Installation für den eigenen Benutzer:
+  sh AutoNeg-1.0.0-Linux.sh --prefix=$HOME/.local --exclude-subdir

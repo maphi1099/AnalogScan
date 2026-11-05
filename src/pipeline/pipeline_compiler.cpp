@@ -4,6 +4,7 @@
 #include "pipeline/pixel_program_builder.hpp"
 #include "pipeline/warp_builder.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <variant>
@@ -91,11 +92,13 @@ CompiledPipeline PipelineCompiler::compile(const model::EditList& l, model::Film
         }
     }
     // Negativ ohne bekannte Filmbasis: nicht umkehren, der Scan bleibt unverändert (K-M10-11)
-    const bool negative = ctx.film == model::FilmType::ColorNegative || ctx.film == model::FilmType::BwNegative;
+    const bool negative =
+        ctx.film == model::FilmType::ColorNegative || ctx.film == model::FilmType::BwNegative;
     // (neutrale Einträge zählen nicht, sie erzeugen keine Stufe)
     const bool canInvert =
         std::ranges::any_of(active, [](const Active& a) { return a.step->descriptor().neededToInvert; }) ||
-        std::ranges::none_of(registry_.ordered(), [](const IStep* s) { return s->descriptor().neededToInvert; });
+        std::ranges::none_of(registry_.ordered(),
+                             [](const IStep* s) { return s->descriptor().neededToInvert; });
     if (negative && !canInvert) {
         ctx.film = model::FilmType::Unconverted;
     }

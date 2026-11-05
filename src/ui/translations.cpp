@@ -225,6 +225,7 @@ const QHash<QString, QString>& english()
             {"Die Filmvorgabe enthält keine Tonwerte.", "The film preset contains no tone range."},
             {"Filmvorgabe speichern", "Save film preset"},
             {"Kein Messbereich gespeichert: zuerst Auto-Basis oder Basis messen.", "No measuring area stored: use Auto base or Measure base first."},
+            {"Auf eine Stelle klicken, die neutral grau oder weiß sein soll.", "Click a spot that should be neutral grey or white."},
             {"Kopierte Bearbeitungsoptionen", "Copied editing options"},
             {"Kopierte Bearbeitungsoptionen auf %n Bild(er) übernommen", "Copied editing options applied to %n image(s)"},
             {"Kopierte Bearbeitungsoptionen auf Auswahl übernehmen", "Apply copied editing options to selection"},
