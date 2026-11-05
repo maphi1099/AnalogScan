@@ -710,7 +710,12 @@ void MainWindow::buildActions()
     };
     QMenu* file = menuBar()->addMenu(tr("&Datei"));
     add(file, QStringLiteral("openFolder"), tr("Ordner öffnen …"), QKeySequence::Open, [this] {
-        const QString d = QFileDialog::getExistingDirectory(this, tr("Scan-Ordner öffnen"));
+#ifdef AUTONEG_DEBUG_OPEN_DIR
+        const QString start = QStringLiteral(AUTONEG_DEBUG_OPEN_DIR); // Debug: Testdaten
+#else
+        const QString start;
+#endif
+        const QString d = QFileDialog::getExistingDirectory(this, tr("Scan-Ordner öffnen"), start);
         if (!d.isEmpty()) {
             openFolder(std::filesystem::path(d.toStdU16String()));
         }

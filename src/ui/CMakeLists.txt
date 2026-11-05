@@ -29,3 +29,5 @@ set_target_properties(autoneg_ui PROPERTIES AUTOMOC ON)
 # Qt-Schlüsselwörter (emit, signals, slots) sind Makros und kollidieren mit IStep::emit:
 # in der Oberfläche Q_EMIT/Q_SIGNALS/Q_SLOTS verwenden
 target_compile_definitions(autoneg_ui PUBLIC QT_NO_KEYWORDS)
+# Debug-Bau: "Ordner öffnen" beginnt in den Testdaten (Bequemlichkeit beim Entwickeln)
+target_compile_definitions(autoneg_ui PRIVATE $<$<CONFIG:Debug>:AUTONEG_DEBUG_OPEN_DIR="${AUTONEG_TESTDATA_DIR}">)
