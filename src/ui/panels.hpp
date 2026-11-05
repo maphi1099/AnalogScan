@@ -124,12 +124,20 @@ public:
     /// Gespeicherte Filmvorgaben für die Tonwerte (Namen).
     void setLevelPresets(const QStringList& names);
     void setShowArea(bool on);
+    /// Bewertung der letzten Bildfelderkennung (Debug-Anzeige unter Auto-Bildfeld).
+    void setQuality(const QString& text);
+    /// Basis messen läuft (Rechteck wird gezogen): Schalter bleibt an.
+    void setPickActive(bool on) { pickActive_ = on; }
 
 Q_SIGNALS:
     /// Wahl im Feld Filmtyp: "color", "bw", "slide" oder "raw" (Filmtyp entfernen).
     void filmTypeChosen(const QString& type);
-    void autoFrameRequested();
-    void autoBaseRequested();
+    /// Schalter an (true) oder aus (false: Schritt zurücknehmen).
+    void autoFrameToggled(bool on);
+    void autoBaseToggled(bool on);
+    void pickBaseToggled(bool on);
+    void convertToggled(bool on);
+    void frameOptionsRequested();
     void autoLevelsRequested();
     void levelPresetChosen(const QString& name);
     void saveLevelsRequested();
@@ -141,6 +149,12 @@ private:
     QCheckBox* auto_ = nullptr;
     QWidget* manual_ = nullptr; ///< alles, was bei Autokonvertierung verschwindet
     QComboBox* levels_ = nullptr;
+    QPushButton* autoFrame_ = nullptr;
+    QPushButton* autoBase_ = nullptr;
+    QPushButton* pickBase_ = nullptr;
+    QPushButton* convert_ = nullptr;
+    QLabel* quality_ = nullptr;
+    bool pickActive_ = false;
     QComboBox* filmType_ = nullptr;
     QCheckBox* showArea_ = nullptr;
     QLabel* hint_ = nullptr;

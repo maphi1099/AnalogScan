@@ -14,14 +14,17 @@
 #include "ui/qt_session_bridge.hpp"
 #include "ui/ui_controller.hpp"
 
+#include <QtCore/QByteArray>
 #include <QtWidgets/QMainWindow>
 
 #include <filesystem>
 #include <functional>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <optional>
 #include <set>
+#include <string_view>
 
 class QAction;
 class QComboBox;
@@ -182,6 +185,14 @@ private:
     [[nodiscard]] bool autoConverted(const model::FrameId& f) const;
     void setAutoConvert(bool on);
     void refreshLevelPresets();
+    /// Schritte der markierten Bilder entfernen (Schalter abgewählt).
+    void removeSteps(std::initializer_list<std::string_view> steps);
+    /// Alle Fenster wieder wie beim Start anordnen (auch losgelöste).
+    void arrangeWindows();
+    void doFrameOptions();
+    /// Hinweis (Format, Lage) aus den Einstellungen an die Erkennung geben.
+    void applyFrameHint();
+    void onFrameReport(const model::FrameId& f, double quality, std::vector<std::string> notes);
     /// Beim Import abgewählte Scans aus der Rolle nehmen.
     void excludeFrames(const std::vector<model::FrameId>& frames);
     void setStars(int stars);
@@ -243,6 +254,9 @@ private:
     std::unique_ptr<RectPickerTool> areaTool_;
     std::set<model::FrameId> manualConversion_; ///< Autokonvertierung abgewählt
     std::optional<model::FrameId> copiedFrom_;
+    std::optional<model::FrameId> showFrameAfterDetect_;
+    std::map<model::FrameId, QString> frameReports_; ///< Bewertung der Bildfelderkennung
+    QByteArray defaultLayout_;
     std::uint64_t lastSeq_ = 0;
     std::uint64_t previewsShown_ = 0;
     QStringList messages_;

@@ -22,6 +22,8 @@
 #include <QtGui/QDropEvent>
 #include <QtGui/QKeySequence>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QDockWidget>
 #include <QtWidgets/QFileDialog>
 #include <QtWidgets/QGroupBox>
@@ -44,6 +46,7 @@
 #include <QtWidgets/QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 
 namespace autoneg::ui {
 
@@ -139,8 +142,20 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
             display_ = *xf;
         }
     }
+    // dauerhaft eingeschaltete Schalter hellblau hinterlegt
+    setStyleSheet(QStringLiteral("QPushButton:checked, QToolButton:checked { background-color: #9fd3ff; "
+                                 "color: #10202c; border: 1px solid #5aa9e6; border-radius: 3px; }"));
     buildUi();
     buildActions();
+    defaultLayout_ = saveState();
+    applyFrameHint();
+    // QPointer: Meldungen können nach dem Schließen des Fensters ankommen
+    s_.analysis.setReport([self = QPointer<MainWindow>(this)](const model::FrameId& f, double quality,
+                                                              std::vector<std::string> notes) {
+        if (self) {
+            self->onFrameReport(f, quality, std::move(notes));
+        }
+    });
     s_.bus.subscribe(&s_.bridge);
 
     connect(&s_.bridge, &QtSessionBridge::previewReady, this, &MainWindow::onPreview);
@@ -176,8 +191,28 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
         if (const model::Frame* fr = frame(s_.session.current)) {
             trackJob(s_.analysis.measureBase(*fr, roll_, r), tr("Basis messen"));
         }
-        setTool(0);
+        conversion_->setPickActive(false);
+        setTool(0); // zurück zum zugeschnittenen Bild
     });
+}
+
+void MainWindow::onFrameReport(const model::FrameId& f, double quality, std::vector<std::string> notes)
+{
+    {
+        QString text = tr("Erkennung: %1 %").arg(static_cast<int>(std::lround(quality * 100.0)));
+        text += quality >= 0.8 ? tr(" – gut") : quality >= 0.5 ? tr(" – prüfen") : tr(" – unsicher");
+        for (const std::string& n : notes) {
+            text += QStringLiteral("\n• ") + QString::fromStdString(n);
+        }
+        frameReports_[f] = text;
+        if (f == s_.session.current) {
+            conversion_->setQuality(text);
+            if (showFrameAfterDetect_ == f) {
+                showFrameAfterDetect_.reset();
+                setTool(1); // erkannten Rahmen zeigen; der Nutzer kann ihn ziehen
+            }
+        }
+    }
 }
 
 MainWindow::~MainWindow()
@@ -479,7 +514,7 @@ void MainWindow::buildUi()
     tools_->addTab(adjustScroll, tr("Anpassen"));
     imageTools_ = new QWidget(tools_);
     imageTools_->setObjectName(QStringLiteral("imageTools"));
-    tools_->insertTab(0, imageTools_, tr("Zuschnitt und Retusche"));
+    tools_->insertTab(1, imageTools_, tr("Zuschnitt und Retusche")); // Konvertierung bleibt vorn
     auto* toolDock = new QDockWidget(tr("Werkzeuge"), this);
     toolDock->setObjectName(QStringLiteral("toolsDock"));
     toolDock->setWidget(tools_);
@@ -537,10 +572,48 @@ void MainWindow::buildUi()
     connect(conversion_, &ConversionPanel::filmTypeChosen, this,
             [this](const QString& type) { chooseFilm(type.toStdString()); });
     // jede Automatik macht nur ihren Schritt
-    connect(conversion_, &ConversionPanel::autoFrameRequested, this,
-            [this] { detect(targets(), tr("Bildfeld erkennen"), application::AnalysisService::Frame); });
-    connect(conversion_, &ConversionPanel::autoBaseRequested, this,
-            [this] { detect(targets(), tr("Basis messen"), application::AnalysisService::Base); });
+    // Schalter: an = Automatik für die markierten Bilder, aus = Schritt wieder entfernen
+    connect(conversion_, &ConversionPanel::autoFrameToggled, this, [this](bool on) {
+        if (on) {
+            showFrameAfterDetect_ = s_.session.current; // erkannten Rahmen zeigen, ziehbar
+            detect(targets(), tr("Bildfeld erkennen"), application::AnalysisService::Frame);
+        } else {
+            removeSteps({id::crop, id::rotation});
+        }
+    });
+    connect(conversion_, &ConversionPanel::autoBaseToggled, this, [this](bool on) {
+        setTool(0); // zurück zum zugeschnittenen Bild
+        if (on) {
+            detect(targets(), tr("Basis messen"), application::AnalysisService::Base); // ersetzt Basis messen
+        } else {
+            removeSteps({id::filmbase});
+        }
+    });
+    connect(conversion_, &ConversionPanel::pickBaseToggled, this, [this](bool on) {
+        if (on) {
+            conversion_->setPickActive(true);
+            setTool(2); // ganzes Bild, Rechteck ziehen; ersetzt die automatische Basis
+        } else {
+            conversion_->setPickActive(false);
+            setTool(0);
+            removeSteps({id::filmbase});
+        }
+    });
+    connect(conversion_, &ConversionPanel::convertToggled, this, [this](bool on) {
+        if (!on) {
+            removeSteps({id::convert});
+            return;
+        }
+        if (ui_->currentList().get(model::StepId(std::string(id::filmbase))) == nullptr) {
+            report(tr("Zuerst die Filmbasis bestimmen (Auto-Basis oder Basis messen)."));
+            refreshCurrent();
+            return;
+        }
+        // Tonwerte aus Bild und Basis, dann umkehren
+        detect(targets(), tr("Konvertieren"),
+               application::AnalysisService::Levels | application::AnalysisService::Convert);
+    });
+    connect(conversion_, &ConversionPanel::frameOptionsRequested, this, [this] { doFrameOptions(); });
     connect(conversion_, &ConversionPanel::autoLevelsRequested, this,
             [this] { detect(targets(), tr("Tonwerte"), application::AnalysisService::Levels); });
     connect(conversion_, &ConversionPanel::autoConvertToggled, this, [this](bool on) { setAutoConvert(on); });
@@ -588,7 +661,6 @@ void MainWindow::buildUi()
         showArea_ = on;
         setTool(on ? 4 : 0);
     });
-    connect(conversion_, &ConversionPanel::pickBaseRequested, this, [this] { setTool(2); });
 
     progress_ = new QProgressBar(this);
     progress_->setObjectName(QStringLiteral("jobProgress"));
@@ -840,6 +912,15 @@ void MainWindow::buildActions()
     views->addSeparator();
     add(views, QStringLiteral("closeView"), tr("Ansicht schließen"), QKeySequence(Qt::CTRL | Qt::Key_W),
         [this] { closeView(view_); });
+    views->addSeparator();
+    // jedes Fenster einzeln ein- und ausblenden
+    for (QDockWidget* d : editorDocks_) {
+        QAction* t = d->toggleViewAction();
+        t->setObjectName(QStringLiteral("show_") + d->objectName());
+        views->addAction(t);
+    }
+    add(views, QStringLiteral("arrangeWindows"), tr("Automatisch anordnen"),
+        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A), [this] { arrangeWindows(); });
     showView(View::Start);
 }
 
@@ -1264,6 +1345,10 @@ void MainWindow::refreshCurrent()
     const model::FilmType film = filmOf(s_.session.current);
     conversion_->setFilm(film);
     conversion_->setAutoMode(autoConverted(s_.session.current));
+    {
+        const auto it = frameReports_.find(s_.session.current);
+        conversion_->setQuality(it != frameReports_.end() ? it->second : QString());
+    }
     gradation_->setFilm(film);
     adjust_->setFilm(film);
     tools_->setTabVisible(tools_->indexOf(gradation_), film == model::FilmType::BwNegative);
@@ -1471,7 +1556,8 @@ bool MainWindow::autoConverted(const model::FrameId& f) const
     };
     const model::FilmType film = filmOf(f);
     const bool negative = film == model::FilmType::ColorNegative || film == model::FilmType::BwNegative;
-    return automatic(id::crop) && (!negative || (automatic(id::filmbase) && automatic(id::densityrange)));
+    return automatic(id::crop) &&
+           (!negative || (automatic(id::filmbase) && automatic(id::densityrange) && automatic(id::convert)));
 }
 
 void MainWindow::setAutoConvert(bool on)
@@ -1487,6 +1573,121 @@ void MainWindow::setAutoConvert(bool on)
     if (on) {
         detect(t, tr("Autokonvertierung"), application::AnalysisService::All);
     }
+}
+
+void MainWindow::removeSteps(std::initializer_list<std::string_view> steps)
+{
+    class RemoveSteps final : public application::ICommand
+    {
+    public:
+        explicit RemoveSteps(std::vector<model::StepId> s)
+            : steps_(std::move(s))
+        {}
+        [[nodiscard]] std::string label() const override { return "Entfernen"; }
+        [[nodiscard]] model::EditList apply(const model::EditList& l,
+                                            const application::CommandContext& /*c*/) const override
+        {
+            model::EditList out = l;
+            for (const model::StepId& st : steps_) {
+                out = out.without(st);
+            }
+            return out;
+        }
+
+    private:
+        std::vector<model::StepId> steps_;
+    };
+    std::vector<model::StepId> ids;
+    for (const std::string_view st : steps) {
+        ids.emplace_back(std::string(st));
+    }
+    if (roll_) {
+        s_.bus.execute(RemoveSteps(std::move(ids)), targets(), *roll_);
+    }
+    refreshCurrent();
+}
+
+void MainWindow::arrangeWindows()
+{
+    // Standardanordnung: alle Fenster angedockt und sichtbar (in Entwickeln)
+    restoreState(defaultLayout_);
+    for (QDockWidget* d : editorDocks_) {
+        d->setFloating(false);
+        d->setVisible(view_ == View::Image);
+    }
+}
+
+void MainWindow::applyFrameHint()
+{
+    analysis::FrameHint h;
+    const auto text = [this](const char* key) {
+        const auto v = s_.settings.get(key);
+        return v && v->asString() != nullptr ? *v->asString() : std::string();
+    };
+    // Format: Länge entlang des Films / Breite quer
+    static const std::map<std::string, std::pair<double, double>> formats{
+        {"24x36", {36.0 / 24.0, 24}}, {"18x24", {18.0 / 24.0, 24}}, {"24x65", {65.0 / 24.0, 24}},
+        {"6x4.5", {41.5 / 56.0, 56}}, {"6x6", {1.0, 56}},           {"6x7", {70.0 / 56.0, 56}},
+        {"6x9", {84.0 / 56.0, 56}}};
+    if (const auto it = formats.find(text("frameFormat")); it != formats.end()) {
+        h.aspect = it->second.first;
+        h.acrossMm = it->second.second;
+    }
+    const std::string o = text("frameOrientation");
+    h.orientation = o == "landscape"  ? analysis::FrameHint::Orientation::Landscape
+                    : o == "portrait" ? analysis::FrameHint::Orientation::Portrait
+                                      : analysis::FrameHint::Orientation::Any;
+    s_.analysis.setFrameHint(h);
+}
+
+void MainWindow::doFrameOptions()
+{
+    QDialog d(this);
+    d.setWindowTitle(tr("Optionen der Bildfelderkennung"));
+    auto* layout = new QVBoxLayout(&d);
+    layout->addWidget(
+        new QLabel(tr("Hinweise für die Erkennung.") + QLatin1Char(' ') +
+                       tr("Weicht das Gefundene stark ab, sucht AutoNeg mit diesem Format weiter."),
+                   &d));
+    auto* format = new QComboBox(&d);
+    format->setObjectName(QStringLiteral("frameFormat"));
+    for (const auto& [key, name] :
+         std::vector<std::pair<QString, QString>>{{QString(), tr("Automatisch")},
+                                                  {QStringLiteral("24x36"), tr("Kleinbild 24×36")},
+                                                  {QStringLiteral("18x24"), tr("Halbformat 18×24")},
+                                                  {QStringLiteral("24x65"), tr("Panorama 24×65")},
+                                                  {QStringLiteral("6x4.5"), tr("Mittelformat 6×4,5")},
+                                                  {QStringLiteral("6x6"), tr("Mittelformat 6×6")},
+                                                  {QStringLiteral("6x7"), tr("Mittelformat 6×7")},
+                                                  {QStringLiteral("6x9"), tr("Mittelformat 6×9")}}) {
+        format->addItem(name, key);
+    }
+    auto* orientation = new QComboBox(&d);
+    orientation->setObjectName(QStringLiteral("frameOrientation"));
+    orientation->addItem(tr("Lage egal"), QString());
+    orientation->addItem(tr("Bild quer im Scan"), QStringLiteral("landscape"));
+    orientation->addItem(tr("Bild hochkant im Scan"), QStringLiteral("portrait"));
+    const auto current = [this](const char* key) {
+        const auto v = s_.settings.get(key);
+        return v && v->asString() != nullptr ? QString::fromStdString(*v->asString()) : QString();
+    };
+    format->setCurrentIndex(std::max(0, format->findData(current("frameFormat"))));
+    orientation->setCurrentIndex(std::max(0, orientation->findData(current("frameOrientation"))));
+    layout->addWidget(new QLabel(tr("Bevorzugtes Bildformat"), &d));
+    layout->addWidget(format);
+    layout->addWidget(new QLabel(tr("Lage"), &d));
+    layout->addWidget(orientation);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &d);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &d, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    if (d.exec() != QDialog::Accepted) {
+        return;
+    }
+    s_.settings.set("frameFormat", model::JsonValue(format->currentData().toString().toStdString()));
+    s_.settings.set("frameOrientation",
+                    model::JsonValue(orientation->currentData().toString().toStdString()));
+    applyFrameHint();
 }
 
 void MainWindow::refreshLevelPresets()

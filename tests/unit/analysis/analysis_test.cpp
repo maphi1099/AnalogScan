@@ -95,6 +95,27 @@ TEST_F(Analysis, U_ANA_01_FrameOnSyntheticNegative)
     }
 }
 
+// K-M10-14 (Wunsch des Nutzers): Bewertung der Erkennung mit Gründen; ein Lage-Hinweis, der
+// nicht passt, wird genannt und mindert die Bewertung
+TEST_F(Analysis, M10_DetectionQualityAndHint)
+{
+    const auto s = spec(FilmType::ColorNegative);
+    const t::SyntheticScan scan = t::makeNegative(s);
+    const auto plain = detector.detect(scan.scan, FilmType::ColorNegative);
+    ASSERT_TRUE(plain.has_value()) << plain.error().message;
+    EXPECT_GT(plain->quality, 0.0);
+    EXPECT_LE(plain->quality, 1.0);
+    analysis::FrameHint portrait;
+    portrait.orientation = analysis::FrameHint::Orientation::Portrait;
+    const auto hinted = detector.detect(scan.scan, FilmType::ColorNegative, portrait);
+    ASSERT_TRUE(hinted.has_value());
+    EXPECT_LT(hinted->quality, plain->quality);
+    EXPECT_TRUE(std::ranges::any_of(
+        hinted->notes, [](const std::string& n) { return n.find("Lage") != std::string::npos; }));
+    // Bildfeld bleibt: ein Hinweis ist keine Vorgabe
+    EXPECT_LE(worstEdge(hinted->frame, scan.truth.frame, s.width, s.height), 1.0);
+}
+
 // LF-GEO-05
 TEST_F(Analysis, U_ANA_02_RegionClassification)
 {

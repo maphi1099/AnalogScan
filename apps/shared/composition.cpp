@@ -179,7 +179,10 @@ base::Expected<image::ImageBuffer> Composition::analysisImage(const model::Frame
     }
     const base::Size size{std::max(1, static_cast<int>(std::lround(img->spec().width * k))),
                           std::max(1, static_cast<int>(std::lround(img->spec().height * k)))};
-    return backend_.resample({}, *img, size);
+    auto small = backend_.resample({}, *img, size);
+    // Quelle freigeben: sonst hält die Erkennung einer ganzen Rolle alle Scans im Speicher
+    releaseUnlessCurrent(f.id);
+    return small;
 }
 
 } // namespace autoneg::app

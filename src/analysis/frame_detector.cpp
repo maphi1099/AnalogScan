@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <numbers>
 #include <optional>
@@ -248,6 +249,9 @@ struct Layout
     double bottom = 0.0;
     std::vector<std::pair<double, double>> cols; ///< Bildfelder: Spalten (Subpixel)
     double confidence = 0.0;
+    bool fromPerforation = false; ///< Bildfeld aus Perforation bzw. Format geschätzt
+    double rowContrast = 1.0;
+    double colContrast = 1.0;
 };
 
 struct Planes
@@ -258,7 +262,7 @@ struct Planes
     Plane exposed; ///< 1 = belichtet (Bildinhalt)
 };
 
-base::Expected<Layout> findLayout(const Planes& p, model::FilmType film)
+base::Expected<Layout> findLayout(const Planes& p, model::FilmType film, const FrameHint& hint)
 {
     const int w = p.t.w;
     const int h = p.t.h;
@@ -376,6 +380,7 @@ base::Expected<Layout> findLayout(const Planes& p, model::FilmType film)
     if (span) {
         const double height = *span * 24.0 / 25.4;
         if (l.bottom - l.top < 0.8 * height) {
+            l.fromPerforation = true;
             double mid = 0.0;
             int y = l.s0;
             while (lightRow[static_cast<std::size_t>(y)] <= 0.05) {
@@ -437,13 +442,25 @@ base::Expected<Layout> findLayout(const Planes& p, model::FilmType film)
     // Kleinbild: Breite 36 mm. Ist das einzige Bildfeld deutlich zu schmal (Bild nahe am
     // Basispegel) oder zu breit und am Scanrand (Nachbarbild angeschnitten), den besten Ausschnitt dieser
     // Breite.
+    // Format: Hinweis des Anwenders, sonst Kleinbild 24×36 (nur mit Perforation)
+    const double aspect = hint.aspect > 0.0 ? hint.aspect : 1.5;
     if (span && l.cols.size() == 1) {
-        const double width = *span * 36.0 / 25.4;
+        const double width = *span * 24.0 / 25.4 * aspect;
         const double found = l.cols.front().second - l.cols.front().first;
         const bool atBorder = l.cols.front().first < 1.0 || l.cols.front().second > w - 1.0;
         if (noColumns || found < 0.8 * width || (found > 1.06 * width && atBorder)) {
             const double left = bestWindow(colExp, width);
             l.cols = {{left, std::min(left + width, static_cast<double>(w))}};
+            l.fromPerforation = true;
+        }
+    } else if (!span && hint.aspect > 0.0 && l.cols.size() == 1) {
+        // Rollfilm ohne Perforation: Höhe gilt, Breite aus dem Format, wenn sie stark abweicht
+        const double width = (l.bottom - l.top) * hint.aspect;
+        const double found = l.cols.front().second - l.cols.front().first;
+        if (std::abs(found - width) > 0.15 * width) {
+            const double left = bestWindow(colExp, width);
+            l.cols = {{left, std::min(left + width, static_cast<double>(w))}};
+            l.fromPerforation = true;
         }
     }
     // Ohne jede Grenze (Streifen, Filmrand, Steg) ist kein Bildfeld belegt (LF-GEO-05)
@@ -453,7 +470,9 @@ base::Expected<Layout> findLayout(const Planes& p, model::FilmType film)
         return base::makeError(base::ErrorCode::NotFound,
                                "Kein Bildfeld erkennbar (keine Begrenzung gefunden)");
     }
-    l.confidence = std::clamp(std::min(rowBoundary ? pin - pout : 1.0, qin - qout), 0.0, 1.0);
+    l.rowContrast = rowBoundary ? pin - pout : 1.0;
+    l.colContrast = qin - qout;
+    l.confidence = std::clamp(std::min(l.rowContrast, l.colContrast), 0.0, 1.0);
     (void)film;
     return l;
 }
@@ -661,6 +680,63 @@ RegionMap regionsOf(const Planes& p, const Layout& l, bool vertical, int w, int 
     return RegionMap(w, h, std::move(labels), skewDeg, std::move(rebate));
 }
 
+/// Qualität der Erkennung (K-M10-14): jedes Kriterium mindert die Bewertung und nennt den Grund.
+///  - Kontrast der Rahmenlinien (Unterschied Bildfeld/Umgebung in Zeilen und Spalten)
+///  - Format: Seitenverhältnis gegen den Hinweis bzw. das nächste übliche Format
+///  - Bildfeld nur aus Perforation bzw. Format geschätzt (Kanten nicht gefunden)
+///  - Bildfeld am Scanrand (vermutlich angeschnitten)
+///  - Schräglage nicht messbar; ungewöhnlich kleines Bildfeld; Lage gegen den Hinweis
+void assess(FrameDetection& d, const Layout& l, double left, double right, double lw, double lh,
+            bool vertical, bool skewMeasured, const FrameHint& hint)
+{
+    double q = 1.0;
+    const auto note = [&](double factor, std::string text) {
+        q *= factor;
+        d.notes.push_back(std::move(text));
+    };
+    const auto pct = [](double v) { return std::to_string(static_cast<int>(std::lround(v * 100.0))) + " %"; };
+    const double contrast = std::min(l.rowContrast, l.colContrast);
+    if (contrast < 0.35) {
+        note(0.4 + contrast, "schwache Rahmenlinien (Kontrast " + pct(contrast) + ")");
+    }
+    const double along = right - left; // Länge entlang des Films
+    const double across = l.bottom - l.top;
+    const double aspect = across > 0.0 ? along / across : 0.0;
+    double expected = hint.aspect;
+    if (expected <= 0.0) { // nächstes übliches Format
+        expected = 1.5;
+        for (const double a : {0.75, 1.0, 1.2, 1.5, 2.7}) {
+            if (std::abs(std::log(aspect / a)) < std::abs(std::log(aspect / expected))) {
+                expected = a;
+            }
+        }
+    }
+    if (aspect > 0.0 && std::abs(aspect / expected - 1.0) > 0.08) {
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "ungewöhnliches Format (%.2f statt %.2f)", aspect, expected);
+        note(std::max(0.3, 1.0 - 2.0 * std::abs(aspect / expected - 1.0)), buf);
+    }
+    if (l.fromPerforation) {
+        note(0.8, "Bildfeld aus Perforation/Format geschätzt, Kanten schwach");
+    }
+    if (left < 1.0 || right > lw - 1.0 || l.top < 1.0 || l.bottom > lh - 1.0) {
+        note(0.85, "Bildfeld berührt den Scanrand");
+    }
+    if (!skewMeasured) {
+        note(0.9, "Schräglage nicht messbar");
+    }
+    if (along * across < 0.2 * lw * lh) {
+        note(0.6, "sehr kleines Bildfeld (" + pct(along * across / (lw * lh)) + " des Scans)");
+    }
+    if (hint.orientation != FrameHint::Orientation::Any) {
+        const bool landscapeInScan = vertical ? along < across : along > across;
+        if (landscapeInScan != (hint.orientation == FrameHint::Orientation::Landscape)) {
+            note(0.7, "Lage passt nicht zum Hinweis Quer/Hochkant");
+        }
+    }
+    d.quality = std::clamp(q, 0.0, 1.0);
+}
+
 } // namespace
 
 base::Expected<double> SkewEstimator::estimate(const image::ImageBuffer& img) const
@@ -760,8 +836,8 @@ base::Expected<double> SkewEstimator::estimate(const image::ImageBuffer& img) co
     return -skew; // Korrekturwinkel für autoneg.rotation
 }
 
-base::Expected<std::vector<FrameDetection>> FrameDetector::detectAll(const image::ImageBuffer& img,
-                                                                     model::FilmType film) const
+base::Expected<std::vector<FrameDetection>>
+FrameDetector::detectAll(const image::ImageBuffer& img, model::FilmType film, const FrameHint& hint) const
 {
     if (img.empty() || img.host().empty()) {
         return base::makeError(base::ErrorCode::InvalidArgument, "Bildfelderkennung ohne Bild");
@@ -788,9 +864,15 @@ base::Expected<std::vector<FrameDetection>> FrameDetector::detectAll(const image
         }
         litCols += n * 2 > p.t.h ? 1 : 0;
     }
-    const bool vertical = litCols > litRows || (litCols == litRows && p.t.h > p.t.w);
+    bool vertical = litCols > litRows || (litCols == litRows && p.t.h > p.t.w);
+    // Hinweis Quer/Hochkant entscheidet nur, wenn Licht keine Lage zeigt: Bild quer im Scan
+    // heißt Streifen waagerecht, sofern das Bild entlang des Films länger ist
+    if (litCols == litRows && hint.orientation != FrameHint::Orientation::Any) {
+        const bool alongLonger = hint.aspect <= 0.0 || hint.aspect >= 1.0;
+        vertical = (hint.orientation == FrameHint::Orientation::Portrait) == alongLonger;
+    }
     const Planes q = vertical ? transposed(p) : std::move(p);
-    const auto layout = findLayout(q, film);
+    const auto layout = findLayout(q, film, hint);
     if (!layout) {
         return std::unexpected(layout.error());
     }
@@ -811,15 +893,16 @@ base::Expected<std::vector<FrameDetection>> FrameDetector::detectAll(const image
         d.angleDeg = correction ? *correction : 0.0;
         d.regions = regions;
         d.confidence = layout->confidence * (correction ? 1.0 : 0.8);
+        assess(d, *layout, left, right, lw, lh, vertical, correction.has_value(), hint);
         out.push_back(std::move(d));
     }
     return out;
 }
 
-base::Expected<FrameDetection> FrameDetector::detect(const image::ImageBuffer& img,
-                                                     model::FilmType film) const
+base::Expected<FrameDetection> FrameDetector::detect(const image::ImageBuffer& img, model::FilmType film,
+                                                     const FrameHint& hint) const
 {
-    auto all = detectAll(img, film);
+    auto all = detectAll(img, film, hint);
     if (!all) {
         return std::unexpected(all.error());
     }

@@ -95,7 +95,9 @@ TEST(LibRawComponent, K_01_ProbeAllOwnScans)
 {
     LibRawDecoder decoder;
     const auto rawFiles = allRawFiles();
-    ASSERT_GE(rawFiles.size(), 400U) << "Testdaten fehlen: " << files::testData();
+    // Testdatenbestand des Nutzers (05.11.2026: 387 RAW-Dateien); die Schwelle erkennt einen
+    // fehlenden oder falschen Testdatenordner
+    ASSERT_GE(rawFiles.size(), 300U) << "Testdaten fehlen: " << files::testData();
     std::map<std::string, int> perModel;
     for (const fs::path& p : rawFiles) {
         const auto info = decoder.probe(p);

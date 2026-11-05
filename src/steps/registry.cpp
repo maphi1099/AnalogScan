@@ -15,6 +15,7 @@ base::Expected<void> registerStandardSteps(pipeline::StepRegistry& registry, Fla
         std::make_unique<CropStep>(),
         std::make_unique<RetouchStep>(),
         std::make_unique<FilmModeStep>(),
+        std::make_unique<ConvertStep>(),
         std::make_unique<BwMixStep>(),
         std::make_unique<FilmBaseStep>(),
         std::make_unique<DensityStep>(),

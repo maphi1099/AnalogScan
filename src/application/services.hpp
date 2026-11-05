@@ -29,7 +29,8 @@ using UiDispatcher = std::function<void(std::function<void()>)>;
 struct AnalysisFunctions
 {
     std::function<base::Expected<image::ImageBuffer>(const model::Frame&)> image; ///< Analysebild
-    std::function<base::Expected<analysis::FrameDetection>(const image::ImageBuffer&, model::FilmType)>
+    std::function<base::Expected<analysis::FrameDetection>(const image::ImageBuffer&, model::FilmType,
+                                                           const analysis::FrameHint&)>
         detect;
     std::function<base::Expected<analysis::BaseMeasurement>(const image::ImageBuffer&,
                                                             const analysis::RegionMap&)>
@@ -52,13 +53,14 @@ struct AnalysisFunctions
 class AnalysisService
 {
 public:
-    /// Teile der Automatik: Bildfeld (Zuschnitt, Feindrehung), Filmbasis, Tonwertgrenzen.
+    /// Teile der Automatik: Bildfeld (Zuschnitt, Feindrehung), Filmbasis, Tonwertgrenzen, Konvertieren.
     enum Part : unsigned
     {
         Frame = 1U,
         Base = 2U,
         Levels = 4U,
-        All = 7U
+        Convert = 8U, ///< Konvertieren einschalten (autoneg.convert)
+        All = 15U
     };
 
     AnalysisService(JobScheduler& jobs, CommandBus& bus, UiDispatcher ui, AnalysisFunctions fns)
@@ -81,6 +83,11 @@ public:
     /// (steps::FilmModeStep::effective); ohne festgelegten Filmtyp scheitert der Job (K-M10-08).
     JobHandle detectFrame(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
                           model::FilmType film, unsigned parts = All, model::EditList current = {});
+    /// Hinweis für die Bildfelderkennung (Format, Lage); gilt für folgende Aufträge.
+    void setFrameHint(const analysis::FrameHint& h) { hint_ = h; }
+    /// Meldung je Bild nach der Erkennung (im UI-Thread): Bewertung 0…1 und Gründe.
+    using Report = std::function<void(const model::FrameId&, double quality, std::vector<std::string> notes)>;
+    void setReport(Report r) { report_ = std::move(r); }
     /// Basis im vom Anwender gezogenen Rechteck messen (LF-BAS-04); Eintrag mit Herkunft
     /// manuell und source = "manual".
     JobHandle measureBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,
@@ -92,6 +99,8 @@ private:
     std::shared_ptr<int> alive_ = std::make_shared<int>(0); ///< vor ui_: lebt so lange wie der Dienst
     UiDispatcher ui_;
     AnalysisFunctions fns_;
+    analysis::FrameHint hint_;
+    Report report_;
 };
 
 /// Setzt Ergebnisse einer Automatik: nur, wo kein Eintrag des Anwenders steht.

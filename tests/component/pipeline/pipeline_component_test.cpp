@@ -160,7 +160,9 @@ EditList standardEdits(const Rig& rig, FilmType f, const t::NegativeTruth& truth
 {
     EditList l = rig.film(f).with(rig.entry(id::crop, ParamSet{}.with("rect", truth.frame)));
     if (f != FilmType::Slide) {
+        // Basis gemessen und „Konvertieren“ gedrückt (K-M10-14)
         l = l.with(rig.entry(id::filmbase, ParamSet{}.with("base", truth.base)))
+                .with(rig.entry(id::convert, ParamSet{}.with("on", true)))
                 .with(rig.entry(id::densityrange,
                                 ParamSet{}.with("dMin", truth.dMin).with("dMax", truth.dMax)));
     }

@@ -281,6 +281,11 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - Tests: `M10_UndoScopesFrameAndLightTable`, `M10_EachAutomaticWritesOnlyItsPart`; E-25 angepasst (T-23).
 - Offen: `K_01_ProbeAllOwnScans` erwartet ≥ 400 RAW-Dateien in `Testing/Data`, dort liegen derzeit 387 (Testdaten geändert).
 
+### Konvertieren, Erkennungshinweise, Fenster (05.11.2026)
+
+- K-M10-14: Schritt autoneg.convert, Schalter mit Zustand (hellblau), Format-/Lagehinweis und Qualitätsbewertung der Bildfelderkennung, Fenster einzeln und automatisch anordnen, Erkennung mit Stapel-Priorität und Quellfreigabe.
+- Tests: `M10_DetectionQualityAndHint`, `M10_NegativeWithoutConvertStaysScan`; Anpassungen T-24.
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |

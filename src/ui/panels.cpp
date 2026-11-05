@@ -333,13 +333,34 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
         b->setToolTip(tip);
         return b;
     };
-    QPushButton* autoFrame = button(tr("Auto-Bildfeld"), QStringLiteral("autoFrame"),
-                                    tr("Nur das Bildfeld (Zuschnitt und Feindrehung) automatisch erkennen"));
-    QPushButton* autoBase =
+    // Schalter: an = der Schritt ist eingetragen (hellblau); nochmal klicken nimmt ihn zurück
+    autoFrame_ = button(tr("Auto-Bildfeld"), QStringLiteral("autoFrame"),
+                        tr("Nur das Bildfeld (Zuschnitt und Feindrehung) automatisch erkennen") +
+                            QLatin1Char(' ') + tr("Der Rahmen lässt sich danach ziehen."));
+    QPushButton* frameOptions = button(tr("Optionen …"), QStringLiteral("frameOptions"),
+                                       tr("Bevorzugtes Bildformat und Lage als Hinweis für die Erkennung"));
+    autoBase_ =
         button(tr("Auto-Basis"), QStringLiteral("autoBase"), tr("Nur die Filmbasis im Filmrand messen"));
-    QPushButton* pickBase =
+    pickBase_ =
         button(tr("Basis messen"), QStringLiteral("pickBase"), tr("Messrechteck in den Filmrand ziehen"));
-    m->addWidget(autoFrame);
+    convert_ = button(tr("Konvertieren"), QStringLiteral("convert"),
+                      tr("Negativ mit der gemessenen Filmbasis umkehren (Tonwerte automatisch)"));
+    for (QPushButton* b : {autoFrame_, autoBase_, pickBase_, convert_}) {
+        b->setCheckable(true);
+    }
+    auto* frameRow = new QHBoxLayout;
+    frameRow->addWidget(autoFrame_, 1);
+    frameRow->addWidget(frameOptions);
+    m->addLayout(frameRow);
+    quality_ = new QLabel(manual_);
+    quality_->setObjectName(QStringLiteral("frameQuality"));
+    quality_->setWordWrap(true);
+    QFont small = quality_->font();
+    small.setPointSizeF(small.pointSizeF() * 0.9);
+    quality_->setFont(small);
+    m->addWidget(quality_);
+    QPushButton* autoBase = autoBase_;
+    QPushButton* pickBase = pickBase_;
     auto* baseRow = new QHBoxLayout;
     baseRow->addWidget(autoBase);
     baseRow->addWidget(pickBase);
@@ -357,6 +378,7 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     levelRow->addWidget(levels_, 1);
     levelRow->addWidget(saveLevels);
     m->addLayout(levelRow);
+    m->addWidget(convert_);
     showArea_ = new QCheckBox(tr("Messbereich anzeigen"), manual_);
     showArea_->setObjectName(QStringLiteral("showBaseArea"));
     showArea_->setToolTip(tr("Zeigt das ganze Bild mit dem Bereich, in dem die Filmbasis gemessen wurde"));
@@ -364,9 +386,11 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     layout->addWidget(manual_);
     layout->addStretch(1);
     setLevelPresets({});
-    connect(autoFrame, &QPushButton::clicked, this, &ConversionPanel::autoFrameRequested);
-    connect(autoBase, &QPushButton::clicked, this, &ConversionPanel::autoBaseRequested);
-    connect(pickBase, &QPushButton::clicked, this, &ConversionPanel::pickBaseRequested);
+    connect(autoFrame_, &QPushButton::clicked, this, &ConversionPanel::autoFrameToggled);
+    connect(autoBase_, &QPushButton::clicked, this, &ConversionPanel::autoBaseToggled);
+    connect(pickBase_, &QPushButton::clicked, this, &ConversionPanel::pickBaseToggled);
+    connect(convert_, &QPushButton::clicked, this, &ConversionPanel::convertToggled);
+    connect(frameOptions, &QPushButton::clicked, this, &ConversionPanel::frameOptionsRequested);
     connect(saveLevels, &QPushButton::clicked, this, &ConversionPanel::saveLevelsRequested);
     connect(levels_, &QComboBox::activated, this, [this](int i) {
         const QString name = levels_->itemData(i).toString();
@@ -380,8 +404,9 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
         manual_->setVisible(!on);
         Q_EMIT autoConvertToggled(on);
     });
-    filmButtons_ = {autoFrame, auto_};
-    baseControls_ = {autoBase, pickBase, showArea_};
+    filmButtons_ = {autoFrame_, auto_};
+    baseControls_.push_back(convert_);
+    baseControls_.insert(baseControls_.end(), {autoBase, pickBase, showArea_});
     connect(showArea_, &QCheckBox::toggled, this, &ConversionPanel::showBaseAreaToggled);
     // Die Wahl gilt für alle markierten Bilder; der MainWindow trägt sie ein
     connect(filmType_, &QComboBox::activated, this,
@@ -416,8 +441,25 @@ void ConversionPanel::setShowArea(bool on)
     showArea_->setChecked(on);
 }
 
-void ConversionPanel::bindList(const model::EditList& /*l*/)
+void ConversionPanel::setQuality(const QString& text)
 {
+    quality_->setText(text);
+    quality_->setVisible(!text.isEmpty());
+}
+
+void ConversionPanel::bindList(const model::EditList& l)
+{
+    // Schalterzustand aus der Liste: was eingetragen ist, ist an
+    const auto get = [&l](std::string_view step) { return l.get(model::StepId(std::string(step))); };
+    const model::EditEntry* crop = get(steps::id::crop);
+    const model::EditEntry* base = get(steps::id::filmbase);
+    const model::EditEntry* conv = get(steps::id::convert);
+    const bool manualBase =
+        base != nullptr && base->params.get<std::string>("source").value_or("") == "manual";
+    autoFrame_->setChecked(crop != nullptr && crop->origin == model::Origin::Automatic);
+    autoBase_->setChecked(base != nullptr && !manualBase);
+    pickBase_->setChecked(manualBase || pickActive_);
+    convert_->setChecked(conv != nullptr && conv->enabled && conv->params.get<bool>("on").value_or(false));
     // Der Filmtyp hängt auch vom Rollen-Standard ab und kommt über setFilm
 }
 

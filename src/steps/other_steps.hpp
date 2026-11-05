@@ -40,6 +40,23 @@ private:
     pipeline::StepDescriptor d_;
 };
 
+/// Konvertieren (K-M10-14): erst mit diesem Eintrag wird ein Negativ umgekehrt; die Filmbasis
+/// allein ändert das Bild nicht. Steuerstufe ohne eigene Rechnung.
+class ConvertStep final : public pipeline::ControlStep
+{
+public:
+    ConvertStep();
+    [[nodiscard]] const pipeline::StepDescriptor& descriptor() const noexcept override { return d_; }
+    [[nodiscard]] bool isNeutral(const model::ParamSet& p) const override
+    {
+        return !p.get<bool>("on").value_or(false);
+    }
+    void configure(pipeline::StepContext& /*ctx*/, const model::ParamSet& /*p*/) const override {}
+
+private:
+    pipeline::StepDescriptor d_;
+};
+
 // --- Geometrie ---------------------------------------------------------------------------
 
 class DescribedGeometric : public pipeline::GeometricStep

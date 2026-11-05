@@ -4,6 +4,7 @@ autoneg.rotation 1
 autoneg.crop 1
 autoneg.retouch 1
 autoneg.filmmode 1
+autoneg.convert 1
 autoneg.bwmix 1
 autoneg.filmbase 1
 autoneg.density 1

@@ -127,8 +127,8 @@ AnalysisFunctions::standard(ports::IVision& vision,
 {
     AnalysisFunctions f;
     f.image = std::move(image);
-    f.detect = [&vision](const image::ImageBuffer& img, model::FilmType film) {
-        return analysis::FrameDetector(vision).detect(img, film);
+    f.detect = [&vision](const image::ImageBuffer& img, model::FilmType film, const analysis::FrameHint& h) {
+        return analysis::FrameDetector(vision).detect(img, film, h);
     };
     f.measureBase = [](const image::ImageBuffer& img, const analysis::RegionMap& m) {
         return analysis::BaseMeter{}.measure(img, m);
@@ -164,9 +164,11 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
     {
     public:
         DetectJob(model::Frame f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
-                  unsigned parts, model::EditList current, AnalysisFunctions fns, CommandBus& bus,
-                  UiDispatcher ui)
+                  unsigned parts, model::EditList current, analysis::FrameHint hint, Report report,
+                  AnalysisFunctions fns, CommandBus& bus, UiDispatcher ui)
             : f_(std::move(f))
+            , hint_(hint)
+            , report_(std::move(report))
             , roll_(std::move(roll))
             , film_(film)
             , parts_(parts)
@@ -190,7 +192,7 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
             if (c.cancel.cancelled()) {
                 return base::makeError(base::ErrorCode::Cancelled, "abgebrochen");
             }
-            auto d = fns_.detect(*img, film);
+            auto d = fns_.detect(*img, film, hint_);
             if (!d) {
                 return std::unexpected(d.error()); // Oberfläche meldet, Zuschnitt bleibt (LF-GEO-05)
             }
@@ -240,17 +242,26 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
                     }
                 }
             }
+            if ((parts_ & Convert) != 0) {
+                entries.push_back(automatic("autoneg.convert", model::ParamSet{}.with("on", true)));
+            }
             c.progress(1, 1);
             // Ergebnis im UI-Thread über den CommandBus eintragen
-            ui_([&bus = bus_, id = f_.id, roll = roll_, entries = std::move(entries)] {
+            ui_([&bus = bus_, id = f_.id, roll = roll_, entries = std::move(entries), report = report_,
+                 quality = d->quality, notes = d->notes] {
                 const std::vector<model::FrameId> target{id};
                 bus.execute(SetAutomaticEntriesCommand(entries), target, roll ? *roll : model::Roll{});
+                if (report) {
+                    report(id, quality, notes);
+                }
             });
             return {};
         }
 
     private:
         model::Frame f_;
+        analysis::FrameHint hint_;
+        Report report_;
         std::shared_ptr<const model::Roll> roll_;
         model::FilmType film_;
         unsigned parts_;
@@ -259,9 +270,9 @@ JobHandle AnalysisService::detectFrame(const model::Frame& f, std::shared_ptr<co
         CommandBus& bus_;
         UiDispatcher ui_;
     };
-    return jobs_.submit(
-        std::make_unique<DetectJob>(f, std::move(roll), film, parts, std::move(current), fns_, bus_, ui_),
-        ports::Priority::Background);
+    return jobs_.submit(std::make_unique<DetectJob>(f, std::move(roll), film, parts, std::move(current),
+                                                    hint_, report_, fns_, bus_, ui_),
+                        ports::Priority::Batch);
 }
 
 JobHandle AnalysisService::measureBase(const model::Frame& f, std::shared_ptr<const model::Roll> roll,

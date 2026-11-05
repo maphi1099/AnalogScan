@@ -111,7 +111,8 @@ TEST(AnalysisServiceTest, U_APP_16_AutomaticsWriteEntries)
             {4, 4, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
             std::vector<float>(48, 0.5F));
     };
-    fns.detect = [](const image::ImageBuffer&, model::FilmType) -> base::Expected<analysis::FrameDetection> {
+    fns.detect = [](const image::ImageBuffer&, model::FilmType,
+                    const analysis::FrameHint&) -> base::Expected<analysis::FrameDetection> {
         analysis::FrameDetection d;
         d.frame = {0.1, 0.12, 0.8, 0.76};
         d.angleDeg = -0.4;
@@ -186,7 +187,8 @@ TEST(AnalysisServiceTest, M10_ResultAfterShutdownIsDropped)
             {4, 4, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
             std::vector<float>(48, 0.5F));
     };
-    fns.detect = [](const image::ImageBuffer&, model::FilmType) -> base::Expected<analysis::FrameDetection> {
+    fns.detect = [](const image::ImageBuffer&, model::FilmType,
+                    const analysis::FrameHint&) -> base::Expected<analysis::FrameDetection> {
         analysis::FrameDetection d;
         d.frame = {0.1, 0.1, 0.8, 0.8};
         return d;
@@ -237,7 +239,8 @@ TEST(AnalysisServiceTest, M10_EachAutomaticWritesOnlyItsPart)
             {32, 32, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
             std::vector<float>(32 * 32 * 3, 0.2F));
     };
-    fns.detect = [](const image::ImageBuffer&, model::FilmType) -> base::Expected<analysis::FrameDetection> {
+    fns.detect = [](const image::ImageBuffer&, model::FilmType,
+                    const analysis::FrameHint&) -> base::Expected<analysis::FrameDetection> {
         analysis::FrameDetection d;
         d.frame = {0.1, 0.1, 0.8, 0.8};
         return d;

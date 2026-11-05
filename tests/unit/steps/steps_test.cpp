@@ -54,7 +54,13 @@ protected:
     }
     static model::StepId stepId_(std::string_view s) { return stepId(s); }
 
+    /// Filmtyp gewählt und „Konvertieren“ gedrückt (K-M10-14): so rechnen die Schritte.
     EditList film(FilmType f) const
+    {
+        return scanOnly(f).with(entry(id::convert, ParamSet{}.with("on", true)));
+    }
+    /// Filmtyp gewählt, aber nicht konvertiert: der Scan bleibt.
+    EditList scanOnly(FilmType f) const
     {
         return EditList{}.with(
             entry(id::filmmode, ParamSet{}.with("type", std::string(FilmModeStep::toString(f)))));
@@ -250,10 +256,7 @@ TEST_F(Steps, U_STP_05_ClipShareOfDensityRange)
     const double clip = 0.005;
     const double lo = 1.5 * (clip / 2.0);
     const double hi = 1.5 * (1.0 - clip / 2.0);
-    // Basis 0,999: der Verlauf ist praktisch schon auf die Basis bezogen (ohne Basis keine
-    // Umkehrung; 1/1/1 wäre neutral und zählte nicht)
     const EditList l = film(FilmType::BwNegative)
-                           .with(entry(id::filmbase, ParamSet{}.with("base", base::Vec3{0.999, 0.999, 0.999})))
                            .with(entry(id::densityrange, ParamSet{}
                                                              .with("dMin", base::Vec3{lo, lo, lo})
                                                              .with("dMax", base::Vec3{hi, hi, hi})
@@ -273,9 +276,8 @@ TEST_F(Steps, U_STP_06_BwMixSelectsChannel)
     const image::ImageBuffer src = testImage();
     for (const auto& [weights, channel] :
          {std::pair{base::Vec3{1, 0, 0}, 0}, std::pair{base::Vec3{0, 1, 0}, 1}}) {
-        const EditList l = film(FilmType::BwNegative)
-                               .with(entry(id::filmbase, ParamSet{}.with("base", base::Vec3{0.999, 0.999, 0.999})))
-                               .with(entry(id::bwmix, ParamSet{}.with("weights", weights)));
+        const EditList l =
+            film(FilmType::BwNegative).with(entry(id::bwmix, ParamSet{}.with("weights", weights)));
         // nur die Mischung prüfen: Abgriff vor der Dichte
         pipeline::RenderProfile p;
         p.mode = RenderMode::Export;
@@ -297,17 +299,20 @@ TEST_F(Steps, U_STP_06_BwMixSelectsChannel)
 
 // K-M10-11 (Fehler des Nutzers: alle Bilder blau ohne Bearbeitung): ein Negativ ohne
 // bekannte Filmbasis wird nicht umgekehrt, es bleibt der Scan; mit Basis wird umgekehrt
-TEST_F(Steps, M10_NegativeWithoutBaseStaysScan)
+TEST_F(Steps, M10_NegativeWithoutConvertStaysScan)
 {
+    // K-M10-14: auch mit gemessener Basis bleibt der Scan, bis „Konvertieren“ gedrückt ist
     const image::ImageBuffer src = testImage();
-    const image::ImageBuffer scan = apply(film(FilmType::ColorNegative), src, FilmType::ColorNegative);
+    const EditList baseOnly =
+        scanOnly(FilmType::ColorNegative)
+            .with(entry(id::filmbase, ParamSet{}.with("base", base::Vec3{0.7, 0.4, 0.3})));
+    const image::ImageBuffer scan = apply(baseOnly, src, FilmType::ColorNegative);
     ASSERT_EQ(scan.host().size(), src.host().size());
     for (std::size_t i = 0; i < src.host().size(); ++i) {
         ASSERT_NEAR(scan.host()[i], src.host()[i], 1e-6);
     }
-    const EditList withBase =
-        film(FilmType::ColorNegative).with(entry(id::filmbase, ParamSet{}.with("base", base::Vec3{0.7, 0.4, 0.3})));
-    const image::ImageBuffer converted = apply(withBase, src, FilmType::ColorNegative);
+    const EditList converting = baseOnly.with(entry(id::convert, ParamSet{}.with("on", true)));
+    const image::ImageBuffer converted = apply(converting, src, FilmType::ColorNegative);
     double diff = 0.0;
     for (std::size_t i = 0; i < src.host().size(); ++i) {
         diff = std::max(diff, static_cast<double>(std::abs(converted.host()[i] - src.host()[i])));
