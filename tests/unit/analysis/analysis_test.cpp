@@ -171,6 +171,29 @@ TEST_F(Analysis, M10_SkewUpToConfiguredLimit)
     EXPECT_FALSE(limited.has_value() && std::abs(*limited + 7.0) < 0.5);
 }
 
+// K-M10-16: Film ohne Perforation (Rollfilm, Planfilm) – Erkennung nur über Belichtung und
+// Kanten, auch schräg und mit Formathinweis
+TEST_F(Analysis, M10_FrameWithoutPerforation)
+{
+    for (const double angle : {0.0, 4.0}) {
+        SCOPED_TRACE(angle);
+        auto s = spec();
+        s.perforation = false;
+        s.angleDeg = angle;
+        const t::SyntheticScan scan = t::makeNegative(s);
+        const auto d = detector.detect(scan.scan, FilmType::ColorNegative);
+        ASSERT_TRUE(d.has_value()) << d.error().message;
+        EXPECT_NEAR(d->angleDeg, -angle, 0.15);
+        EXPECT_LE(worstEdge(d->frame, scan.truth.frame, s.width, s.height), 2.0);
+        // Hinweis 6×6: weicht stark ab (Bild 2:1) – Hinweis bleibt Hinweis, Bewertung nennt es
+        analysis::FrameHint square;
+        square.aspect = 1.0;
+        const auto h = detector.detect(scan.scan, FilmType::ColorNegative, square);
+        ASSERT_TRUE(h.has_value());
+        EXPECT_FALSE(h->notes.empty());
+    }
+}
+
 // LF-GEO-05
 TEST_F(Analysis, U_ANA_04_NoFrameRecognizable)
 {
