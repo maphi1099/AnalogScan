@@ -68,6 +68,20 @@ double maxRel(const ImageBuffer& ref, const ImageBuffer& got)
     return d;
 }
 
+/// Mittlere absolute Abweichung (für Kernels, die seit D-21 OpenCV rechnet).
+double meanAbs(const ImageBuffer& ref, const ImageBuffer& got)
+{
+    EXPECT_EQ(ref.spec(), got.spec());
+    const auto a = ref.host();
+    const auto b = got.host();
+    const std::size_t n = std::min(a.size(), b.size());
+    double sum = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        sum += std::abs(static_cast<double>(a[i]) - b[i]);
+    }
+    return n > 0 ? sum / static_cast<double>(n) : 0.0;
+}
+
 bool bitEqual(const ImageBuffer& a, const ImageBuffer& b)
 {
     return a.spec() == b.spec() && std::ranges::equal(a.hostBytes(), b.hostBytes());
@@ -248,12 +262,19 @@ TEST(CpuBackend, U_BCK_03_WarpAndResampleMatchReference)
         const image::WarpPlan plan{rot, {w, h}, f};
         const auto got = cpu.warp(ctx, star, plan);
         ASSERT_TRUE(got);
-        EXPECT_LE(maxRel(reference::warp(star, plan), *got), 1e-5);
+        // Seit D-21 rechnet OpenCV (warpAffine; Lanczos-4 statt -3, außer Nächster Nachbar): exakt nur
+        // noch gegen OpenCV (Komponententest), hier nahe an der eigenen Referenz im Mittel
+        const double d = meanAbs(reference::warp(star, plan), *got);
+        std::printf("warp Filter %d: mittlere Abweichung %.2e\n", static_cast<int>(f), d);
+        EXPECT_LE(d, f == image::Filter::Nearest ? 1e-7 : 3e-3); // gemessen bis 2,6e-3 (Bikubisch: a = −0,75)
     }
     const base::Size small{static_cast<int>(std::lround(w * 0.37)), static_cast<int>(std::lround(h * 0.37))};
     const auto down = cpu.resample(ctx, star, small);
     ASSERT_TRUE(down);
-    EXPECT_LE(maxRel(reference::resample(star, small), *down), 1e-5);
+    // Verkleinern seit D-21 mit cv::resize INTER_AREA (Flächenmittel statt Lanczos-3)
+    const double dr = meanAbs(reference::resample(star, small), *down);
+    std::printf("resample: mittlere Abweichung %.2e\n", dr);
+    EXPECT_LE(dr, 1.5e-2); // gemessen 1,3e-2: Flächenmittel ist weicher (Siemensstern)
 
     // 90°-Drehung ist verlustfrei (exakte Achsenabbildung)
     const image::WarpPlan quarter{
@@ -301,7 +322,10 @@ TEST(CpuBackend, U_BCK_04_NeighbourhoodKernelsMatchReference)
     EXPECT_LE(maxRel(reference::localTone(gray, 0.5F, 0.3F, 8.0F),
                      cpu.localTone(ctx, gray, 0.5F, 0.3F, 8.0F).value()),
               1e-5);
-    EXPECT_LE(maxRel(reference::denoise(rgb, 0.5F), cpu.denoise(ctx, rgb, 0.5F).value()), 1e-5);
+    // Rauschminderung „schnell“ seit D-21 mit cv::bilateralFilter (Farbabstand L1 statt L2)
+    const double dd = meanAbs(reference::denoise(rgb, 0.5F), cpu.denoise(ctx, rgb, 0.5F, ports::DenoiseMethod::Fast).value());
+    std::printf("denoise: mittlere Abweichung %.2e\n", dd);
+    EXPECT_LE(dd, 1e-2); // gemessen 7,4e-3 auf Zufallsrauschen
     const model::SpotList spots{{{0.3, 0.4}, {0.1, 0.0}, 0.05},
                                 {{0.32, 0.42}, {-0.1, 0.05}, 0.04}, // überlappt die erste Stelle
                                 {{0.98, 0.02}, {-0.2, 0.1}, 0.06}}; // am Bildrand

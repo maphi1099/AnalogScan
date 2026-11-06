@@ -590,6 +590,24 @@ AdjustPanel::AdjustPanel(UiController& ui, QWidget* parent)
             }
         });
     }
+    // Verfahren der Rauschminderung (Wahl des Anwenders): schnell oder besser und langsam
+    auto* denoiseRow = new QHBoxLayout;
+    auto* denoiseLabel = new QLabel(tr("Rauschminderung"), this);
+    denoiseLabel->setMinimumWidth(110);
+    denoiseMethod_ = new QComboBox(this);
+    denoiseMethod_->setObjectName(QStringLiteral("denoiseMethod"));
+    denoiseMethod_->addItem(tr("Schnell"));
+    denoiseMethod_->addItem(tr("Stark (besser, langsam)"));
+    denoiseMethod_->setItemData(0, tr("Bilateraler Filter: schnell, ohne Verlust an Tonwertauflösung"), Qt::ToolTipRole);
+    const QString strongTip = tr(
+        "Non-Local Means: entfernt Korn deutlich besser. Rechnet intern mit 8 Bit: in weichen Verläufen können feine Stufen entstehen; deutlich langsamer (Export eines großen Scans einige Sekunden mehr).");
+    denoiseMethod_->setItemData(1, strongTip, Qt::ToolTipRole);
+    denoiseMethod_->setToolTip(strongTip);
+    denoiseRow->addWidget(denoiseLabel);
+    denoiseRow->addWidget(denoiseMethod_, 1);
+    layout->addLayout(denoiseRow);
+    connect(denoiseMethod_, &QComboBox::activated, this,
+            [this](int i) { commit(withParam(std::string(id::denoise), std::string(key::method), i)); });
     picker_ = new QPushButton(tr("Weißabgleich-Pipette"), this);
     picker_->setObjectName(QStringLiteral("whitePicker"));
     picker_->setToolTip(tr("Neutrale Stelle im Bild anklicken"));
@@ -632,6 +650,12 @@ void AdjustPanel::bindList(const model::EditList& l)
     for (ParamSlider* s : sliders_) {
         s->setValue(paramOr(l, s->step(), s->param(), s->neutral()));
     }
+    int method = 0;
+    if (const model::EditEntry* e = l.get(model::StepId(std::string(id::denoise)))) {
+        method = e->params.get<int>(key::method).value_or(0);
+    }
+    const QSignalBlocker block(denoiseMethod_);
+    denoiseMethod_->setCurrentIndex(std::clamp(method, 0, 1));
 }
 
 // --- NumberSlider ------------------------------------------------------------------------------

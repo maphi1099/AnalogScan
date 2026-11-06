@@ -4,7 +4,7 @@
 //
 //   autoneg_cvcompare <scan.raw> <ausgabeordner>
 //
-// Schreibt je Funktion Ausschnitte (eigen | OpenCV | 10-fache Differenz) als PNG.
+// Schreibt je Funktion Ausschnitte (eigen | OpenCV | 10-fache Differenz) als PPM (OpenCV hier ohne PNG).
 
 #include "adapters/libraw/libraw_decoder.hpp"
 #include "backends/cpu/cpu_backend.hpp"
@@ -146,7 +146,7 @@ int main(int argc, char** argv)
     cv::Mat img = full(mid).clone();
     double mx = 0;
     cv::minMaxLoc(img.reshape(1), nullptr, &mx);
-    img = 1.0 - img / mx;
+    img = cv::Scalar::all(1.0) - img / mx;
     cv::pow(cv::max(img, 0.0), 2.0, img); // etwas Kontrast, Werte 0 … 1 linear
     const image::ImageBuffer in = fromMat(img);
     backend::cpu::CpuBackend cpu;
@@ -162,7 +162,7 @@ int main(int argc, char** argv)
         const double tOwn = timeMs([&] { own = *cpu.gaussian(ctx, in, sigma); });
         const double tCv = timeMs([&] { cv::GaussianBlur(img, ref, cv::Size(0, 0), sigma, sigma, cv::BORDER_REPLICATE); });
         report("GaussianBlur", compare(toMat(own), ref), tOwn, tCv);
-        saveCrop(outDir / "gaussian.png", toMat(own), ref, crop);
+        saveCrop(outDir / "gaussian.ppm", toMat(own), ref, crop);
     }
     // Schärfen: Unschärfe + Maske |in − blur| > t
     {
@@ -181,7 +181,7 @@ int main(int argc, char** argv)
             sharp.copyTo(ref, mask);
         });
         report("Unscharf maskieren", compare(toMat(own), ref), tOwn, tCv);
-        saveCrop(outDir / "unsharp.png", toMat(own), ref, crop);
+        saveCrop(outDir / "unsharp.ppm", toMat(own), ref, crop);
     }
     // Rauschminderung: bilateral (eigen L2-Farbabstand) gegen cv::bilateralFilter
     {
@@ -189,10 +189,10 @@ int main(int argc, char** argv)
         const float sigmaR = 0.02F + 0.2F * strength;
         image::ImageBuffer own;
         cv::Mat ref;
-        const double tOwn = timeMs([&] { own = *cpu.denoise(ctx, in, strength); });
+        const double tOwn = timeMs([&] { own = *cpu.denoise(ctx, in, strength, ports::DenoiseMethod::Fast); });
         const double tCv = timeMs([&] { cv::bilateralFilter(img, ref, 5, sigmaR, 1.5, cv::BORDER_REPLICATE); });
         report("bilateralFilter", compare(toMat(own), ref), tOwn, tCv);
-        saveCrop(outDir / "bilateral.png", toMat(own), ref, crop);
+        saveCrop(outDir / "bilateral.ppm", toMat(own), ref, crop);
         // „Stark“: Non-Local Means, nur 8 Bit
         cv::Mat nlm;
         const double tNlm = timeMs([&] {
@@ -203,7 +203,7 @@ int main(int argc, char** argv)
             d.convertTo(nlm, CV_32FC3, 1.0 / 255.0);
         });
         report("fastNlMeans (8 Bit)", compare(toMat(own), nlm), tOwn, tNlm);
-        saveCrop(outDir / "nlmeans.png", toMat(own), nlm, crop);
+        saveCrop(outDir / "nlmeans.ppm", toMat(own), nlm, crop);
         // Verlust allein durch 8 Bit (ohne Filter)
         cv::Mat q;
         img.convertTo(q, CV_8UC3, 255.0);
@@ -249,7 +249,7 @@ int main(int argc, char** argv)
             }
         });
         report("Guided Filter (box)", compare(toMat(own), ref), tOwn, tCv);
-        saveCrop(outDir / "guided.png", toMat(own), ref, crop);
+        saveCrop(outDir / "guided.ppm", toMat(own), ref, crop);
     }
     // Feindrehung 1,5°: Lanczos-3 gegen warpAffine Lanczos-4
     {
@@ -271,7 +271,7 @@ int main(int argc, char** argv)
         });
         const cv::Rect inner(100, 100, img.cols - 200, img.rows - 200);
         report("warpAffine Lanczos4", compare(toMat(own)(inner), ref(inner)), tOwn, tCv);
-        saveCrop(outDir / "warp.png", toMat(own), ref, crop);
+        saveCrop(outDir / "warp.ppm", toMat(own), ref, crop);
     }
     // Verkleinern auf 1/5: Lanczos-3 mit Tiefpass gegen INTER_AREA bzw. INTER_LANCZOS4
     {
@@ -284,8 +284,8 @@ int main(int argc, char** argv)
         report("resize INTER_AREA", compare(toMat(own), area), tOwn, tArea);
         report("resize LANCZOS4", compare(toMat(own), lz), tOwn, tLz);
         const cv::Rect small(200, 150, 150, 100);
-        saveCrop(outDir / "resize_area.png", toMat(own), area, small);
-        saveCrop(outDir / "resize_lanczos4.png", toMat(own), lz, small);
+        saveCrop(outDir / "resize_area.ppm", toMat(own), area, small);
+        saveCrop(outDir / "resize_lanczos4.ppm", toMat(own), lz, small);
     }
     std::printf("\nBilder: %s\n", outDir.string().c_str());
     return 0;

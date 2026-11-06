@@ -527,6 +527,25 @@ TEST_F(E2E, M10_FilmProfileSlidersAndSave)
     EXPECT_EQ(conv->currentText(), QStringLiteral("Portra 160")); // zuletzt gewählt
 }
 
+// LF-EDT-11 (D-21): Rauschminderung wählbar schnell oder stark; „stark“ mit Hinweis auf 8 Bit
+TEST_F(E2E, M10_DenoiseMethodChoice)
+{
+    start(1);
+    auto* box = window->findChild<QComboBox*>(QStringLiteral("denoiseMethod"));
+    ASSERT_NE(box, nullptr);
+    EXPECT_EQ(box->currentIndex(), 0);
+    EXPECT_TRUE(box->itemData(1, Qt::ToolTipRole).toString().contains(QStringLiteral("8 Bit")));
+    box->setCurrentIndex(1);
+    Q_EMIT box->activated(1);
+    ASSERT_NE(entry("autoneg.denoise"), nullptr);
+    EXPECT_EQ(entry("autoneg.denoise")->params.get<int>("method").value_or(0), 1);
+    const auto before = window->previewsShown();
+    auto* strength = window->findChild<QSlider*>(QStringLiteral("autoneg.denoise.strength"));
+    ASSERT_NE(strength, nullptr);
+    strength->triggerAction(QAbstractSlider::SliderPageStepAdd);
+    EXPECT_TRUE(waitFor([&] { return window->previewsShown() > before; }, 30000)); // Vorschau mit NLM
+}
+
 // E-45, E-11: LF-UI-04, LF-KON-08
 TEST_F(E2E, E_45_ShortcutsTriggerFunctions)
 {

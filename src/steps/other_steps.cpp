@@ -353,18 +353,20 @@ base::Expected<image::ImageBuffer> ShadowsHighlightsStep::process(pipeline::Exec
 
 DenoiseStep::DenoiseStep()
     : DescribedRegion(describe(id::denoise, rank::denoise, "Rauschminderung", Phase::Output,
-                               {doubleParam(key::strength, 0.0, 0.0, 1.0, "")}))
+                               {doubleParam(key::strength, 0.0, 0.0, 1.0, ""), intParam(key::method, 0, 0, 1)}))
 {}
 
-int DenoiseStep::halo(const model::ParamSet& /*p*/, double /*scale*/, base::Size /*image*/) const
+int DenoiseStep::halo(const model::ParamSet& p, double /*scale*/, base::Size /*image*/) const
 {
-    return 2; // bilateral 5 × 5
+    // schnell: bilateral 5 × 5; stark: Suchfenster 21 × 21 plus Vergleichsfeld 7 × 7
+    return param(p, key::method, 0) == 1 ? 13 : 2;
 }
 
 base::Expected<image::ImageBuffer>
 DenoiseStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, const model::ParamSet& p) const
 {
-    return x.backend.denoise(x.kernel(), in, static_cast<float>(param(p, key::strength, 0.0)));
+    return x.backend.denoise(x.kernel(), in, static_cast<float>(param(p, key::strength, 0.0)),
+                             param(p, key::method, 0) == 1 ? ports::DenoiseMethod::Strong : ports::DenoiseMethod::Fast);
 }
 
 SharpenStep::SharpenStep()

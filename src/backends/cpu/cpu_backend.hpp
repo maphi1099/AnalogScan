@@ -63,7 +63,7 @@ public:
     Result gaussian(Ctx c, In in, float sigma) override;
     Result localTone(Ctx c, In in, float s, float h, float r) override;
     Result unsharp(Ctx c, In in, float a, float r, float t) override;
-    Result denoise(Ctx c, In in, float strength) override;
+    Result denoise(Ctx c, In in, float strength, ports::DenoiseMethod m) override;
     Result inpaint(Ctx c, In in, const model::SpotList& spots) override;
     base::Expected<image::Histogram> histogram(Ctx c, In in, int bins) override;
     base::Expected<image::ImageBuffer> colorTransform(Ctx c, In in,
@@ -79,6 +79,8 @@ public:
     static void resetTargetForTest();
 
 private:
+    Result warpOpenCv(Ctx c, In in, const image::WarpPlan& plan);
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

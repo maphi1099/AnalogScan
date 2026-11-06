@@ -278,7 +278,8 @@ inline std::unique_ptr<pipeline::StepRegistry> standardRegistry()
         descriptor("denoise", rank::denoise, {dbl("strength", 0)}),
         [](const auto& /*p*/, double /*s*/) { return 2; },
         [](ExecContext& x, const image::ImageBuffer& in, const auto& p) {
-            return x.backend.denoise(x.kernel(), in, static_cast<float>(paramOr(p, "strength", 0)));
+            return x.backend.denoise(x.kernel(), in, static_cast<float>(paramOr(p, "strength", 0)),
+                                     ports::DenoiseMethod::Fast);
         }));
     add(std::make_unique<TestRegion>(
         descriptor("sharpen", rank::sharpen, {dbl("amount", 0), dbl("radius", 1.0)}),

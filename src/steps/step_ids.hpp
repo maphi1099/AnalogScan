@@ -59,6 +59,7 @@ inline constexpr std::string_view grade = "grade";
 inline constexpr std::string_view highlights = "highlights";
 inline constexpr std::string_view inset = "inset";
 inline constexpr std::string_view level = "level";
+inline constexpr std::string_view method = "method";
 inline constexpr std::string_view on = "on";
 inline constexpr std::string_view pivot = "pivot";
 inline constexpr std::string_view profile = "profile";

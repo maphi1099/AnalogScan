@@ -81,7 +81,7 @@ ReferenceBackend::Result ReferenceBackend::unsharp(Ctx c, In in, float a, float 
     return begin(c, "unsharp") ? Result(reference::unsharp(in, a, r, t)) : cancelled();
 }
 
-ReferenceBackend::Result ReferenceBackend::denoise(Ctx c, In in, float strength)
+ReferenceBackend::Result ReferenceBackend::denoise(Ctx c, In in, float strength, ports::DenoiseMethod /*m*/)
 {
     return begin(c, "denoise") ? Result(reference::denoise(in, strength)) : cancelled();
 }

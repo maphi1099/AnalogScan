@@ -42,7 +42,7 @@
     "adapter_qtprint": { "layer": "adapter", "deps": ["base", "model", "image", "ports", "layout"], "foreign": ["qt", "platform"], "externalTargets": ["^Qt6::"] },
     "adapter_spdlog":  { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["spdlog", "platform"], "externalTargets": ["^spdlog::", "^fmt::"] },
     "adapter_tbb":     { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["tbb", "platform"], "externalTargets": ["^TBB::"] },
-    "backend_cpu":     { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["tbb", "simd", "platform"], "externalTargets": ["^TBB::", "^hwy::", "^Halide::"] },
+    "backend_cpu":     { "layer": "adapter", "deps": ["base", "model", "image", "ports"], "foreign": ["tbb", "simd", "opencv", "platform"], "externalTargets": ["^TBB::", "^hwy::", "^Halide::", "^opencv_"] },
 
     "autoneg":         { "layer": "program", "deps": ["*"] }
   },

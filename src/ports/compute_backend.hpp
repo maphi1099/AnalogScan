@@ -25,6 +25,13 @@ struct KernelContext
     image::CancelToken cancel;
 };
 
+/// Verfahren der Rauschminderung (Wahl des Anwenders).
+enum class DenoiseMethod
+{
+    Fast,  ///< schnell: bilateraler Filter
+    Strong ///< besser, langsam: Non-Local Means
+};
+
 /// Rechen-Backend (NF-ARC-05). Datenparallel über alle Kerne (NF-PERF-05).
 /// Implementierungen: CpuBackend (Referenz); GPU ab Version 1.1 (D-03).
 ///
@@ -61,8 +68,10 @@ public:
     /// Unscharfmaskierung: a Stärke, r Radius in Pixeln, t Schwellwert.
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     unsharp(const KernelContext& c, const image::ImageBuffer& in, float a, float r, float t) = 0;
+    /// Rauschminderung: Fast = bilateraler Filter (Gleitkomma), Strong = Non-Local Means
+    /// (deutlich besser gegen Korn, intern 8 Bit, langsam). strength 0 … 1.
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
-    denoise(const KernelContext& c, const image::ImageBuffer& in, float strength) = 0;
+    denoise(const KernelContext& c, const image::ImageBuffer& in, float strength, DenoiseMethod m) = 0;
     /// Retusche; Koordinaten der Stellen normiert auf das Eingabebild.
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     inpaint(const KernelContext& c, const image::ImageBuffer& in, const model::SpotList& spots) = 0;

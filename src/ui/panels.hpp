@@ -191,6 +191,7 @@ private:
     std::vector<ParamSlider*> sliders_;
     QLabel* hint_ = nullptr;
     QPushButton* picker_ = nullptr;
+    QComboBox* denoiseMethod_ = nullptr;
 };
 
 /// Schieberegler mit Zahlenfeld für einen frei skalierten Wert (nicht an ein Parameterschema
