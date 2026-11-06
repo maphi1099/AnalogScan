@@ -10,6 +10,7 @@
 #include "model/values.hpp"
 #include "ports/color.hpp"
 
+#include <functional>
 #include <string>
 
 namespace autoneg::ports {
@@ -77,6 +78,14 @@ public:
     /// floor(clamp(x, 0, 1) · (2^bits − 1) + 0,5); NaN wird 0. Ergänzung K-M10-03.
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     quantize(const KernelContext& c, const image::ImageBuffer& in, int bits) = 0;
+    /// fn(0) … fn(n − 1), z. B. Kacheln (Architektur 6, Ebene 2); fn muss threadsicher sein, die
+    /// Reihenfolge ist offen. Standard: nacheinander; das CpuBackend verteilt auf die Kerne.
+    virtual void parallelFor(int n, const std::function<void(int)>& fn)
+    {
+        for (int i = 0; i < n; ++i) {
+            fn(i);
+        }
+    }
 };
 
 } // namespace autoneg::ports

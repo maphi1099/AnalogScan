@@ -938,4 +938,15 @@ void CpuBackend::resetTargetForTest()
     detail::resetTargets();
 }
 
+void CpuBackend::parallelFor(int n, const std::function<void(int)>& fn)
+{
+    impl_->run([&] {
+        tbb::parallel_for(tbb::blocked_range<int>(0, n, 1), [&](const tbb::blocked_range<int>& r) {
+            for (int i = r.begin(); i < r.end(); ++i) {
+                fn(i);
+            }
+        });
+    });
+}
+
 } // namespace autoneg::backend::cpu

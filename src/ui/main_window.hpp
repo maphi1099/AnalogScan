@@ -276,6 +276,7 @@ private:
     std::optional<model::FrameId> showFrameAfterDetect_;
     bool pickWhite_ = false;                         ///< Weißabgleich-Pipette wartet auf einen Klick ins Bild
     QImage shown_;                                   ///< zuletzt gezeigte Vorschau (für die Pipette)
+    std::optional<QRectF> detail_; ///< Detailansicht: angeforderter Ausschnitt (normiert)
     std::map<model::FrameId, QString> frameReports_; ///< Bewertung der Bildfelderkennung
     QByteArray defaultLayout_;
     std::uint64_t lastSeq_ = 0;

@@ -201,16 +201,15 @@ base::Expected<image::ImageBuffer> PipelineExecutor::runTiled(const CompiledPipe
     const image::ImageSpec areaSpec{area.w, area.h, 1, image::PixelFormat::F32,
                                     image::ColorSpace::WorkingLinear};
     const image::TileGrid grid = tiles_.plan(areaSpec, 0);
-    std::shared_ptr<image::HostStorage> storage;
-    image::ImageSpec outSpec;
-    ExecContext x{backend_, r.cancel, scale, std::nullopt, {}};
-    std::vector<image::Roi> rois(n + 1);
+    const auto& tiles = grid.tiles();
 
-    for (const image::Tile& t : grid.tiles()) {
+    // Eine Kachel durch alle Stufen; eigener Kontext je Kachel, Stufen sind zustandslos
+    const auto runTile = [&](const image::Tile& t) -> base::Expected<std::pair<image::Roi, image::ImageBuffer>> {
         if (r.cancel.cancelled()) {
-            return cancelled();
+            return std::unexpected(cancelled().error());
         }
         // benötigte Ausschnitte rückwärts durch alle Stufen
+        std::vector<image::Roi> rois(n + 1);
         rois[n] = image::Roi{t.core.x + area.x, t.core.y + area.y, t.core.w, t.core.h};
         for (std::size_t i = n; i-- > 0;) {
             rois[i] = cp.stages[i]->requiredInput(rois[i + 1], sizes[i]);
@@ -219,14 +218,15 @@ base::Expected<image::ImageBuffer> PipelineExecutor::runTiled(const CompiledPipe
                        ? base::Expected<image::ImageBuffer>(src)
                        : src.copyRegion(rois[0]);
         if (!cur) {
-            return cur;
+            return std::unexpected(cur.error());
         }
+        ExecContext x{backend_, r.cancel, scale, std::nullopt, {}};
         for (std::size_t i = 0; i < n; ++i) {
             x.tile = image::Tile{rois[i + 1], rois[i]};
             x.imageSize = sizes[i];
             auto out = cp.stages[i]->runRegion(x, *cur, rois[i], rois[i + 1]);
             if (!out) {
-                return out;
+                return std::unexpected(out.error());
             }
             if (auto ok = checkF32(*out, i); !ok) {
                 return std::unexpected(ok.error());
@@ -237,23 +237,53 @@ base::Expected<image::ImageBuffer> PipelineExecutor::runTiled(const CompiledPipe
             }
             cur = std::move(out);
         }
-        // Kachel in das Ergebnis kopieren
-        const image::ImageSpec& ts = cur->spec();
-        if (!storage) {
-            outSpec = ts;
-            outSpec.width = area.w;
-            outSpec.height = area.h;
-            storage = std::make_shared<image::HostStorage>(outSpec.sizeBytes());
-        }
-        const auto from = cur->hostBytes();
+        return std::pair{rois[n], std::move(*cur)};
+    };
+
+    // Erste Kachel allein: sie legt Kanäle und Format des Ergebnisses fest
+    auto first = runTile(tiles.front());
+    if (!first) {
+        return std::unexpected(first.error());
+    }
+    image::ImageSpec outSpec = first->second.spec();
+    outSpec.width = area.w;
+    outSpec.height = area.h;
+    auto storage = std::make_shared<image::HostStorage>(outSpec.sizeBytes());
+    const std::size_t pixelBytes =
+        static_cast<std::size_t>(outSpec.channels) * image::bytesPerSample(outSpec.format);
+    // Kachel in das Ergebnis kopieren; die Kacheln überlappen nicht, daher ohne Sperre
+    const auto place = [&](const image::Roi& at, const image::ImageBuffer& tile) {
+        const image::ImageSpec& ts = tile.spec();
+        const auto from = tile.hostBytes();
         const auto to = storage->bytes();
-        const std::size_t pixelBytes =
-            static_cast<std::size_t>(ts.channels) * image::bytesPerSample(ts.format);
         for (int y = 0; y < ts.height; ++y) {
-            const std::size_t dst = static_cast<std::size_t>(rois[n].y - area.y + y) * outSpec.rowBytes() +
-                                    static_cast<std::size_t>(rois[n].x - area.x) * pixelBytes;
+            const std::size_t dst = static_cast<std::size_t>(at.y - area.y + y) * outSpec.rowBytes() +
+                                    static_cast<std::size_t>(at.x - area.x) * pixelBytes;
             std::ranges::copy(from.subspan(static_cast<std::size_t>(y) * ts.rowBytes(), ts.rowBytes()),
                               to.subspan(dst).begin());
+        }
+    };
+    place(first->first, first->second);
+
+    // Übrige Kacheln parallel (Architektur 6, Ebene 2); Fehler nach Kachelnummer, damit das
+    // Ergebnis nicht von der Ausführungsreihenfolge abhängt
+    std::vector<std::optional<base::Error>> errors(tiles.size());
+    backend_.parallelFor(static_cast<int>(tiles.size()) - 1, [&](int k) {
+        const auto i = static_cast<std::size_t>(k) + 1;
+        auto done = runTile(tiles[i]);
+        if (!done) {
+            errors[i] = done.error();
+            return;
+        }
+        if (done->second.spec().channels != outSpec.channels) {
+            errors[i] = base::Error{base::ErrorCode::Internal, "Kacheln mit unterschiedlicher Kanalzahl"};
+            return;
+        }
+        place(done->first, done->second);
+    });
+    for (const auto& e : errors) {
+        if (e) {
+            return std::unexpected(*e);
         }
     }
     return image::ImageBuffer::wrap(outSpec, std::move(storage));

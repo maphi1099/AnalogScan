@@ -58,6 +58,7 @@ public:
     Result runPixel(Ctx c, const image::PixelProgram& p, In in) override;
     Result warp(Ctx c, In in, const image::WarpPlan& w) override;
     Result resample(Ctx c, In in, base::Size s) override;
+    void parallelFor(int n, const std::function<void(int)>& fn) override;
     Result multiply(Ctx c, In in, In gain) override;
     Result gaussian(Ctx c, In in, float sigma) override;
     Result localTone(Ctx c, In in, float s, float h, float r) override;

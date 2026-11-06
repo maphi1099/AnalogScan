@@ -569,6 +569,25 @@ TEST_F(E2E, E_43_ZoomLevels)
     EXPECT_NEAR(window->canvas()->mapping().imageRect.width() * dpr, 480.0, 1.0);
 }
 
+// Reflexion: die Detailansicht rechnete das ganze Bild (aus der halben Auflösung). Bei 100 % und
+// 200 % rechnet die Pipeline nur den sichtbaren Ausschnitt in voller Auflösung, die Arbeitsfläche
+// zeigt ihn an seiner Stelle (200 %: die Brücke vergrößert auf das Doppelte).
+TEST_F(E2E, M10_DetailRendersOnlyVisiblePart)
+{
+    start(1);
+    action("zoom200")->trigger(); // Quelle 480 × 320 → 960 × 640, breiter als die Arbeitsfläche
+    const auto before = window->previewsShown();
+    window->canvas()->setCenter({0.25, 0.5});
+    ASSERT_TRUE(waitFor([&] { return window->previewsShown() > before; }));
+    const auto matches = [this] {
+        const QRectF vis = window->canvas()->visibleNorm();
+        return vis.width() < 1.0 && std::abs(window->canvas()->image().width() - 2.0 * vis.width() * 480.0) <= 4.0;
+    };
+    ASSERT_TRUE(waitFor(matches)) << window->canvas()->image().width() << " "
+                                  << window->canvas()->visibleNorm().width();
+    EXPECT_LT(window->canvas()->image().width(), 960);
+}
+
 // E-45, E-11: LF-UI-04, LF-KON-08
 TEST_F(E2E, E_45_ShortcutsTriggerFunctions)
 {
