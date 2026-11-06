@@ -130,6 +130,7 @@ public:
         int memoryMb = 0;            ///< Budget für Zwischenbilder; 0 = unbegrenzt
         int ramMb = 0;               ///< Arbeitsspeicher des Rechners (Vorschlag: die Hälfte)
         std::vector<Shortcut> shortcuts;
+        int panButton = Qt::LeftButton; ///< Maustaste zum Verschieben (Qt::MouseButton)
     };
 
     explicit SettingsDialog(QWidget* parent = nullptr);
@@ -141,6 +142,7 @@ private:
     QSpinBox* threads_ = nullptr;
     QSpinBox* memory_ = nullptr;
     QCheckBox* unlimited_ = nullptr;
+    QComboBox* panButton_ = nullptr;
     int ramMb_ = 0;
     std::vector<Shortcut> shortcuts_;
     std::vector<QKeySequenceEdit*> keys_;

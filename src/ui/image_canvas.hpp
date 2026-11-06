@@ -15,9 +15,10 @@ namespace autoneg::ui {
 /// Arbeitsfläche (Architektur 9.14, LF-UI-02): zeigt die fertige Vorschau als Textur.
 ///
 /// Die Vorschau kommt aus dem Render-Thread bereits in Monitorgröße und -farbraum; die
-/// Fläche kopiert sie nur in ihr Ziel (ohne Shader, ohne Rechnen im UI-Thread). Zoom-Stufen:
-/// Einpassen, 100 %, 200 % mit verschiebbarem Ausschnitt; jede Änderung meldet viewChanged,
-/// worauf das Hauptfenster eine passende Vorschau bzw. Detailansicht anfordert.
+/// Fläche kopiert sie nur in ihr Ziel (ohne Shader, ohne Rechnen im UI-Thread). Zoom stufenlos
+/// von Einpassen bis 800 % (Strg+Mausrad um die Stelle unter der Maus), Ausschnitt mit der Maus
+/// verschiebbar; jede Änderung meldet viewChanged, worauf das Hauptfenster eine passende
+/// Vorschau bzw. Detailansicht anfordert.
 /// Werkzeuge zeichnen auf einer durchsichtigen Ebene darüber.
 /// Ohne GPU-Schnittstelle (Tests, offscreen) läuft QRhi im Null-Backend.
 class ImageCanvas final : public QRhiWidget
@@ -29,8 +30,11 @@ public:
     {
         Fit,
         Actual, ///< 100 %
-        Double  ///< 200 %
+        Double, ///< 200 %
+        Custom  ///< jeder andere Faktor
     };
+    static constexpr double kMaxScale = 8.0;  ///< 800 %
+    static constexpr double kMinScale = 0.02; ///< 2 %
 
     explicit ImageCanvas(QWidget* parent = nullptr);
     ~ImageCanvas() override;
@@ -46,7 +50,18 @@ public:
     [[nodiscard]] const QImage& image() const { return image_; }
 
     void setZoom(Zoom z);
-    [[nodiscard]] Zoom zoom() const { return zoom_; }
+    [[nodiscard]] Zoom zoom() const;
+    /// Vergrößerung: Gerätepixel je Quellpixel (1 = 100 %); bei Einpassen der passende Wert.
+    [[nodiscard]] double scale() const;
+    /// Vergrößerung setzen (2 … 800 %); anchor (Widget-Pixel) bleibt an derselben Bildstelle.
+    /// Einpassen nur über setZoom(Zoom::Fit).
+    void setScale(double s, std::optional<QPointF> anchor = std::nullopt);
+    void zoomBy(double factor, std::optional<QPointF> anchor = std::nullopt) { setScale(scale() * factor, anchor); }
+    [[nodiscard]] double fitScale() const;
+    /// Maustaste zum Verschieben (Einstellung); ist ein Werkzeug aktiv und die Taste links,
+    /// verschiebt die mittlere Taste.
+    void setPanButton(Qt::MouseButton b) { panButton_ = b; }
+    [[nodiscard]] Qt::MouseButton panButton() const { return panButton_; }
     /// Mittelpunkt des sichtbaren Ausschnitts (normiert).
     [[nodiscard]] QPointF center() const { return center_; }
     void setCenter(QPointF c);
@@ -60,6 +75,7 @@ public:
 
 Q_SIGNALS:
     void viewChanged();
+    void zoomChanged(); ///< Vergrößerung geändert (Anzeige in der Statusleiste)
     void picked(QPointF norm); ///< Klick ohne Werkzeug (Pipette)
 
 protected:
@@ -73,6 +89,8 @@ private:
     friend class Overlay;
     void overlayPaint(QPainter& p);
     bool overlayMouse(QMouseEvent* e);
+    bool overlayWheel(QWheelEvent* e);
+    [[nodiscard]] Qt::MouseButton effectivePanButton() const;
 
     Overlay* overlay_ = nullptr;
     QImage image_;
@@ -80,12 +98,15 @@ private:
     bool showClipping_ = false;
     QRectF drawRect_;
     QSize source_{3, 2};
-    Zoom zoom_ = Zoom::Fit;
+    bool fit_ = true;
+    double scale_ = 1.0; ///< ohne Einpassen: Gerätepixel je Quellpixel
     QPointF center_{0.5, 0.5};
     ICanvasTool* tool_ = nullptr;
     std::unique_ptr<QRhiTexture> texture_;
     bool dirty_ = true;
+    Qt::MouseButton panButton_ = Qt::LeftButton;
     std::optional<QPointF> panFrom_;
+    Qt::MouseButton panWith_ = Qt::NoButton;
     QPointF panCenter_;
 };
 

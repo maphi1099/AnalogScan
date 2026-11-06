@@ -20,7 +20,7 @@ HistogramWidget::HistogramWidget(QWidget* parent)
     : QWidget(parent)
 {
     setMinimumHeight(80);
-    setToolTip(tr("Histogramm R, G, B und Luminanz; Ecken: Beschnitt der Tiefen bzw. Lichter"));
+    setToolTip(tr("Histogramm R, G, B und Luminanz; Ecken: Beschnitt der Schatten bzw. Lichter"));
 }
 
 void HistogramWidget::setHistogram(const image::Histogram& h)

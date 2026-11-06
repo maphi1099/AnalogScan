@@ -6,6 +6,8 @@
 #include "ui/image_canvas.hpp"
 
 #include <QtGui/QImage>
+#include <QtWidgets/QAbstractButton>
+#include <QtWidgets/QTabBar>
 
 #include <cstdlib>
 
@@ -79,6 +81,39 @@ TEST_F(Visual, M10_ImageVisibleAndCentered)
         ASSERT_TRUE(window->controller().apply(std::make_unique<application::SetEntryCommand>(crop)));
         ASSERT_TRUE(waitFor([&] { return window->previewsShown() > before; }));
         expectCentered(shown());
+    }
+}
+
+// Fehler: die Schließkreuze der senkrechten Reiter Leuchttisch/Entwickeln waren links abgeschnitten
+// (Reiter schmaler als der Knopf mit Rand); nur mit dem echten Stil sichtbar
+TEST_F(Visual, M10_ViewTabCloseButtonsFullyVisible)
+{
+    start(1);
+    window->showView(ui::MainWindow::View::Overview);
+    window->showView(ui::MainWindow::View::Image);
+    auto* tabs = window->findChild<QTabBar*>(QStringLiteral("viewTabs"));
+    ASSERT_NE(tabs, nullptr);
+    ASSERT_EQ(tabs->count(), 2);
+    QApplication::processEvents();
+    for (int i = 0; i < tabs->count(); ++i) {
+        QWidget* close = tabs->tabButton(i, QTabBar::RightSide);
+        if (close == nullptr) {
+            close = tabs->tabButton(i, QTabBar::LeftSide);
+        }
+        ASSERT_NE(close, nullptr);
+        if (auto* inner = close->findChild<QAbstractButton*>()) {
+            close = inner; // Knopf in einem Halter mit Rand
+        }
+        const QRect tab = tabs->tabRect(i);
+        const QRect b(close->mapTo(tabs, QPoint(0, 0)), close->size());
+        // ganz im Reiter, mit mindestens 2 px Rand links und rechts
+        EXPECT_GE(b.left(), tab.left() + 2) << "Reiter " << i;
+        EXPECT_LE(b.right(), tab.right() - 2) << "Reiter " << i;
+        EXPECT_GE(b.left(), 2) << "Reiter " << i;
+        EXPECT_LE(b.right(), tabs->width() - 3) << "Reiter " << i;
+        // oben und unten: das Kreuz liegt nicht auf dem Rand des Reiters (dort wurde es abgeschnitten)
+        EXPECT_GE(b.top(), tab.top() + 4) << "Reiter " << i;
+        EXPECT_LE(b.bottom(), tab.bottom() - 4) << "Reiter " << i;
     }
 }
 

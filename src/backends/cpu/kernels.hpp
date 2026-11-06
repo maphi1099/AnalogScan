@@ -26,7 +26,7 @@ void convolveRowV(const float* const* rows, float* out, std::size_t len, std::sp
 void unsharpRow(const float* in, const float* blur, float* out, std::size_t len, float a, float t);
 /// Luminanz (Rec. 2020) einer Zeile; bei einem Kanal Kopie.
 void luminanceRow(const float* in, float* lum, std::size_t pixels, int channels);
-/// Lichter/Tiefen: out = in · (1 + s·2·max(0; 0,5 − B))·(1 − h·max(0; B − 0,5)).
+/// Lichter/Schatten: out = in · (1 + s·2·max(0; 0,5 − B))·(1 − h·max(0; B − 0,5)).
 void toneRow(const float* in, const float* base, float* out, std::size_t pixels, int channels, float s,
              float h);
 

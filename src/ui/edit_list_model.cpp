@@ -103,7 +103,7 @@ QString describe(const std::string& name, const model::ParamValue& value)
     const std::pair<std::string_view, QString> shares[] = {
         {key::saturation, EditListModel::tr("Sättigung")}, {key::vibrance, EditListModel::tr("Dynamik")},
         {key::amount, EditListModel::tr("Stärke")},        {key::strength, EditListModel::tr("Stärke")},
-        {key::shadows, EditListModel::tr("Tiefen")},       {key::highlights, EditListModel::tr("Lichter")},
+        {key::shadows, EditListModel::tr("Schatten")},       {key::highlights, EditListModel::tr("Lichter")},
         {key::splitSoft, EditListModel::tr("weich")},      {key::splitHard, EditListModel::tr("hart")},
         {key::black, EditListModel::tr("Schwarz")},        {key::white, EditListModel::tr("Weiß")},
         {key::inset, EditListModel::tr("Rand")},           {key::clip, EditListModel::tr("Beschnitt")},

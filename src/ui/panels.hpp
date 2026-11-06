@@ -172,7 +172,7 @@ private:
 };
 
 /// Regler der Bildbearbeitung (LF-EDT-04 … -11): Belichtung, Weißabgleich, Kontrast, Lichter/
-/// Tiefen, Sättigung, Schärfen, Rauschminderung. Jeder Regler hat einen Tooltip (LF-UI-08).
+/// Schatten, Sättigung, Schärfen, Rauschminderung. Jeder Regler hat einen Tooltip (LF-UI-08).
 class AdjustPanel final : public ToolPanel
 {
     Q_OBJECT

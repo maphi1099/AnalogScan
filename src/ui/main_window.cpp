@@ -45,6 +45,9 @@
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QTableView>
 #include <QtWidgets/QToolBar>
+#include <QtWidgets/QSlider>
+#include <QtWidgets/QSpinBox>
+#include <QtWidgets/QStyle>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
@@ -693,7 +696,6 @@ void MainWindow::buildUi()
     progress_ = new QProgressBar(this);
     progress_->setObjectName(QStringLiteral("jobProgress"));
     progress_->setRange(0, 1000);
-    progress_->setMaximumWidth(220);
     progress_->hide();
     cancel_ = new QPushButton(tr("Abbrechen"), this);
     cancel_->setObjectName(QStringLiteral("cancelJobs"));
@@ -708,6 +710,44 @@ void MainWindow::buildUi()
     statusBar()->addWidget(status_, 1);
     statusBar()->addPermanentWidget(progress_);
     statusBar()->addPermanentWidget(cancel_);
+
+    // Zoom sichtbar und einstellbar: Regler (logarithmisch 2 … 800 %) und Prozentfeld
+    zoomBar_ = new QWidget(this);
+    zoomBar_->setObjectName(QStringLiteral("zoomBar"));
+    auto* zoomLayout = new QHBoxLayout(zoomBar_);
+    zoomLayout->setContentsMargins(0, 0, 0, 0);
+    auto* fitButton = new QToolButton(zoomBar_);
+    fitButton->setText(tr("Einpassen"));
+    fitButton->setToolTip(tr("Ganzes Bild zeigen (Strg+0)"));
+    fitButton->setAutoRaise(true);
+    zoomSlider_ = new QSlider(Qt::Horizontal, zoomBar_);
+    zoomSlider_->setObjectName(QStringLiteral("zoomSlider"));
+    zoomSlider_->setRange(0, 1000);
+    zoomSlider_->setFixedWidth(160);
+    zoomSlider_->setToolTip(tr("Zoom (Strg+Mausrad, Strg+Plus/Minus)"));
+    zoomPercent_ = new QSpinBox(zoomBar_);
+    zoomPercent_->setObjectName(QStringLiteral("zoomPercent"));
+    zoomPercent_->setRange(static_cast<int>(ImageCanvas::kMinScale * 100), static_cast<int>(ImageCanvas::kMaxScale * 100));
+    zoomPercent_->setSuffix(QStringLiteral(" %"));
+    zoomPercent_->setKeyboardTracking(false);
+    zoomLayout->addWidget(fitButton);
+    zoomLayout->addWidget(zoomSlider_);
+    zoomLayout->addWidget(zoomPercent_);
+    statusBar()->addPermanentWidget(zoomBar_);
+    static const double lo = std::log(ImageCanvas::kMinScale);
+    static const double hi = std::log(ImageCanvas::kMaxScale);
+    connect(fitButton, &QToolButton::clicked, this, [this] { canvas_->setZoom(ImageCanvas::Zoom::Fit); });
+    connect(zoomSlider_, &QSlider::valueChanged, this, [this](int v) {
+        canvas_->setScale(std::exp(lo + (hi - lo) * v / 1000.0));
+    });
+    connect(zoomPercent_, &QSpinBox::valueChanged, this, [this](int p) { canvas_->setScale(p / 100.0); });
+    connect(canvas_, &ImageCanvas::zoomChanged, this, [this] {
+        const double s = canvas_->scale();
+        const QSignalBlocker b1(zoomSlider_);
+        const QSignalBlocker b2(zoomPercent_);
+        zoomSlider_->setValue(static_cast<int>(std::lround((std::log(s) - lo) / (hi - lo) * 1000.0)));
+        zoomPercent_->setValue(static_cast<int>(std::lround(s * 100.0)));
+    });
     resize(1400, 900);
 }
 
@@ -844,18 +884,16 @@ void MainWindow::buildActions()
     add(view, QStringLiteral("nextImage"), tr("Nächstes Bild"), QKeySequence(Qt::CTRL | Qt::Key_Right),
         [this] { stepImage(1); });
     view->addSeparator();
-    add(view, QStringLiteral("zoomFit"), tr("Einpassen"), QKeySequence(Qt::CTRL | Qt::Key_0), [this] {
-        s_.bridge.setUpscale(1);
-        canvas_->setZoom(ImageCanvas::Zoom::Fit);
-    });
-    add(view, QStringLiteral("zoom100"), tr("100 %"), QKeySequence(Qt::CTRL | Qt::Key_1), [this] {
-        s_.bridge.setUpscale(1);
-        canvas_->setZoom(ImageCanvas::Zoom::Actual);
-    });
-    add(view, QStringLiteral("zoom200"), tr("200 %"), QKeySequence(Qt::CTRL | Qt::Key_2), [this] {
-        s_.bridge.setUpscale(2);
-        canvas_->setZoom(ImageCanvas::Zoom::Double);
-    });
+    add(view, QStringLiteral("zoomIn"), tr("Vergrößern"), QKeySequence(Qt::CTRL | Qt::Key_Plus),
+        [this] { canvas_->zoomBy(1.25); });
+    add(view, QStringLiteral("zoomOut"), tr("Verkleinern"), QKeySequence(Qt::CTRL | Qt::Key_Minus),
+        [this] { canvas_->zoomBy(0.8); });
+    add(view, QStringLiteral("zoomFit"), tr("Einpassen"), QKeySequence(Qt::CTRL | Qt::Key_0),
+        [this] { canvas_->setZoom(ImageCanvas::Zoom::Fit); });
+    add(view, QStringLiteral("zoom100"), tr("100 %"), QKeySequence(Qt::CTRL | Qt::Key_1),
+        [this] { canvas_->setZoom(ImageCanvas::Zoom::Actual); });
+    add(view, QStringLiteral("zoom200"), tr("200 %"), QKeySequence(Qt::CTRL | Qt::Key_2),
+        [this] { canvas_->setZoom(ImageCanvas::Zoom::Double); });
     auto* compare = add(view, QStringLiteral("compare"), tr("Vorher/Nachher"),
                         QKeySequence(Qt::Key_Backslash), [this](bool on) {
                             compare_ = on;
@@ -995,6 +1033,9 @@ void MainWindow::buildActions()
         a->setProperty("standardShortcut", a->shortcut());
     }
     applyShortcuts();
+    if (const auto v = s_.settings.get("panButton"); v && v->number()) {
+        canvas_->setPanButton(static_cast<Qt::MouseButton>(static_cast<int>(*v->number())));
+    }
     showView(View::Start);
 }
 
@@ -1046,6 +1087,21 @@ void MainWindow::showView(View v)
             viewTabs_->setTabData(tab, static_cast<int>(v));
             viewTabs_->setTabToolTip(tab, v == View::Overview ? tr("Alle Bilder der Rolle (G)")
                                                               : tr("Ein Bild bearbeiten (E)"));
+            // Eigener Schließknopf mit Abstand nach oben: der Stil setzt ihn sonst auf die
+            // Oberkante des Reiters, wo der Rand ihn abschneidet
+            auto* holder = new QWidget(viewTabs_);
+            auto* holderLayout = new QVBoxLayout(holder);
+            holderLayout->setContentsMargins(0, 8, 0, 2);
+            auto* close = new QToolButton(holder);
+            close->setText(QStringLiteral("✕"));
+            close->setAutoRaise(true);
+            close->setFixedSize(16, 16);
+            close->setToolTip(tr("Ansicht schließen"));
+            holderLayout->addWidget(close);
+            const QTabBar::ButtonPosition side = static_cast<QTabBar::ButtonPosition>(
+                viewTabs_->style()->styleHint(QStyle::SH_TabBar_CloseButtonPosition, nullptr, viewTabs_));
+            viewTabs_->setTabButton(tab, side, holder);
+            connect(close, &QToolButton::clicked, this, [this, v] { closeView(v); });
         }
         viewTabs_->setCurrentIndex(tab);
     }
@@ -1069,7 +1125,11 @@ void MainWindow::showView(View v)
     action(QStringLiteral("openFolder"))->setVisible(v != View::Image);
     action(QStringLiteral("contactSheet"))->setVisible(v == View::Overview);
     // Bildwerkzeuge nur in der Bildansicht; Befehle für die Rolle nicht während des Imports
-    for (const char* n : {"toolCrop", "toolRetouch", "compare", "zoomFit", "zoom100", "zoom200", "rotateLeft",
+    if (zoomBar_ != nullptr) {
+        zoomBar_->setVisible(v == View::Image);
+    }
+    for (const char* n : {"toolCrop", "toolRetouch", "compare", "zoomIn", "zoomOut", "zoomFit", "zoom100",
+                          "zoom200", "rotateLeft",
                           "rotateRight", "flipH"}) {
         if (QAction* a = action(QString::fromLatin1(n))) {
             a->setEnabled(v == View::Image);
@@ -1524,9 +1584,11 @@ void MainWindow::requestPreview(const model::EditList& l)
     r.profile.priority = ports::Priority::Interactive;
     r.profile.output.transform = display_;
     const double dpr = canvas_->devicePixelRatioF();
-    if (canvas_->zoom() == ImageCanvas::Zoom::Fit) {
+    const double scale = canvas_->scale();
+    if (canvas_->zoom() == ImageCanvas::Zoom::Fit || scale < 1.0) {
         // Die Vorschau verkleinert den ganzen Scan auf das Ziel und schneidet danach zu: mit
-        // Zuschnitt entsprechend größer anfordern, damit der Ausschnitt das Fenster füllt
+        // Zuschnitt entsprechend größer anfordern, damit der Ausschnitt das Fenster füllt bzw.
+        // (unter 100 %) die Größe des gezoomten Bilds hat
         double fw = 1.0;
         double fh = 1.0;
         if (const model::EditEntry* e = r.list->get(model::StepId(std::string(id::crop))); e && e->enabled) {
@@ -1534,11 +1596,15 @@ void MainWindow::requestPreview(const model::EditList& l)
             fw = std::clamp(c.w, 0.05, 1.0);
             fh = std::clamp(c.h, 0.05, 1.0);
         }
-        r.profile.target = {std::max(1, static_cast<int>(canvas_->width() * dpr / fw)),
-                            std::max(1, static_cast<int>(canvas_->height() * dpr / fh))};
+        const QSizeF want = canvas_->zoom() == ImageCanvas::Zoom::Fit
+                                ? QSizeF(canvas_->width() * dpr, canvas_->height() * dpr)
+                                : QSizeF(canvas_->sourceSize()) * scale;
+        r.profile.target = {std::max(1, static_cast<int>(want.width() / fw)),
+                            std::max(1, static_cast<int>(want.height() / fh))};
         detail_.reset();
     } else {
-        // 100 % und 200 %: volle Auflösung, nur der sichtbare Ausschnitt (200 % vergrößert die Brücke)
+        // ab 100 %: volle Auflösung, nur der sichtbare Ausschnitt; vergrößert wird in der Brücke
+        s_.bridge.setDetailScale(scale);
         const QSize full = canvas_->sourceSize();
         const QRectF vis = canvas_->visibleNorm();
         const int x0 =
@@ -1994,6 +2060,9 @@ void MainWindow::trackJob(application::JobHandle h, const QString& what)
     connect(timer, &QTimer::timeout, this, [this, timer, h, what] {
         progress_->setValue(static_cast<int>(h.progress() * 1000.0));
         progress_->setFormat(what + QStringLiteral(" %p %"));
+        // so breit wie der Text bei 100 % (plus Rand), nie abgeschnitten
+        progress_->setMinimumWidth(progress_->fontMetrics().horizontalAdvance(what + QStringLiteral(" 100 %")) +
+                                   32);
         if (!h.done()) {
             return;
         }
@@ -2149,6 +2218,7 @@ void MainWindow::doSettings()
     before.threads = num("threads", 0);
     before.memoryMb = num("memoryBudgetMb", 0); // Standard: unbegrenzt
     before.ramMb = static_cast<int>(s_.physicalMemory >> 20U);
+    before.panButton = num("panButton", static_cast<int>(Qt::LeftButton));
     for (const QAction* menu : menuBar()->actions()) {
         for (const QAction* a : menu->menu()->actions()) {
             if (actions_.contains(a->objectName())) {
@@ -2166,6 +2236,8 @@ void MainWindow::doSettings()
     s_.settings.set("language", model::JsonValue(v.language));
     s_.settings.set("threads", model::JsonValue(std::int64_t{v.threads}));
     s_.settings.set("memoryBudgetMb", model::JsonValue(std::int64_t{v.memoryMb}));
+    s_.settings.set("panButton", model::JsonValue(std::int64_t{v.panButton}));
+    canvas_->setPanButton(static_cast<Qt::MouseButton>(v.panButton));
     // nur Abweichungen vom Standard speichern; leer = ohne Kürzel
     model::JsonValue keys = model::JsonValue::object({});
     for (const SettingsDialog::Shortcut& sc : v.shortcuts) {

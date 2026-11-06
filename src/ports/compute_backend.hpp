@@ -55,7 +55,7 @@ public:
     multiply(const KernelContext& c, const image::ImageBuffer& in, const image::ImageBuffer& gain) = 0;
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     gaussian(const KernelContext& c, const image::ImageBuffer& in, float sigma) = 0;
-    /// Lichter und Tiefen: s, h Stärke, r Radius in Pixeln.
+    /// Lichter und Schatten: s, h Stärke, r Radius in Pixeln.
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     localTone(const KernelContext& c, const image::ImageBuffer& in, float s, float h, float r) = 0;
     /// Unscharfmaskierung: a Stärke, r Radius in Pixeln, t Schwellwert.

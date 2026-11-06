@@ -11,6 +11,7 @@
 
 class QPainter;
 class QMouseEvent;
+class QWheelEvent;
 
 namespace autoneg::ui {
 
@@ -44,6 +45,8 @@ public:
     virtual void paint(QPainter& p, const ViewMapping& m) = 0;
     /// true: Ereignis verbraucht.
     virtual bool mouse(QMouseEvent* e, const ViewMapping& m) = 0;
+    /// Mausrad ohne Strg (Strg+Rad zoomt immer); true: verbraucht.
+    virtual bool wheel(QWheelEvent* /*e*/, const ViewMapping& /*m*/) { return false; }
 };
 
 /// Zuschneiden und Drehen (LF-EDT-01, LF-EDT-02, LF-GEO-03).

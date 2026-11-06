@@ -170,7 +170,7 @@ public:
                                                 const image::Roi& tile);
 };
 
-/// Lichter und Tiefen (LF-EDT-07), Radius in Pixeln der vollen Auflösung.
+/// Lichter und Schatten (LF-EDT-07), Radius in Pixeln der vollen Auflösung.
 class ShadowsHighlightsStep final : public DescribedRegion
 {
 public:

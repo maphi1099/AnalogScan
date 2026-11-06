@@ -21,7 +21,7 @@ struct PreviewFrame
     std::uint64_t seq = 0;
     model::FrameId frame;
     QImage image;    ///< RGBA8888, Monitorfarbraum
-    QImage clipping; ///< Maske beschnittener Pixel (rot: Lichter, blau: Tiefen), gleiche Größe
+    QImage clipping; ///< Maske beschnittener Pixel (rot: Lichter, blau: Schatten), gleiche Größe
     image::Histogram histogram;
     bool detail = false; ///< Detailansicht (Ausschnitt in Originalauflösung)
 };
@@ -51,8 +51,9 @@ public:
     /// Aus jedem Thread: f im UI-Thread ausführen.
     void post(std::function<void()> f);
 
-    /// Vergrößerung der Vorschau im Render-Thread (200 %: jedes Pixel 2 × 2, pixelgenau).
-    void setUpscale(int factor) { upscale_.store(std::max(1, factor)); }
+    /// Vergrößerung der Detailansicht im Render-Thread (Zoom über 100 %): ganzzahlig pixelgenau,
+    /// sonst geglättet.
+    void setDetailScale(double factor) { detailScale_.store(std::max(1.0, factor)); }
 
     /// Umwandlung (öffentlich für Tests): 1 oder 3 Kanäle F32 → RGBA8888.
     [[nodiscard]] static QImage toQImage(const image::ImageBuffer& b);
@@ -66,7 +67,7 @@ Q_SIGNALS:
     void jobFinished(quint64 job, bool ok, const QString& message);
 
 private:
-    std::atomic<int> upscale_{1};
+    std::atomic<double> detailScale_{1.0};
 };
 
 } // namespace autoneg::ui

@@ -33,6 +33,8 @@ class QDockWidget;
 class QLabel;
 class QProgressBar;
 class QPushButton;
+class QSlider;
+class QSpinBox;
 class QStackedWidget;
 class QTabBar;
 class QTableView;
@@ -255,6 +257,9 @@ private:
     std::vector<QDockWidget*> editorDocks_; ///< nur in der Bildansicht sichtbar
     View view_ = View::Start;
     QProgressBar* progress_ = nullptr;
+    QWidget* zoomBar_ = nullptr;
+    QSlider* zoomSlider_ = nullptr;
+    QSpinBox* zoomPercent_ = nullptr;
     QPushButton* cancel_ = nullptr;
     QLabel* status_ = nullptr;
     QComboBox* filter_ = nullptr;

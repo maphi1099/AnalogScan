@@ -469,6 +469,14 @@ SettingsDialog::SettingsDialog(QWidget* parent)
     memoryLayout->addWidget(unlimited_);
     memoryLayout->addWidget(memory_);
     form->addRow(tr("Speicherbudget"), memoryBox);
+    panButton_ = new QComboBox(this);
+    panButton_->setObjectName(QStringLiteral("panButton"));
+    panButton_->addItem(tr("Linke Maustaste"), static_cast<int>(Qt::LeftButton));
+    panButton_->addItem(tr("Rechte Maustaste"), static_cast<int>(Qt::RightButton));
+    panButton_->addItem(tr("Mittlere Maustaste"), static_cast<int>(Qt::MiddleButton));
+    panButton_->setToolTip(
+        tr("Bild im Zoom verschieben; belegt ein Werkzeug die linke Taste, verschiebt die mittlere"));
+    form->addRow(tr("Bild ziehen mit"), panButton_);
     // Haken raus: Vorschlag die Hälfte des Arbeitsspeichers
     connect(unlimited_, &QCheckBox::toggled, this, [this](bool on) {
         memory_->setEnabled(!on);
@@ -537,6 +545,7 @@ void SettingsDialog::setValues(const Values& v)
     unlimited_->setChecked(v.memoryMb <= 0);
     memory_->setEnabled(v.memoryMb > 0);
     memory_->setValue(v.memoryMb > 0 ? v.memoryMb : (ramMb_ > 0 ? ramMb_ / 2 : 4096));
+    panButton_->setCurrentIndex(std::max(0, panButton_->findData(v.panButton)));
     shortcuts_ = v.shortcuts;
     for (QKeySequenceEdit* e : keys_) {
         keyForm_->removeRow(e);
@@ -558,7 +567,8 @@ void SettingsDialog::setValues(const Values& v)
 SettingsDialog::Values SettingsDialog::values() const
 {
     Values v{language_->currentData().toString().toStdString(), threads_->value(),
-             unlimited_->isChecked() ? 0 : memory_->value(), ramMb_, shortcuts_};
+             unlimited_->isChecked() ? 0 : memory_->value(), ramMb_, shortcuts_,
+             panButton_->currentData().toInt()};
     for (std::size_t i = 0; i < keys_.size(); ++i) {
         v.shortcuts[i].key = keys_[i]->keySequence();
     }

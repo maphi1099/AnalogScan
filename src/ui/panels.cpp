@@ -553,7 +553,7 @@ AdjustPanel::AdjustPanel(UiController& ui, QWidget* parent)
         {id::whitebalance, key::temperature, tr("Farbtemperatur"), tr("Weißabgleich: warm/kalt")},
         {id::whitebalance, key::tint, tr("Tönung"), tr("Weißabgleich: grün/magenta")},
         {id::contrast, key::amount, tr("Kontrast"), tr("Kontrast um den Mittelton")},
-        {id::shadowshighlights, key::shadows, tr("Tiefen"), tr("Tiefen aufhellen")},
+        {id::shadowshighlights, key::shadows, tr("Schatten"), tr("Schatten aufhellen")},
         {id::shadowshighlights, key::highlights, tr("Lichter"), tr("Lichter abdunkeln")},
         {id::saturation, key::saturation, tr("Sättigung"), tr("Farbsättigung")},
         {id::saturation, key::vibrance, tr("Dynamik"), tr("Sättigung schwacher Farben")},

@@ -322,11 +322,11 @@ RetouchStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, con
     return x.backend.inpaint(x.kernel(), in, spots);
 }
 
-// --- Lichter und Tiefen, Rauschen, Schärfen ----------------------------------------------
+// --- Lichter und Schatten, Rauschen, Schärfen ----------------------------------------------
 
 ShadowsHighlightsStep::ShadowsHighlightsStep()
     : DescribedRegion(describe(
-          id::shadowshighlights, rank::shadowshighlights, "Lichter und Tiefen", Phase::Finishing,
+          id::shadowshighlights, rank::shadowshighlights, "Lichter und Schatten", Phase::Finishing,
           {doubleParam(key::shadows, 0.0, 0.0, 1.0, ""), doubleParam(key::highlights, 0.0, 0.0, 1.0, ""),
            doubleParam(key::radius, 30.0, 1.0, 200.0, "px")}))
 {}

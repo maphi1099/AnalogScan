@@ -28,6 +28,7 @@
 #include <QtCore/QUrl>
 #include <QtGui/QAction>
 #include <QtGui/QDropEvent>
+#include <QtGui/QWheelEvent>
 #include <QtTest/QTest>
 #include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
@@ -398,6 +399,82 @@ TEST_F(E2E, M10_DetailRendersOnlyVisiblePart)
     ASSERT_TRUE(waitFor(matches)) << window->canvas()->image().width() << " "
                                   << window->canvas()->visibleNorm().width();
     EXPECT_LT(window->canvas()->image().width(), 960);
+}
+
+// LF-UI-02: stufenloser Zoom mit Strg+Mausrad (um die Stelle unter der Maus), Strg+Plus/Minus,
+// Regler und Prozentfeld in der Statusleiste; Ziehen verschiebt, Taste in den Einstellungen wählbar
+TEST_F(E2E, M10_FreeZoomAndPan)
+{
+    start(1);
+    ui::ImageCanvas* c = window->canvas();
+    auto* overlay = c->findChild<QWidget*>();
+    ASSERT_NE(overlay, nullptr);
+    auto* percent = window->findChild<QSpinBox*>(QStringLiteral("zoomPercent"));
+    auto* slider = window->findChild<QSlider*>(QStringLiteral("zoomSlider"));
+    ASSERT_NE(percent, nullptr);
+    ASSERT_NE(slider, nullptr);
+    EXPECT_TRUE(window->findChild<QWidget*>(QStringLiteral("zoomBar"))->isVisibleTo(window));
+
+    // Strg+Mausrad: die Bildstelle unter der Maus bleibt stehen (Bild größer als die Fläche)
+    c->setScale(3.0);
+    const QPointF at(c->width() * 0.3, c->height() * 0.4);
+    const QPointF normBefore = c->mapping().toNorm(at);
+    QWheelEvent wheel(at, overlay->mapToGlobal(at), {}, {0, 120}, Qt::NoButton, Qt::ControlModifier,
+                      Qt::NoScrollPhase, false);
+    QApplication::sendEvent(overlay, &wheel);
+    EXPECT_NEAR(c->scale(), 3.75, 1e-9);
+    EXPECT_EQ(c->zoom(), ui::ImageCanvas::Zoom::Custom);
+    const QPointF normAfter = c->mapping().toNorm(at);
+    EXPECT_NEAR(normAfter.x(), normBefore.x(), 0.01);
+    EXPECT_NEAR(normAfter.y(), normBefore.y(), 0.01);
+    EXPECT_EQ(percent->value(), 375);
+
+    // Rad ohne Strg zoomt nicht
+    QWheelEvent plain(at, overlay->mapToGlobal(at), {}, {0, 120}, Qt::NoButton, Qt::NoModifier,
+                      Qt::NoScrollPhase, false);
+    QApplication::sendEvent(overlay, &plain);
+    EXPECT_NEAR(c->scale(), 3.75, 1e-9);
+
+    // Kürzel und Prozentfeld
+    action("zoomIn")->trigger();
+    EXPECT_NEAR(c->scale(), 4.6875, 1e-9);
+    action("zoomOut")->trigger();
+    EXPECT_NEAR(c->scale(), 3.75, 1e-9);
+    percent->setValue(300);
+    EXPECT_NEAR(c->scale(), 3.0, 1e-9);
+    const int sliderAt300 = slider->value();
+    slider->setValue(sliderAt300 - 100);
+    EXPECT_LT(c->scale(), 3.0);
+    EXPECT_EQ(percent->value(), static_cast<int>(std::lround(c->scale() * 100)));
+
+    // Ziehen mit der linken Taste verschiebt den Ausschnitt
+    percent->setValue(300);
+    const QPointF center = c->center();
+    const QPoint from(c->width() / 2, c->height() / 2);
+    QTest::mousePress(overlay, Qt::LeftButton, {}, from);
+    QTest::mouseMove(overlay, from + QPoint(60, 0));
+    QTest::mouseRelease(overlay, Qt::LeftButton, {}, from + QPoint(60, 0));
+    EXPECT_LT(c->center().x(), center.x());
+
+    // Einstellung: rechte Taste zieht, linke nicht mehr
+    c->setPanButton(Qt::RightButton);
+    const QPointF c2 = c->center();
+    QTest::mousePress(overlay, Qt::LeftButton, {}, from);
+    QTest::mouseMove(overlay, from + QPoint(60, 0));
+    QTest::mouseRelease(overlay, Qt::LeftButton, {}, from + QPoint(60, 0));
+    EXPECT_EQ(c->center(), c2);
+    QTest::mousePress(overlay, Qt::RightButton, {}, from);
+    QTest::mouseMove(overlay, from + QPoint(60, 0));
+    QTest::mouseRelease(overlay, Qt::RightButton, {}, from + QPoint(60, 0));
+    EXPECT_LT(c->center().x(), c2.x());
+
+    // Grenzen 2 … 800 %; Einpassen nur ausdrücklich
+    c->setScale(0.0001);
+    EXPECT_NEAR(c->scale(), ui::ImageCanvas::kMinScale, 1e-9);
+    c->setScale(100.0);
+    EXPECT_NEAR(c->scale(), ui::ImageCanvas::kMaxScale, 1e-9);
+    action("zoomFit")->trigger();
+    EXPECT_EQ(c->zoom(), ui::ImageCanvas::Zoom::Fit);
 }
 
 // E-45, E-11: LF-UI-04, LF-KON-08

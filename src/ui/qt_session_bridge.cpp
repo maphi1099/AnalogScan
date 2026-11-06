@@ -80,7 +80,7 @@ QImage QtSessionBridge::clippingMask(const image::ImageBuffer& b)
             if (hi >= 1.0F) { // Lichter beschnitten (LF-EDT-14)
                 line[4 * x] = 255;
                 line[4 * x + 3] = 200;
-            } else if (lo <= 0.0F) { // Tiefen beschnitten
+            } else if (lo <= 0.0F) { // Schatten beschnitten
                 line[4 * x + 2] = 255;
                 line[4 * x + 3] = 200;
             }
@@ -97,10 +97,13 @@ void QtSessionBridge::deliverPreview(std::uint64_t seq, const model::FrameId& f,
     p.frame = f;
     p.image = toQImage(display);
     p.clipping = clippingMask(display);
-    if (const int factor = upscale_.load(); factor > 1 && !p.image.isNull()) {
-        p.image = p.image.scaled(p.image.size() * factor, Qt::IgnoreAspectRatio, Qt::FastTransformation);
-        p.clipping =
-            p.clipping.scaled(p.clipping.size() * factor, Qt::IgnoreAspectRatio, Qt::FastTransformation);
+    if (const double factor = detailScale_.load(); detail && factor > 1.0 && !p.image.isNull()) {
+        const QSize size(static_cast<int>(std::lround(p.image.width() * factor)),
+                         static_cast<int>(std::lround(p.image.height() * factor)));
+        const bool whole = std::abs(factor - std::round(factor)) < 1e-6;
+        p.image = p.image.scaled(size, Qt::IgnoreAspectRatio,
+                                 whole ? Qt::FastTransformation : Qt::SmoothTransformation);
+        p.clipping = p.clipping.scaled(size, Qt::IgnoreAspectRatio, Qt::FastTransformation);
     }
     p.histogram = analysis::HistogramCalculator{}.compute(display);
     p.detail = detail;

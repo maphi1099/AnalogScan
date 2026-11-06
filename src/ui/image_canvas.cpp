@@ -2,6 +2,7 @@
 
 #include <QtGui/QGuiApplication>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QWheelEvent>
 #include <QtGui/QPainter>
 #include <QtGui/rhi/qrhi.h>
 
@@ -32,6 +33,15 @@ protected:
     void mousePressEvent(QMouseEvent* e) override { handle(e); }
     void mouseMoveEvent(QMouseEvent* e) override { handle(e); }
     void mouseReleaseEvent(QMouseEvent* e) override { handle(e); }
+    void wheelEvent(QWheelEvent* e) override
+    {
+        if (canvas_->overlayWheel(e)) {
+            update();
+            e->accept();
+        } else {
+            e->ignore();
+        }
+    }
 
 private:
     void handle(QMouseEvent* e)
@@ -86,14 +96,74 @@ void ImageCanvas::setClipping(const QImage& mask, bool on)
 
 void ImageCanvas::setZoom(Zoom z)
 {
-    if (z != zoom_) {
-        zoom_ = z;
-        if (z == Zoom::Fit) {
+    switch (z) {
+    case Zoom::Fit:
+        if (!fit_) {
+            fit_ = true;
             center_ = {0.5, 0.5};
+            Q_EMIT viewChanged();
+            Q_EMIT zoomChanged();
+            overlay_->update();
         }
-        Q_EMIT viewChanged();
-        overlay_->update();
+        break;
+    case Zoom::Actual:
+        setScale(1.0);
+        break;
+    case Zoom::Double:
+        setScale(2.0);
+        break;
+    case Zoom::Custom:
+        break;
     }
+}
+
+ImageCanvas::Zoom ImageCanvas::zoom() const
+{
+    if (fit_) {
+        return Zoom::Fit;
+    }
+    if (std::abs(scale_ - 1.0) < 1e-9) {
+        return Zoom::Actual;
+    }
+    if (std::abs(scale_ - 2.0) < 1e-9) {
+        return Zoom::Double;
+    }
+    return Zoom::Custom;
+}
+
+double ImageCanvas::fitScale() const
+{
+    return std::min(static_cast<double>(width()) / source_.width(),
+                    static_cast<double>(height()) / source_.height()) *
+           devicePixelRatioF();
+}
+
+double ImageCanvas::scale() const
+{
+    return fit_ ? fitScale() : scale_;
+}
+
+void ImageCanvas::setScale(double s, std::optional<QPointF> anchor)
+{
+    s = std::clamp(s, kMinScale, kMaxScale);
+    const QPointF a = anchor.value_or(QPointF(width() / 2.0, height() / 2.0));
+    const QPointF norm = mapping().toNorm(a); // Bildstelle unter dem Anker
+    if (!fit_ && std::abs(s - scale_) < 1e-12) {
+        return;
+    }
+    fit_ = false;
+    {
+        scale_ = s;
+        // Mitte so legen, dass norm wieder unter dem Anker liegt
+        const double logical = s / devicePixelRatioF();
+        const double iw = source_.width() * logical;
+        const double ih = source_.height() * logical;
+        center_ = {std::clamp(norm.x() - (a.x() - width() / 2.0) / iw, 0.0, 1.0),
+                   std::clamp(norm.y() - (a.y() - height() / 2.0) / ih, 0.0, 1.0)};
+    }
+    Q_EMIT viewChanged();
+    Q_EMIT zoomChanged();
+    overlay_->update();
 }
 
 void ImageCanvas::setCenter(QPointF c)
@@ -107,22 +177,11 @@ ViewMapping ImageCanvas::mapping() const
 {
     const double w = width();
     const double h = height();
-    const double dpr = devicePixelRatioF();
-    double scale = 1.0; // logische Widget-Pixel je Quellpixel
-    switch (zoom_) {
-    case Zoom::Fit:
-        scale = std::min(w / source_.width(), h / source_.height());
-        break;
-    case Zoom::Actual:
-        scale = 1.0 / dpr; // 100 %: ein Quellpixel je Gerätepixel
-        break;
-    case Zoom::Double:
-        scale = 2.0 / dpr;
-        break;
-    }
+    // logische Widget-Pixel je Quellpixel; 100 %: ein Quellpixel je Gerätepixel
+    const double scale = fit_ ? std::min(w / source_.width(), h / source_.height()) : scale_ / devicePixelRatioF();
     const double iw = source_.width() * scale;
     const double ih = source_.height() * scale;
-    if (zoom_ == Zoom::Fit) {
+    if (fit_) {
         return {QRectF((w - iw) / 2.0, (h - ih) / 2.0, iw, ih)};
     }
     // Ausschnitt um center_; kleiner als das Fenster: mittig
@@ -206,6 +265,9 @@ void ImageCanvas::resizeEvent(QResizeEvent* e)
     QRhiWidget::resizeEvent(e);
     overlay_->setGeometry(rect());
     Q_EMIT viewChanged();
+    if (fit_) {
+        Q_EMIT zoomChanged(); // Prozentwert des Einpassens ändert sich
+    }
 }
 
 void ImageCanvas::overlayPaint(QPainter& p)
@@ -219,44 +281,89 @@ void ImageCanvas::overlayPaint(QPainter& p)
     }
 }
 
+Qt::MouseButton ImageCanvas::effectivePanButton() const
+{
+    // Ein Werkzeug belegt die linke Taste: dann verschiebt die mittlere
+    return tool_ != nullptr && panButton_ == Qt::LeftButton ? Qt::MiddleButton : panButton_;
+}
+
 bool ImageCanvas::overlayMouse(QMouseEvent* e)
 {
     const ViewMapping m = mapping();
-    if (tool_ != nullptr && tool_->mouse(e, m)) {
-        return true;
-    }
-    // Ohne Werkzeug: Verschieben im Zoom, Klick für Pipetten
+    const Qt::MouseButton pan = effectivePanButton();
+    // Verschieben hat Vorrang vor dem Werkzeug (nur mit seiner Taste)
     switch (e->type()) {
     case QEvent::MouseButtonPress:
-        if (e->button() == Qt::LeftButton) {
+        if (e->button() == pan) {
             panFrom_ = e->position();
+            panWith_ = pan;
             panCenter_ = center_;
             return true;
         }
-        return false;
+        break;
     case QEvent::MouseMove:
-        if (panFrom_ && zoom_ != Zoom::Fit) {
-            const QPointF d = e->position() - *panFrom_;
-            center_ = {std::clamp(panCenter_.x() - d.x() / m.imageRect.width(), 0.0, 1.0),
-                       std::clamp(panCenter_.y() - d.y() / m.imageRect.height(), 0.0, 1.0)};
-            return true;
-        }
-        return false;
-    case QEvent::MouseButtonRelease:
         if (panFrom_) {
-            const bool moved = (e->position() - *panFrom_).manhattanLength() > 3.0;
-            panFrom_.reset();
-            if (moved && zoom_ != Zoom::Fit) {
-                Q_EMIT viewChanged();
-            } else if (!moved) {
-                Q_EMIT picked(m.toNorm(e->position()));
+            if (!fit_) {
+                const QPointF d = e->position() - *panFrom_;
+                center_ = {std::clamp(panCenter_.x() - d.x() / m.imageRect.width(), 0.0, 1.0),
+                           std::clamp(panCenter_.y() - d.y() / m.imageRect.height(), 0.0, 1.0)};
             }
             return true;
         }
-        return false;
+        break;
+    case QEvent::MouseButtonRelease:
+        if (panFrom_ && e->button() == panWith_) {
+            const QPointF from = *panFrom_;
+            const bool moved = (e->position() - from).manhattanLength() > 3.0;
+            panFrom_.reset();
+            if (moved && !fit_) {
+                Q_EMIT viewChanged();
+                return true;
+            }
+            if (!moved) {
+                if (tool_ != nullptr) {
+                    // Klick ohne Ziehen: an das Werkzeug weitergeben (z. B. Rechtsklick hebt Auswahl auf)
+                    QMouseEvent press(QEvent::MouseButtonPress, from, e->globalPosition(), e->button(),
+                                      e->button(), e->modifiers());
+                    tool_->mouse(&press, m);
+                    tool_->mouse(e, m);
+                } else if (e->button() == Qt::LeftButton) {
+                    Q_EMIT picked(m.toNorm(e->position())); // Pipetten
+                }
+            }
+            return true;
+        }
+        break;
     default:
+        break;
+    }
+    if (tool_ != nullptr && tool_->mouse(e, m)) {
+        return true;
+    }
+    // Ohne Werkzeug: Klick links für Pipetten, auch wenn eine andere Taste verschiebt
+    if (tool_ == nullptr && e->button() == Qt::LeftButton) {
+        if (e->type() == QEvent::MouseButtonPress) {
+            return true;
+        }
+        if (e->type() == QEvent::MouseButtonRelease) {
+            Q_EMIT picked(m.toNorm(e->position()));
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ImageCanvas::overlayWheel(QWheelEvent* e)
+{
+    const int delta = e->angleDelta().y();
+    if (delta == 0) {
         return false;
     }
+    if ((e->modifiers() & Qt::ControlModifier) != 0) {
+        zoomBy(std::pow(1.25, delta / 120.0), e->position());
+        return true;
+    }
+    return tool_ != nullptr && tool_->wheel(e, mapping());
 }
 
 } // namespace autoneg::ui
