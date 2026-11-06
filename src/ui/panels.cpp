@@ -443,24 +443,31 @@ void ConversionPanel::setBusy(const QString& button, bool on)
         spin_->setInterval(80);
         connect(spin_, &QTimer::timeout, this, [this] {
             angle_ = (angle_ + 30) % 360;
-            QPixmap icon(32, 32);
-            icon.fill(Qt::transparent);
-            QPainter p(&icon);
-            p.setRenderHint(QPainter::Antialiasing);
-            p.setPen(QPen(palette().color(QPalette::Highlight), 4, Qt::SolidLine, Qt::RoundCap));
-            p.drawArc(QRectF(4, 4, 24, 24), -angle_ * 16, 270 * 16);
-            p.end();
-            for (const QString& name : busy_) {
-                if (auto* busyButton = manual_->findChild<QPushButton*>(name)) {
-                    busyButton->setIcon(QIcon(icon));
-                }
-            }
+            paintSpinner();
         });
     }
     if (busy_.isEmpty()) {
         spin_->stop();
     } else {
+        // sofort zeichnen: eine schnelle Automatik ist sonst vor dem ersten Takt fertig
+        paintSpinner();
         spin_->start();
+    }
+}
+
+void ConversionPanel::paintSpinner()
+{
+    QPixmap icon(32, 32);
+    icon.fill(Qt::transparent);
+    QPainter p(&icon);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(palette().color(QPalette::Highlight), 4, Qt::SolidLine, Qt::RoundCap));
+    p.drawArc(QRectF(4, 4, 24, 24), -angle_ * 16, 270 * 16);
+    p.end();
+    for (const QString& name : busy_) {
+        if (auto* busyButton = manual_->findChild<QPushButton*>(name)) {
+            busyButton->setIcon(QIcon(icon));
+        }
     }
 }
 

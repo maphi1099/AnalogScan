@@ -150,6 +150,8 @@ Q_SIGNALS:
     void autoConvertToggled(bool on);
 
 private:
+    void paintSpinner();
+
     QCheckBox* auto_ = nullptr;
     QWidget* manual_ = nullptr; ///< alles, was bei Autokonvertierung verschwindet
     QComboBox* levels_ = nullptr;

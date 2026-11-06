@@ -1091,7 +1091,8 @@ TEST_F(E2E, M10_AutomaticShowsBusyButton)
     button->click();
     EXPECT_TRUE(window->conversionPanel()->busy(QStringLiteral("autoBase")));
     EXPECT_FALSE(button->isEnabled());
-    ASSERT_TRUE(waitFor([&] { return !button->icon().isNull(); }));
+    // sofort, nicht erst beim ersten Takt: schnelle Automatiken zeigten sonst nie ein Symbol (Linux Release)
+    EXPECT_FALSE(button->icon().isNull());
     ASSERT_TRUE(waitFor([&] { return !window->conversionPanel()->busy(QStringLiteral("autoBase")); }, 30000));
     EXPECT_TRUE(button->isEnabled());
     EXPECT_TRUE(button->icon().isNull());

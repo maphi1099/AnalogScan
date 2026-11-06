@@ -381,3 +381,11 @@ Format je Eintrag:
 - Ursache: Qt-Signale dürfen unverbunden sein; E2E-Tests prüften die Pipette nicht.
 - Abhilfe: Für jeden Knopf einen E2E-Test, der seine Wirkung prüft (`M10_WhitePickerSetsWhiteBalance`); Vorschlag in der Reflexion: Test, der Empfänger aller Panel-Signale verlangt.
 - Status: behoben (Pipette), Vorbeugung offen
+
+## B-46: Nach Triplet-Wechsel „IMPORTED_LOCATION not set“ für `lcms2::lcms2`, `TIFF::TIFF`
+- Erstmals: 06.11.2026, Häufigkeit: 1
+- Plattform: Linux
+- Symptom: `cmake --preset linux-release` scheitert im Generate-Schritt, obwohl vcpkg fehlerfrei installiert hat.
+- Ursache: `CMakeCache.txt` behält `LCMS2_LIBRARY_*` und `TIFF_LIBRARY_*` aus `vcpkg_installed/x64-linux`; nach dem Wechsel auf `x64-linux-lgpl` (D-19) zeigen sie ins Leere.
+- Abhilfe: Bei einem Triplet-Wechsel `CMakeCache.txt` im Build-Ordner löschen (oder `cmake --fresh`).
+- Status: umgangen
