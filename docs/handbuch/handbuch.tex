@@ -83,8 +83,9 @@ Installation im eigenen Benutzerverzeichnis (ohne Administratorrechte) im Termin
 \begin{lstlisting}
 sh AutoNeg-1.0.0-Linux.sh --prefix=$HOME/.local --exclude-subdir
 \end{lstlisting}
-Das Programm liegt danach unter \datei{bin/autoneg} im gewählten Ordner, hier also
-\datei{\textasciitilde/.local/bin/autoneg}. Zum Aktualisieren die neue Datei genauso
+Das Programm ist danach als \datei{bin/autoneg} im gewählten Ordner aufrufbar, hier also
+\datei{\textasciitilde/.local/bin/autoneg}; Programm und mitgelieferte Bibliotheken (Qt, LibRaw)
+liegen gemeinsam in \datei{lib/autoneg}. Zum Aktualisieren die neue Datei genauso
 ausführen; Einstellungen und Vorlagen bleiben erhalten.
 
 % ---------------------------------------------------------------------------------------------
@@ -222,11 +223,14 @@ Klick entfernt ihn wieder.
         \menu{Lage egal}) und \menu{Maximale Schräglage} (so schief darf der Film unter der
         Kamera liegen, Standard 10\textdegree). Weicht das Gefundene stark vom Format ab, sucht
         AutoNeg mit diesem Format weiter.
-        Unter dem Schalter steht eine Bewertung der Erkennung (\enquote{Erkennung: … \%} mit
-        \enquote{gut}, \enquote{prüfen} oder \enquote{unsicher}) und gegebenenfalls Hinweise,
-        etwa \enquote{Filmrand ungleichmäßig (Fehlfarben), Basis prüfen}. Dann das Ergebnis
-        ansehen und die Basis notfalls mit \menu{Basis messen} bestimmen.
-  \item[Auto-Basis] misst nur die Filmbasis (den unbelichteten Filmrand).
+        Bleibt am Rand des Bildfelds ein schmaler Streifen Filmrand, schneidet AutoNeg ihn ab
+        (höchstens 4\,\% je Seite).
+  \item[Auto-Basis] misst nur die Filmbasis (den unbelichteten Filmrand). Findet AutoNeg keinen
+        Filmrand (randlos gescannt), schätzt es die Basis aus den hellsten Stellen des
+        Negativs und meldet \enquote{Kein Filmrand gefunden, Basis aus dem Bild geschätzt}.
+        Ist der Filmrand ungleichmäßig, erscheint \enquote{Filmrand ungleichmäßig
+        (Fehlfarben), Basis prüfen}; dann das Ergebnis ansehen und die Basis notfalls mit
+        \menu{Basis messen} bestimmen. Die Hinweise stehen in der Statuszeile.
   \item[Basis messen] für schwierige Fälle: Schalter klicken und auf dem Bild ein Rechteck
         in den unbelichteten Filmrand ziehen. Nach dem Loslassen misst AutoNeg die Basis in
         diesem Bereich; Perforationslöcher und andere sehr helle Stellen im Rechteck werden
@@ -240,6 +244,9 @@ Klick entfernt ihn wieder.
   \item[Konvertieren] kehrt das Negativ mit der gemessenen Filmbasis um. Ohne Basis geht das
         nicht: zuerst \menu{Auto-Basis} oder \menu{Basis messen}.
 \end{description}
+Solange eine Automatik rechnet, dreht sich am Schalter ein Symbol, und der Schalter ist
+gesperrt. Auto-Bildfeld, Auto-Basis und Konvertieren lesen den Scan nur einmal; der zweite und
+dritte Schritt sind deshalb deutlich schneller als der erste.
 Automatisch ermittelte Werte erscheinen in den Bearbeitungsoptionen mit der Herkunft
 \enquote{automatisch} und lassen sich wie jede andere Änderung entfernen.
 
@@ -260,7 +267,9 @@ ungeschnittene Bild mit dem Zuschnittrahmen:
 Beim Loslassen werden Zuschnitt und Feindrehung als ein Schritt übernommen.
 Vierteldrehungen und Spiegeln: \menu{90\textdegree{} nach links drehen} (\taste{Strg+[}),
 \menu{90\textdegree{} nach rechts drehen} (\taste{Strg+]}), \menu{Waagerecht spiegeln}
-(\taste{Strg+H}).
+(\taste{Strg+H}). Liegen alle Bilder einer Rolle gleich, dreht man eines und wählt
+\menu{Ansicht \textrightarrow{} Drehung für alle übernehmen}; auf dem Leuchttisch nimmt
+\taste{Strg+Z} das wieder zurück.
 
 % ---------------------------------------------------------------------------------------------
 \section{Gradation für Schwarzweiß}
@@ -301,6 +310,11 @@ den neutralen Wert zurück.
 \end{tabularx}
 \end{center}
 
+\paragraph{Weißabgleich-Pipette} Den Knopf \menu{Weißabgleich-Pipette} drücken und ins Bild auf
+eine Stelle klicken, die neutral grau oder weiß sein soll. AutoNeg stellt \menu{Farbtemperatur}
+und \menu{Tönung} so ein, dass diese Stelle neutral wird; ein zweiter Klick auf dieselbe Stelle
+ändert nichts mehr.
+
 \subsection{Staubretusche}
 Reiter \menu{Staubretusche} bzw. \menu{Ansicht \textrightarrow{} Staubretusche} (\taste{R}): Jeder Klick auf ein Staubkorn setzt
 eine Retuschestelle (cyanfarbener Kreis). AutoNeg füllt sie mit Bildinhalt aus der Nähe. Alle
@@ -309,7 +323,10 @@ Stellen eines Bilds bilden eine Bearbeitungsoption \enquote{Staubretusche}.
 \subsection{Ansicht}
 \begin{itemize}
   \item \menu{Einpassen} (\taste{Strg+0}), \menu{100\,\%} (\taste{Strg+1}),
-        \menu{200\,\%} (\taste{Strg+2}).
+        \menu{200\,\%} (\taste{Strg+2}). Bei 100 und 200\,\% rechnet AutoNeg nur den
+        sichtbaren Ausschnitt, dafür in voller Auflösung.
+  \item \menu{Vorheriges Bild} (\taste{Strg+\textleftarrow}) und \menu{Nächstes Bild}
+        (\taste{Strg+\textrightarrow}).
   \item \menu{Vorher/Nachher} (\taste{\textbackslash}) zeigt den unkonvertierten Scan.
   \item Beschnittene Tiefen und Lichter zeigt das Histogramm (Markierungen oben links und
         rechts); eine Beschnittwarnung im Bild gibt es nicht.
@@ -391,7 +408,8 @@ Am schnellsten auf dem \menu{Leuchttisch}: rechts Zielordner und Format wählen,
   Farbraum    & sRGB, Adobe RGB oder ProPhoto RGB; das Profil wird eingebettet \\
   Lange Kante & Größe der längeren Seite in Pixeln; 0 = Originalgröße \\
   als Graustufen & einkanalige Datei mit Graustufenprofil (für S/W) \\
-  Zielordner  & Standard: Unterordner \datei{export} im Rollenordner \\
+  Zielordner  & Standard: Unterordner \datei{export} im Rollenordner, bei jeder geöffneten
+                Rolle neu \\
   Dateiname   & Muster mit Platzhaltern (siehe unten) \\
   \bottomrule
 \end{tabularx}
@@ -405,6 +423,10 @@ Am schnellsten auf dem \menu{Leuchttisch}: rechts Zielordner und Format wählen,
 \paragraph{Im Hintergrund} Der Export läuft im Hintergrund und rechnet mehrere Bilder
 gleichzeitig; man kann währenddessen weiterarbeiten. Der Fortschritt steht in der Statusleiste,
 \menu{Abbrechen} beendet den Auftrag. Halbe Dateien entstehen dabei nicht.
+
+\paragraph{Dateinamen} Ein leeres Namensmuster ergibt den Namen des Scans. Unter Windows
+ungültige Namen (etwa \datei{CON} oder \datei{NUL}) erhalten ein \datei{\_}, Punkte und
+Leerzeichen am Ende entfallen.
 
 \paragraph{Vorhandene Dateien} werden nicht überschrieben: Existiert eine Zieldatei bereits,
 bricht der Export vor dem ersten geschriebenen Bild mit einer Meldung ab. Dann einen anderen
@@ -454,6 +476,10 @@ Rollenordner), \menu{Drucken …} öffnet den Druckdialog.
         Auslagerung). Wer den Haken entfernt, stellt ein Budget ein; vorgeschlagen werden
         50\,\% des Arbeitsspeichers. Ein kleineres Budget lässt weniger Bilder gleichzeitig
         rechnen, entlastet aber den Rechner.
+  \item[Tastenkürzel] Jede Aktion lässt sich frei belegen: Feld anklicken und die neue
+        Tastenkombination drücken, das Kreuz entfernt die Belegung. Ist eine Kombination
+        doppelt vergeben, nennt der Dialog sie und \menu{OK} ist gesperrt. \menu{Alle auf
+        Standard} stellt die Werksbelegung wieder her.
 \end{description}
 
 % ---------------------------------------------------------------------------------------------
@@ -491,20 +517,17 @@ weiter; nichts wird stillschweigend überschrieben.
   \taste{G} & Leuchttisch                 & \taste{E}              & Entwickeln \\
   \taste{Strg+W} & Ansicht schließen      & \taste{Strg+Umschalt+V} & Einstellungen auf Auswahl \\
   \taste{Strg+Umschalt+A} & Fenster anordnen & \taste{Strg+Alt+V} & Einstellungen auf alle \\
+  \taste{Strg+\textleftarrow} & Vorheriges Bild & \taste{Strg+\textrightarrow} & Nächstes Bild \\
   \bottomrule
 \end{tabular}
 \end{center}
 Auf deutschen Tastaturen erreicht man \textbackslash, [ und ] mit \taste{AltGr}; die Kürzel
-folgen dem Tastaturlayout.
+folgen dem Tastaturlayout. Alle Kürzel lassen sich unter \menu{Einstellungen
+\textrightarrow{} Tastenkürzel} ändern; die Tabelle zeigt die Standardbelegung.
 
 % ---------------------------------------------------------------------------------------------
 \section{Einschränkungen von Version 1.0}
 
-Folgende Bedienelemente sind vorhanden, haben in dieser Ausgabe aber noch keine Funktion:
-\begin{itemize}
-  \item \menu{Weißabgleich-Pipette} (Reiter \menu{Licht und Farbe}): den Weißabgleich über
-        \menu{Farbtemperatur} und \menu{Tönung} einstellen.
-\end{itemize}
 Die automatische Bildfelderkennung findet bei manchen Scans kein Bildfeld (Meldung
 \enquote{Kein Bildfeld erkennbar}), etwa wenn das Bild bis an die Perforation reicht. Dann den
 Zuschnitt mit \menu{Zuschneiden und Drehen} setzen und die Filmbasis mit \menu{Basis messen}
