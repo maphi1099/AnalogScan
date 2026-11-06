@@ -307,6 +307,8 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - D-21: OpenCV im `CpuBackend` (GaussianBlur, warpAffine, resize AREA, bilateralFilter, Non-Local Means „Stark“); Lichter/Schatten bleibt eigen. Messwerkzeug `tests/tools/cvcompare`. Neue Regel in `CLAUDE.md`: Standardfunktionen vor Eigenbau, keine versteckte Automatik.
 - K-M10-23: Staubretusche mit Formen (Kreis, Pinsel, Radierer, Liste mit Name/Haken), Fehlersuche Black-/Top-Hat + `cv::inpaint` (16 Bit, B-47).
 - D-23: Farbgenauigkeit des Bildschirms als LF-UI-11 für Version 1.1.
+- Klarstellung: „Neutral“ (Standard) gleicht wieder automatisch je Kanal aus, „Unbearbeitet“ ohne (LF-KON-06 erfüllt).
+- K-M10-24: Sitzungsprotokoll im Debug-Bau (`<Zwischenspeicher>/logs`, eine Datei je Sitzung, nie gelöscht; Aufträge, Befehle, Rendern, Speichern, Bedienung mit Zeit und Thread). **Bei Fehlersuche zuerst das neueste Sitzungsprotokoll lesen** (Windows: `%LOCALAPPDATA%\AutoNeg\logs`, Linux: `~/.cache/autoneg/logs`).
 - Tests: T-30, T-31. Windows Debug 375/375 (inkl. visual). Linux noch nicht gebaut (nur auf Ansage des Nutzers).
 
 ## Entscheidungen

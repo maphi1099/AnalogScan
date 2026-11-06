@@ -183,11 +183,16 @@ JobHandle JobScheduler::submit(std::unique_ptr<Job> job, ports::Priority p)
         jobs_.push_back(state);
     }
     std::shared_ptr<Job> shared(std::move(job));
-    executor_.enqueue(p, [state, shared, p] {
+    const char* prio = p == ports::Priority::Interactive ? "interaktiv" : p == ports::Priority::Background ? "Hintergrund" : "Stapel";
+    log_.info("Auftrag eingereiht: " + shared->name() + " (" + prio + ")");
+    executor_.enqueue(p, [this, state, shared, p] {
         if (state->cancel.cancelled()) {
             finish(*state, JobStatus::Cancelled); // vor dem Start abgebrochen
+            log_.info("Auftrag vor dem Start abgebrochen: " + shared->name());
             return;
         }
+        const auto started = std::chrono::steady_clock::now();
+        log_.info("Auftrag gestartet: " + shared->name());
         {
             const std::scoped_lock lock(state->mutex);
             state->status = JobStatus::Running;
@@ -199,11 +204,15 @@ JobHandle JobScheduler::submit(std::unique_ptr<Job> job, ports::Priority p)
             state->progress.store(total > 0 ? static_cast<double>(done) / total : 0.0);
         };
         const auto r = shared->run(ctx);
+        const std::string took = std::to_string(EventLog::msSince(started)) + " ms";
         if (state->cancel.cancelled() || (!r && r.error().code == base::ErrorCode::Cancelled)) {
+            log_.info("Auftrag abgebrochen: " + shared->name() + " nach " + took);
             finish(*state, JobStatus::Cancelled);
         } else if (!r) {
+            log_.error("Auftrag fehlgeschlagen: " + shared->name() + " nach " + took + ": " + r.error().message);
             finish(*state, JobStatus::Failed, r.error());
         } else {
+            log_.info("Auftrag fertig: " + shared->name() + " in " + took);
             state->progress.store(1.0);
             finish(*state, JobStatus::Done);
         }

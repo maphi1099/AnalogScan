@@ -3,8 +3,11 @@
 #include "adapters/tbb/system_memory.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <format>
+#include <limits>
 #include <optional>
 
 namespace autoneg::app {
@@ -86,7 +89,7 @@ Composition::Composition(Directories dirs, application::RenderService::ReadyHand
     , codec_(application::stepCatalog(registry_))
     , queue_(store_,
              [this](const model::Frame& f, const base::Error& e) {
-                 logger_.log(ports::LogLevel::Error, "Begleitdatei für " + f.path.filename().string() +
+                 events_.log(ports::LogLevel::Error, "Begleitdatei für " + f.path.filename().string() +
                                                          " nicht gespeichert: " + e.message);
              })
     , bus_(registry_, queue_)
@@ -105,6 +108,30 @@ Composition::Composition(Directories dirs, application::RenderService::ReadyHand
     , contactSheet_(jobs_, renderer_, color_, document,
                     [this](const model::FrameId& f) { releaseUnlessCurrent(f); })
 {
+    events_.add(&logger_);
+#ifndef NDEBUG
+    // Debug-Bau: Sitzungsprotokoll aller internen Ereignisse (Aufträge, Befehle, Rendern,
+    // Speichern, Bedienung, Meldungen) mit Uhrzeit und Thread; eine Datei je Sitzung, nie
+    // rotiert oder gelöscht (Wunsch des Nutzers für Langzeittests)
+    {
+        const auto now = std::chrono::system_clock::now();
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+        const std::string stamp =
+            std::format("{:%Y-%m-%d_%H-%M-%S}", std::chrono::zoned_time{std::chrono::current_zone(),
+                                                                         std::chrono::floor<std::chrono::seconds>(now)}) +
+            std::format("-{:03}", ms);
+        sessionLogFile_ = dirs_.cache / "logs" / ("autoneg-" + stamp + ".log");
+        sessionLog_ = std::make_unique<adapter::spdlog::SpdLogger>(
+            sessionLogFile_, std::numeric_limits<std::size_t>::max(), 1, ports::LogLevel::Info, ports::LogLevel::Info);
+        events_.add(sessionLog_.get());
+        jobs_.setLogger(sessionLog_.get());
+        bus_.setLogger(sessionLog_.get());
+        render_.setLogger(sessionLog_.get());
+        queue_.setLogger(sessionLog_.get());
+        sessionLog_->log(ports::LogLevel::Info, "Sitzungsprotokoll " + sessionLogFile_.string() + "; Einstellungen " +
+                                                    dirs_.config.string() + "; Zwischenspeicher " + dirs_.cache.string());
+    }
+#endif
     // Gespeicherte Threadzahl und Speicherbudget (LF-DAT-04, NF-PERF-12)
     application::ThreadConfig c;
     c.memoryBudget = defaultMemoryBudget();
@@ -117,9 +144,9 @@ Composition::Composition(Directories dirs, application::RenderService::ReadyHand
     }
     jobs_.configure(c);
     if (!config_.loadMessage().empty()) {
-        logger_.log(ports::LogLevel::Warning, config_.loadMessage());
+        events_.log(ports::LogLevel::Warning, config_.loadMessage());
     }
-    logger_.log(ports::LogLevel::Info,
+    events_.log(ports::LogLevel::Info,
                 "AutoNeg gestartet; Threads " + std::to_string(executor_.concurrency()));
 }
 
@@ -129,7 +156,7 @@ Composition::~Composition()
     jobs_.shutdown();
     render_.idle();
     queue_.flush();
-    logger_.log(ports::LogLevel::Info, "AutoNeg beendet");
+    events_.log(ports::LogLevel::Info, "AutoNeg beendet");
 }
 
 std::string Composition::language()

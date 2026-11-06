@@ -130,6 +130,16 @@ model::UndoGroupId CommandBus::execute(const ICommand& c, std::span<const model:
         persist(o);
         notify(f, rev);
     }
+    if (log_.enabled()) {
+        std::string frames;
+        for (const auto& [f, seq] : group.changes) {
+            const auto it = open_.find(f);
+            frames += (frames.empty() ? "" : ", ") +
+                      (it != open_.end() ? it->second.frame.path.filename().string() : std::string("?"));
+        }
+        log_.info("Befehl \"" + group.label + "\"" + (batch ? " (Stapel)" : "") + ": " +
+                  (group.changes.empty() ? std::string("keine Änderung") : frames));
+    }
     if (group.changes.empty()) {
         return {};
     }
@@ -144,6 +154,7 @@ model::UndoGroupId CommandBus::execute(const ICommand& c, std::span<const model:
 
 bool CommandBus::undoFrame(const model::FrameId& f)
 {
+    log_.info("Rückgängig (aktives Bild)");
     const auto it = open_.find(f);
     if (it == open_.end()) {
         return false;
@@ -158,6 +169,7 @@ bool CommandBus::undoFrame(const model::FrameId& f)
 
 bool CommandBus::redoFrame(const model::FrameId& f)
 {
+    log_.info("Wiederholen (aktives Bild)");
     const auto it = open_.find(f);
     if (it == open_.end()) {
         return false;
@@ -172,6 +184,7 @@ bool CommandBus::redoFrame(const model::FrameId& f)
 
 bool CommandBus::undoBatch()
 {
+    log_.info("Rückgängig (Leuchttisch)");
     const auto g = batch_.undo();
     if (!g) {
         return false;
@@ -192,6 +205,7 @@ bool CommandBus::undoBatch()
 
 bool CommandBus::redoBatch()
 {
+    log_.info("Wiederholen (Leuchttisch)");
     const auto g = batch_.redo();
     if (!g) {
         return false;
@@ -217,6 +231,7 @@ bool CommandBus::redoBatch()
 
 bool CommandBus::undo()
 {
+    log_.info("Rückgängig");
     const auto g = undo_.undo();
     if (!g) {
         return false;
@@ -236,6 +251,7 @@ bool CommandBus::undo()
 
 bool CommandBus::redo()
 {
+    log_.info("Wiederholen");
     const auto g = undo_.redo();
     if (!g) {
         return false;

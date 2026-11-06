@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/event_log.hpp"
 #include "model/roll.hpp"
 #include "ports/repositories.hpp"
 
@@ -25,6 +26,8 @@ public:
     using ErrorHandler = std::function<void(const model::Frame&, const base::Error&)>;
 
     explicit PersistenceQueue(ports::IEditRepository& repo, ErrorHandler onError = {});
+    /// Protokoll: jede geschriebene Begleitdatei; optional.
+    void setLogger(ports::ILogger* l) { log_.set(l); }
     ~PersistenceQueue();
     PersistenceQueue(const PersistenceQueue&) = delete;
     PersistenceQueue& operator=(const PersistenceQueue&) = delete;
@@ -44,6 +47,7 @@ private:
     };
 
     ports::IEditRepository& repo_;
+    EventLog log_;
     ErrorHandler onError_;
     std::mutex mutex_;
     std::condition_variable_any cv_;

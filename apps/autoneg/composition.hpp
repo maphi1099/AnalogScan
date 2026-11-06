@@ -35,6 +35,9 @@
 #include "steps/registry.hpp"
 
 #include <filesystem>
+#include <memory>
+#include <string_view>
+#include <vector>
 #include <mutex>
 #include <string>
 
@@ -90,7 +93,10 @@ public:
     [[nodiscard]] ports::IImageReader& reader() { return reader_; }
     [[nodiscard]] ports::IPresetRepository& presets() { return config_; }
     [[nodiscard]] ports::ISettingsStore& settings() { return config_; }
-    [[nodiscard]] ports::ILogger& logger() { return logger_; }
+    /// Protokoll: autoneg.log (rotierend) und im Debug-Bau zusätzlich das Sitzungsprotokoll.
+    [[nodiscard]] ports::ILogger& logger() { return events_; }
+    /// Sitzungsprotokoll dieser Sitzung (nur Debug-Bau, sonst leer).
+    [[nodiscard]] const std::filesystem::path& sessionLog() const { return sessionLogFile_; }
     [[nodiscard]] ports::ITaskExecutor& executor() { return executor_; }
     [[nodiscard]] pipeline::SourceProvider& sources() { return sources_; }
 
@@ -98,8 +104,27 @@ private:
     base::Expected<image::ImageBuffer> analysisImage(const model::Frame& f);
     void releaseUnlessCurrent(const model::FrameId& f);
 
+    /// Verteilt jede Meldung auf mehrere Protokolle.
+    class EventLogger final : public ports::ILogger
+    {
+    public:
+        void add(ports::ILogger* l) { sinks_.push_back(l); }
+        void log(ports::LogLevel l, std::string_view msg) override
+        {
+            for (ports::ILogger* s : sinks_) {
+                s->log(l, msg);
+            }
+        }
+
+    private:
+        std::vector<ports::ILogger*> sinks_;
+    };
+
     Directories dirs_;
     adapter::spdlog::SpdLogger logger_;
+    std::filesystem::path sessionLogFile_;
+    std::unique_ptr<adapter::spdlog::SpdLogger> sessionLog_; ///< Debug-Bau: eine Datei je Sitzung, nie gelöscht
+    EventLogger events_;
     // Adapter
     adapter::lcms::LcmsColorEngine color_;
     adapter::libraw::LibRawDecoder decoder_;

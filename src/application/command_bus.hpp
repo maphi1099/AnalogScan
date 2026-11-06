@@ -1,6 +1,7 @@
 #pragma once
 
 #include "application/commands.hpp"
+#include "application/event_log.hpp"
 #include "application/persistence_queue.hpp"
 #include "model/edit_history.hpp"
 #include "model/roll.hpp"
@@ -74,6 +75,8 @@ private:
 class CommandBus
 {
 public:
+    /// Protokoll: jeder Befehl, Rückgängig und Wiederholen; optional.
+    void setLogger(ports::ILogger* l) { log_.set(l); }
     CommandBus(const pipeline::StepRegistry& registry, PersistenceQueue& queue)
         : registry_(registry)
         , queue_(queue)
@@ -122,6 +125,7 @@ private:
 
     const pipeline::StepRegistry& registry_;
     PersistenceQueue& queue_;
+    EventLog log_;
     std::map<model::FrameId, Open> open_;
     UndoStack undo_;
     UndoStack batch_; ///< nur Aktionen vom Leuchttisch

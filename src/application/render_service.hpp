@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/event_log.hpp"
 #include "pipeline/pipeline_executor.hpp"
 #include "pipeline/render.hpp"
 
@@ -65,6 +66,8 @@ public:
         std::function<void(std::uint64_t seq, const pipeline::RenderRequest&, image::ImageBuffer)>;
 
     RenderService(IRenderer& renderer, ReadyHandler onReady);
+    /// Protokoll: jede Anfrage mit Art, Dauer und Ergebnis; optional.
+    void setLogger(ports::ILogger* l) { log_.set(l); }
     ~RenderService();
     RenderService(const RenderService&) = delete;
     RenderService& operator=(const RenderService&) = delete;
@@ -80,6 +83,7 @@ private:
     void loop(const std::stop_token& stop);
 
     IRenderer& renderer_;
+    EventLog log_;
     ReadyHandler onReady_;
     std::mutex mutex_;
     std::condition_variable_any cv_;

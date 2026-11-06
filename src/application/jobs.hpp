@@ -1,5 +1,6 @@
 #pragma once
 
+#include "application/event_log.hpp"
 #include "base/error.hpp"
 #include "image/cancel_token.hpp"
 #include "ports/task_executor.hpp"
@@ -131,6 +132,8 @@ private:
 class JobScheduler
 {
 public:
+    /// Protokoll interner Ereignisse (Start, Ende, Dauer, Fehler jedes Auftrags); optional.
+    void setLogger(ports::ILogger* l) { log_.set(l); }
     explicit JobScheduler(ports::ITaskExecutor& executor)
         : executor_(executor)
     {}
@@ -160,6 +163,7 @@ public:
 
 private:
     ports::ITaskExecutor& executor_;
+    EventLog log_;
     MemoryBudget budget_{ThreadConfig{}.memoryBudget};
     std::mutex mutex_;
     std::vector<std::weak_ptr<detail::JobState>> jobs_;

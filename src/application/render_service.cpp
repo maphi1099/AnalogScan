@@ -1,5 +1,8 @@
 #include "application/render_service.hpp"
 
+#include <chrono>
+#include <string>
+
 namespace autoneg::application {
 
 RenderService::RenderService(IRenderer& renderer, ReadyHandler onReady)
@@ -56,8 +59,21 @@ void RenderService::loop(const std::stop_token& stop)
         running_ = req.cancel;
         busy_ = true;
         lock.unlock();
+        const auto started = std::chrono::steady_clock::now();
+        const char* mode = req.profile.mode == pipeline::RenderMode::Detail   ? "Detail"
+                           : req.profile.mode == pipeline::RenderMode::Export ? "Export"
+                                                                              : "Vorschau";
         auto img = renderer_.render(req);
         const bool stale = req.cancel.cancelled();
+        const std::string what = "Rendern #" + std::to_string(seq) + " (" + mode + ", " + req.path.filename().string() + ")";
+        if (stale) {
+            log_.info(what + " veraltet, verworfen nach " + std::to_string(EventLog::msSince(started)) + " ms");
+        } else if (!img) {
+            log_.error(what + " fehlgeschlagen: " + img.error().message);
+        } else {
+            log_.info(what + " fertig in " + std::to_string(EventLog::msSince(started)) + " ms, " +
+                      std::to_string(img->spec().width) + " x " + std::to_string(img->spec().height));
+        }
         if (img && !stale && onReady_) {
             onReady_(seq, req, std::move(*img));
         }

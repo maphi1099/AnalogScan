@@ -44,6 +44,10 @@ void PersistenceQueue::loop(const std::stop_token& stop)
         lock.unlock();
         const Pending& p = node.mapped();
         const auto ok = repo_.save(p.frame, p.data);
+        if (ok) {
+            log_.info("Begleitdatei gespeichert: " + p.frame.path.filename().string() + " (" +
+                      std::to_string(p.data.edits.entries().size()) + " Einträge)");
+        }
         if (!ok && onError_) {
             onError_(p.frame, ok.error());
         }

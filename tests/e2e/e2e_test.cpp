@@ -64,6 +64,8 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <regex>
+#include <sstream>
 
 namespace autoneg {
 namespace {
@@ -950,6 +952,46 @@ TEST_F(E2E, M10_RetouchShapesToolsAndList)
     panel->list()->setCurrentRow(1);
     panel->findChild<QPushButton*>(QStringLiteral("retouchRemove"))->click();
     EXPECT_EQ(shapes().size(), 1U);
+}
+
+// Wunsch des Nutzers: im Debug-Bau protokolliert jede Sitzung alle internen Ereignisse in eine
+// eigene Datei (nie gelöscht) mit Uhrzeit, Ebene und Thread
+TEST_F(E2E, M10_DebugSessionLog)
+{
+#ifdef NDEBUG
+    GTEST_SKIP() << "nur im Debug-Bau";
+#else
+    start(1);
+    const fs::path file = comp->sessionLog();
+    ASSERT_FALSE(file.empty());
+    model::EditEntry ev;
+    ev.step = model::StepId("autoneg.exposure");
+    ev.params = model::ParamSet{}.with("ev", 0.5);
+    ASSERT_TRUE(window->controller().apply(std::make_unique<application::SetEntryCommand>(ev)));
+    action("zoom100")->trigger();
+    const auto contents = [&file] {
+        std::ifstream in(file);
+        return std::string(std::istreambuf_iterator<char>(in), {});
+    };
+    ASSERT_TRUE(waitFor([&] { return contents().find("Begleitdatei gespeichert") != std::string::npos; }));
+    const std::string log = contents();
+    EXPECT_NE(log.find("Sitzungsprotokoll"), std::string::npos);
+    EXPECT_NE(log.find("Befehl"), std::string::npos);
+    EXPECT_NE(log.find("Auftrag fertig"), std::string::npos);
+    EXPECT_NE(log.find("Rendern #"), std::string::npos);
+    EXPECT_NE(log.find("UI: Aktion: zoom100"), std::string::npos);
+    // Zeile: Datum Uhrzeit.ms [Ebene] [Thread] Text
+    std::istringstream lines(log);
+    std::string first;
+    std::getline(lines, first);
+    EXPECT_TRUE(std::regex_search(first, std::regex(R"(^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} \[info\] \[\d+\] )")))
+        << first;
+    // neue Sitzung: neue Datei, die alte bleibt
+    restart();
+    EXPECT_NE(comp->sessionLog(), file);
+    EXPECT_TRUE(fs::exists(file));
+    EXPECT_TRUE(fs::exists(comp->sessionLog()));
+#endif
 }
 
 // E-26: LF-BAT-04 – Einfügen mit "neu erkennen": Zuschnitt wird nicht kopiert, sondern erkannt

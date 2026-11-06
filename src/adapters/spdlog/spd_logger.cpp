@@ -97,7 +97,7 @@ struct SpdLogger::Impl
 };
 
 SpdLogger::SpdLogger(const fs::path& file, std::size_t maxBytes, std::size_t maxFiles,
-                     ports::LogLevel minimum)
+                     ports::LogLevel minimum, ports::LogLevel flushFrom)
     : impl_(std::make_unique<Impl>())
 {
     std::error_code ec;
@@ -107,7 +107,7 @@ SpdLogger::SpdLogger(const fs::path& file, std::size_t maxBytes, std::size_t max
     impl_->logger = std::make_shared<::spdlog::logger>("autoneg", std::move(sink));
     impl_->logger->set_pattern("%Y-%m-%d %H:%M:%S.%e [%l] [%t] %v");
     impl_->logger->set_level(levelOf(minimum));
-    impl_->logger->flush_on(::spdlog::level::warn);
+    impl_->logger->flush_on(levelOf(flushFrom));
 }
 
 SpdLogger::~SpdLogger()

@@ -210,6 +210,8 @@ private:
     void saveFilmProfile();
     /// Formen der Staubretusche als Eintrag setzen (leer: Eintrag entfernen).
     void commitShapes(const model::RetouchShapes& shapes);
+    /// Debug-Bau: Bedienereignis ins Sitzungsprotokoll.
+    void trace(const QString& event) const;
     /// Werkzeug und Reiter Staubretusche auf den Stand der Liste bringen.
     void syncRetouchTool();
     /// Schritte der markierten Bilder entfernen (Schalter abgewählt).

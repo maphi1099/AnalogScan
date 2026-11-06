@@ -10,7 +10,8 @@ namespace autoneg::adapter::spdlog {
 
 /// Protokoll in eine Datei mit Rotation (NF-REL-03, Architektur 9.11): Zeit, Ebene, Text;
 /// beim Überschreiten von maxBytes wird die Datei umbenannt (autoneg.1.log …), höchstens
-/// maxFiles alte Dateien bleiben. Threadsicher.
+/// maxFiles alte Dateien bleiben. Ab flushFrom wird jede Meldung sofort geschrieben (Sitzungs-
+/// protokoll: Info, damit bei einem Absturz nichts fehlt). Threadsicher.
 class SpdLogger final : public ports::ILogger
 {
 public:
@@ -19,7 +20,8 @@ public:
 
     explicit SpdLogger(const std::filesystem::path& file, std::size_t maxBytes = defaultMaxBytes,
                        std::size_t maxFiles = defaultMaxFiles,
-                       ports::LogLevel minimum = ports::LogLevel::Info);
+                       ports::LogLevel minimum = ports::LogLevel::Info,
+                       ports::LogLevel flushFrom = ports::LogLevel::Warning);
     ~SpdLogger() override;
     SpdLogger(const SpdLogger&) = delete;
     SpdLogger& operator=(const SpdLogger&) = delete;

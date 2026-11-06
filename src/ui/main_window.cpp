@@ -220,6 +220,7 @@ void MainWindow::onFrameReport(const model::FrameId& f, const application::Analy
         text += QStringLiteral("\n• ") + QString::fromStdString(n);
     }
     frameReports_[f] = text;
+    trace(QStringLiteral("Erkennung ") + QString::fromStdString(f.toHex()) + QStringLiteral(": ") + text.simplified());
     if (f != s_.session.current) {
         return;
     }
@@ -745,6 +746,7 @@ void MainWindow::buildActions()
         a->setShortcut(key);
         a->setShortcutContext(Qt::ApplicationShortcut);
         menu->addAction(a);
+        connect(a, &QAction::triggered, this, [this, name] { trace(QStringLiteral("Aktion: ") + name); });
         connect(a, &QAction::triggered, this, std::forward<decltype(slot)>(slot));
         actions_[name] = a;
         return a;
@@ -1073,6 +1075,8 @@ void MainWindow::stepImage(int delta)
 
 void MainWindow::showView(View v)
 {
+    static constexpr std::array<const char*, 5> viewNames{"Start", "Import", "Leuchttisch", "Entwickeln", "keine"};
+    trace(QStringLiteral("Ansicht ") + QString::fromLatin1(viewNames[static_cast<std::size_t>(v)]));
     // Ohne Rolle gibt es nur den Start; während des Imports keine Übersicht und keine Bildansicht
     if (!roll_ && v != View::Start) {
         v = View::Start;
@@ -1282,6 +1286,18 @@ void MainWindow::setTool(int which)
     requestPreview(ui_->currentList()); // beim Zuschneiden das ungeschnittene Bild zeigen
 }
 
+void MainWindow::trace(const QString& event) const
+{
+#ifndef NDEBUG
+    // Debug-Bau: Bedienung ins Sitzungsprotokoll (mit Uhrzeit und Thread, siehe Composition)
+    if (s_.logger != nullptr) {
+        s_.logger->log(ports::LogLevel::Info, "UI: " + event.toStdString());
+    }
+#else
+    (void)event;
+#endif
+}
+
 void MainWindow::report(const QString& msg)
 {
     messages_.push_back(msg);
@@ -1408,6 +1424,7 @@ void MainWindow::selectFrame(const model::FrameId& f)
     if (fr == nullptr || f == s_.session.current) {
         return;
     }
+    trace(QStringLiteral("Bild gewählt: ") + qs(fr->path.filename()));
     s_.session.current = f;
     stripModel_->setActive(f);
     if (s_.currentChanged) {

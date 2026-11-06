@@ -544,6 +544,14 @@ Rollenordner), \menu{Drucken …} öffnet den Druckdialog.
         \datei{sidecars} (Begleitdateien schreibgeschützter Ordner).
   \item[Zwischenspeicher] \datei{\%LOCALAPPDATA\%\textbackslash AutoNeg}: Miniaturen und das
         Protokoll \datei{autoneg.log}. Der Ordner darf jederzeit gelöscht werden.
+  \item[Sitzungsprotokolle (nur Debug-Bau)] im Zwischenspeicher unter \datei{logs}: je Sitzung
+        eine Datei \datei{autoneg-JJJJ-MM-TT\_hh-mm-ss-mmm.log}, die AutoNeg nie löscht. Jede
+        Zeile hat Datum, Uhrzeit (Millisekunden), Ebene (info, warning, error), die Nummer des
+        Threads und das Ereignis: Aufträge (eingereiht, gestartet, fertig mit Dauer,
+        abgebrochen, fehlgeschlagen), Befehle mit den betroffenen Bildern, Rückgängig und
+        Wiederholen, jedes Rendern mit Art und Dauer, gespeicherte Begleitdateien,
+        Bedienaktionen, Ansichts- und Bildwechsel sowie alle Meldungen der Statuszeile. Der
+        Thread der ersten Zeile ist der Oberflächen-Thread.
 \end{description}
 Beschädigte Dateien benennt AutoNeg in \datei{….defekt} um und arbeitet mit Standardwerten
 weiter; nichts wird stillschweigend überschrieben.
