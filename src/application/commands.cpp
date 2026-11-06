@@ -40,6 +40,123 @@ model::EditList SetEntryCommand::apply(const model::EditList& l, const CommandCo
     return l.with(normalized(entry_, c.registry));
 }
 
+namespace {
+
+/// Lage auf dem Einheitsquadrat wie WarpBuilder::orient: erst spiegeln, dann q-mal 90° im
+/// Uhrzeigersinn ((x, y) → (1 − y, x)).
+struct Orientation
+{
+    int q = 0;
+    bool fh = false;
+    bool fv = false;
+
+    [[nodiscard]] model::NormPoint apply(model::NormPoint p) const
+    {
+        if (fh) {
+            p.x = 1.0 - p.x;
+        }
+        if (fv) {
+            p.y = 1.0 - p.y;
+        }
+        for (int i = 0; i < q; ++i) {
+            p = {1.0 - p.y, p.x};
+        }
+        return p;
+    }
+    [[nodiscard]] model::NormPoint inverse(model::NormPoint p) const
+    {
+        for (int i = 0; i < q; ++i) {
+            p = {p.y, 1.0 - p.x};
+        }
+        if (fv) {
+            p.y = 1.0 - p.y;
+        }
+        if (fh) {
+            p.x = 1.0 - p.x;
+        }
+        return p;
+    }
+    [[nodiscard]] bool mirrored() const { return fh != fv; }
+};
+
+Orientation orientationOf(const model::EditList& l)
+{
+    Orientation o;
+    if (const model::EditEntry* e = l.get(model::StepId(std::string(id::orientation)))) {
+        o.q = ((e->params.get<int>(steps::key::quarterTurns).value_or(0) % 4) + 4) % 4;
+        o.fh = e->params.get<bool>(steps::key::flipH).value_or(false);
+        o.fv = e->params.get<bool>(steps::key::flipV).value_or(false);
+    }
+    return o;
+}
+
+} // namespace
+
+model::EditList SetOrientationCommand::apply(const model::EditList& l, const CommandContext& c) const
+{
+    namespace key = steps::key;
+    const Orientation before = orientationOf(l);
+    const Orientation after{q_, flipH_, flipV_};
+    // Abbildung alte Lage → neue Lage auf dem Einheitsquadrat
+    const auto map = [&](model::NormPoint p) { return after.apply(before.inverse(p)); };
+    const bool mirror = before.mirrored() != after.mirrored();
+    const bool swap = (before.q + after.q) % 2 == 1;
+    model::EditList out = l;
+    // Lage selbst; neutral: kein Eintrag
+    const model::StepId orient{std::string(id::orientation)};
+    if (q_ == 0 && !flipH_ && !flipV_) {
+        out = out.without(orient);
+    } else {
+        model::EditEntry e;
+        if (const model::EditEntry* old = l.get(orient)) {
+            e = *old;
+        } else {
+            e.step = orient;
+        }
+        e.params = e.params.with(key::quarterTurns, q_).with(key::flipH, flipH_).with(key::flipV, flipV_);
+        e.origin = model::Origin::Manual;
+        e.enabled = true;
+        out = out.with(normalized(e, c.registry));
+    }
+    // Feindrehung: gespiegelt dreht sie andersherum
+    if (const model::EditEntry* r = l.get(model::StepId(std::string(id::rotation))); r != nullptr && mirror) {
+        model::EditEntry e = *r;
+        e.params = e.params.with(key::angle, -e.params.get<double>(key::angle).value_or(0.0));
+        out = out.with(e);
+    }
+    // Zuschnitt: Ecken abbilden, achsenparalleles Rechteck darum
+    if (const model::EditEntry* cr = l.get(model::StepId(std::string(id::crop)))) {
+        if (const auto rect = cr->params.get<model::NormRect>(key::rect)) {
+            const model::NormPoint a = map({rect->x, rect->y});
+            const model::NormPoint b = map({rect->x + rect->w, rect->y + rect->h});
+            model::EditEntry e = *cr;
+            e.params = e.params.with(key::rect, model::NormRect{std::min(a.x, b.x), std::min(a.y, b.y),
+                                                                std::abs(b.x - a.x), std::abs(b.y - a.y)});
+            out = out.with(e);
+        }
+    }
+    // Retusche: Formen liegen im zugeschnittenen Bild; Größen in Bildbreiten (Breite tauscht)
+    if (const model::EditEntry* rt = l.get(model::StepId(std::string(id::retouch)))) {
+        if (auto shapes = rt->params.get<model::RetouchShapes>(key::shapes); shapes && !shapes->empty()) {
+            const double widthScale = swap ? aspect_ : 1.0; // alte Breite / neue Breite (= alte Höhe)
+            for (model::RetouchShape& s : *shapes) {
+                s.center = map(s.center);
+                s.radius *= widthScale;
+                for (model::RetouchStroke& st : s.strokes) {
+                    st.width *= widthScale;
+                    for (model::NormPoint& p : st.points) {
+                        p = map(p);
+                    }
+                }
+            }
+            model::EditEntry e = *rt;
+            e.params = e.params.with(key::shapes, *shapes);
+            out = out.with(e);
+        }
+    }
+    return out;
+}
+
 std::string RemoveEntryCommand::label() const
 {
     return "Entfernen: " + step_.value();

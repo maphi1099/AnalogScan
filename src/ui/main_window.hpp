@@ -212,6 +212,8 @@ private:
     void commitShapes(const model::RetouchShapes& shapes);
     /// Debug-Bau: Bedienereignis ins Sitzungsprotokoll.
     void trace(const QString& event) const;
+    /// Seitenverhältnis (Breite/Höhe) des angezeigten fertigen Bilds.
+    [[nodiscard]] double viewAspect() const;
     /// Werkzeug und Reiter Staubretusche auf den Stand der Liste bringen.
     void syncRetouchTool();
     /// Schritte der markierten Bilder entfernen (Schalter abgewählt).

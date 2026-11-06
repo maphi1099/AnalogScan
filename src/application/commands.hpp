@@ -43,6 +43,30 @@ private:
     model::EditEntry entry_;
 };
 
+/// Lage setzen (LF-EDT-02, -03): Vierteldrehungen und Spiegeln. Zuschnitt, Feindrehung und
+/// Retusche-Formen werden mit derselben Abbildung nachgeführt, damit derselbe Bildausschnitt
+/// stehen bleibt (Fehler: der Zuschnitt blieb stehen und das Bild drehte sich darunter weg).
+/// aspect = Breite/Höhe des fertigen Bilds (nach Zuschnitt) vor der Änderung; damit bleiben
+/// Kreisgrößen und Pinselbreiten in Pixeln gleich, wenn Breite und Höhe tauschen.
+class SetOrientationCommand final : public ICommand
+{
+public:
+    SetOrientationCommand(int quarterTurns, bool flipH, bool flipV, double aspect)
+        : q_(((quarterTurns % 4) + 4) % 4)
+        , flipH_(flipH)
+        , flipV_(flipV)
+        , aspect_(aspect > 0.0 ? aspect : 1.0)
+    {}
+    [[nodiscard]] std::string label() const override { return "Drehen/Spiegeln"; }
+    [[nodiscard]] model::EditList apply(const model::EditList& l, const CommandContext& c) const override;
+
+private:
+    int q_;
+    bool flipH_;
+    bool flipV_;
+    double aspect_;
+};
+
 /// Eintrag entfernen: das Bild ist danach im Neutralzustand dieses Schritts (LF-LST-03).
 class RemoveEntryCommand final : public ICommand
 {

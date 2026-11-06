@@ -901,13 +901,8 @@ void MainWindow::buildActions()
         }
         q = ((q + turns) % 4 + 4) % 4;
         fh = flipH ? !fh : fh;
-        model::EditEntry e = entryWith(cur, id::orientation, key::quarterTurns, q);
-        e.params = e.params.with(key::flipH, fh).with(key::flipV, fv);
-        if (q == 0 && !fh && !fv) {
-            ui_->apply(std::make_unique<application::RemoveEntryCommand>(e.step)); // neutral: kein Eintrag
-        } else {
-            ui_->apply(std::make_unique<application::SetEntryCommand>(std::move(e)));
-        }
+        // Zuschnitt, Feindrehung und Retusche drehen mit (derselbe Bildausschnitt bleibt)
+        ui_->apply(std::make_unique<application::SetOrientationCommand>(q, fh, fv, viewAspect()));
     };
     add(view, QStringLiteral("rotateLeft"), tr("90° nach links drehen"),
         QKeySequence(Qt::CTRL | Qt::Key_BracketLeft), [orient] { orient(3, false); });
@@ -925,10 +920,30 @@ void MainWindow::buildActions()
         for (const model::Frame& f : frames_) {
             all.push_back(f.id);
         }
-        if (const model::EditEntry* e = ui_->currentList().get(step)) {
-            s_.bus.execute(application::SetEntryCommand(*e), all, *roll_, true);
-        } else {
-            s_.bus.execute(application::RemoveEntryCommand(step), all, *roll_, true);
+        const model::EditEntry* e = ui_->currentList().get(step);
+        const int q = e != nullptr ? e->params.get<int>(key::quarterTurns).value_or(0) : 0;
+        const bool fh = e != nullptr && e->params.get<bool>(key::flipH).value_or(false);
+        const bool fv = e != nullptr && e->params.get<bool>(key::flipV).value_or(false);
+        // je Bild relativ zu seiner Lage: Zuschnitt und Retusche drehen mit
+        for (const model::FrameId& f : all) {
+            // Seitenverhältnis des fertigen Bilds: Scan, Lage, Zuschnitt
+            double aspect = viewAspect();
+            if (const auto it = sources_.find(f); it != sources_.end() && it->second.height > 0 && s_.bus.isOpen(f)) {
+                const model::EditList& l = s_.bus.history(f).current();
+                double w = it->second.width;
+                double h = it->second.height;
+                if (const model::EditEntry* o = l.get(step); o != nullptr && o->params.get<int>(key::quarterTurns).value_or(0) % 2 != 0) {
+                    std::swap(w, h);
+                }
+                if (const model::EditEntry* cr = l.get(model::StepId(std::string(id::crop)))) {
+                    const auto r = cr->params.get<model::NormRect>(key::rect).value_or(model::NormRect{});
+                    w *= r.w;
+                    h *= r.h;
+                }
+                aspect = h > 0.0 ? w / h : aspect;
+            }
+            const std::vector<model::FrameId> one{f};
+            s_.bus.execute(application::SetOrientationCommand(q, fh, fv, aspect), one, *roll_, true);
         }
         refreshAllThumbnails();
         report(tr("Drehung auf %n Bild(er) übernommen", nullptr, static_cast<int>(all.size())));
@@ -2015,6 +2030,12 @@ void MainWindow::doFrameOptions()
                     model::JsonValue(orientation->currentData().toString().toStdString()));
     s_.settings.set("maxSkewDeg", model::JsonValue(skew->value()));
     applyFrameHint();
+}
+
+double MainWindow::viewAspect() const
+{
+    const QSize s = canvas_->sourceSize();
+    return s.height() > 0 ? static_cast<double>(s.width()) / s.height() : 1.5;
 }
 
 void MainWindow::commitShapes(const model::RetouchShapes& shapes)

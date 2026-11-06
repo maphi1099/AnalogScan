@@ -147,6 +147,51 @@ TEST_F(Commands, U_APP_01_SetEntryIsManual)
     EXPECT_EQ(e->rank, registry.find(StepId("autoneg.exposure"))->descriptor().rank);
 }
 
+// Fehler (Rückmeldung des Nutzers): nach Auto-Bildfeld drehte „90° nach links“ das Bild unter
+// dem stehen gebliebenen Zuschnitt weg. Die Lage führt Zuschnitt, Feindrehung und Retusche mit.
+TEST_F(Commands, M10_OrientationCarriesCropRotationAndRetouch)
+{
+    openAll();
+    const std::vector<FrameId> one{frameId(1)};
+    model::RetouchShape c;
+    c.name = "Kreis 1";
+    c.center = {0.2, 0.3};
+    c.radius = 0.01;
+    bus.execute(SetEntryCommand(entry("autoneg.crop", ParamSet{}.with("rect", model::NormRect{0.1, 0.2, 0.5, 0.6}))),
+                one, roll);
+    bus.execute(SetEntryCommand(entry("autoneg.rotation", ParamSet{}.with("angle", 1.5))), one, roll);
+    bus.execute(SetEntryCommand(entry("autoneg.retouch", ParamSet{}.with("shapes", model::RetouchShapes{c}))), one,
+                roll);
+    const auto rect = [&] { return current(1).get(StepId("autoneg.crop"))->params.get<model::NormRect>("rect").value(); };
+    const auto shape = [&] {
+        return current(1).get(StepId("autoneg.retouch"))->params.get<model::RetouchShapes>("shapes").value().front();
+    };
+    // 90° im Uhrzeigersinn: (x, y) → (1 − y, x); Ausschnitt (0,1/0,2, 0,5 × 0,6) → (0,2/0,1, 0,6 × 0,5)
+    bus.execute(SetOrientationCommand(1, false, false, 1.5), one, roll);
+    EXPECT_NEAR(rect().x, 1.0 - 0.8, 1e-12);
+    EXPECT_NEAR(rect().y, 0.1, 1e-12);
+    EXPECT_NEAR(rect().w, 0.6, 1e-12);
+    EXPECT_NEAR(rect().h, 0.5, 1e-12);
+    EXPECT_NEAR(shape().center.x, 0.7, 1e-12); // im Ausschnitt mitgedreht
+    EXPECT_NEAR(shape().center.y, 0.2, 1e-12);
+    EXPECT_NEAR(shape().radius, 0.015, 1e-12); // gleiche Pixelgröße: alte Breite / neue Breite = 1,5
+    EXPECT_EQ(current(1).get(StepId("autoneg.rotation"))->params.get<double>("angle").value(), 1.5);
+    // vier Vierteldrehungen: wieder wie vorher, Eintrag der Lage entfällt
+    bus.execute(SetOrientationCommand(2, false, false, 1.0 / 1.5), one, roll);
+    bus.execute(SetOrientationCommand(3, false, false, 1.5), one, roll);
+    bus.execute(SetOrientationCommand(0, false, false, 1.0 / 1.5), one, roll);
+    EXPECT_NEAR(rect().x, 0.1, 1e-12);
+    EXPECT_NEAR(rect().y, 0.2, 1e-12);
+    EXPECT_NEAR(rect().w, 0.5, 1e-12);
+    EXPECT_NEAR(shape().center.x, 0.2, 1e-12);
+    EXPECT_NEAR(shape().radius, 0.01, 1e-12);
+    EXPECT_EQ(current(1).get(StepId("autoneg.orientation")), nullptr);
+    // Spiegeln: Ausschnitt gespiegelt, Feindrehung andersherum
+    bus.execute(SetOrientationCommand(0, true, false, 1.5), one, roll);
+    EXPECT_NEAR(rect().x, 1.0 - 0.6, 1e-12);
+    EXPECT_EQ(current(1).get(StepId("autoneg.rotation"))->params.get<double>("angle").value(), -1.5);
+}
+
 // LF-LST-03
 TEST_F(Commands, U_APP_02_RemoveGivesNeutralState)
 {
