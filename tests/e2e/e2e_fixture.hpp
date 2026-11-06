@@ -99,11 +99,11 @@ bool waitFor(const std::function<bool()>& cond, int ms = 20000)
 }
 
 /// Künstliches Negativ Nr. i (Farbnegativ, Bildfeld und Basis bekannt).
-testing::NegativeSpec specFor(int i, model::FilmType film)
+testing::NegativeSpec specFor(int i, model::FilmType film, int width = 480, int height = 320)
 {
     testing::NegativeSpec spec;
-    spec.width = 480;
-    spec.height = 320;
+    spec.width = width;
+    spec.height = height;
     spec.film = film;
     spec.seed = static_cast<std::uint64_t>(i);
     // jedes Bild anders (Staub, Lage des Bildfelds): sonst gleiche Prüfsumme = gleiche FrameId
@@ -113,12 +113,13 @@ testing::NegativeSpec specFor(int i, model::FilmType film)
 }
 
 /// Schreibt n künstliche Negative als TIFF.
-void writeRoll(const fs::path& dir, int n, model::FilmType film = model::FilmType::ColorNegative)
+void writeRoll(const fs::path& dir, int n, model::FilmType film = model::FilmType::ColorNegative, int width = 480,
+               int height = 320)
 {
     fs::create_directories(dir);
     adapter::oiio::OiioImageWriter writer;
     for (int i = 1; i <= n; ++i) {
-        const auto neg = testing::makeNegative(specFor(i, film));
+        const auto neg = testing::makeNegative(specFor(i, film, width, height));
         ports::WriteOptions o;
         o.format = ports::FileFormat::Tiff;
         o.bitDepth = 16;
@@ -132,10 +133,11 @@ void writeRoll(const fs::path& dir, int n, model::FilmType film = model::FilmTyp
 class E2E : public ::testing::Test
 {
 protected:
-    void start(int frames = 6, model::FilmType film = model::FilmType::ColorNegative)
+    void start(int frames = 6, model::FilmType film = model::FilmType::ColorNegative, int width = 480,
+               int height = 320)
     {
         rollDir = tmp.path() / "rolle";
-        writeRoll(rollDir, frames, film);
+        writeRoll(rollDir, frames, film, width, height);
         launch();
         window->openFolder(rollDir);
         ASSERT_TRUE(waitFor([this, frames] {

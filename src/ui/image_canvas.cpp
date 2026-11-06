@@ -82,9 +82,43 @@ void ImageCanvas::setImage(const QImage& img, const QRectF& drawRect)
 {
     image_ = img.format() == QImage::Format_RGBA8888 ? img : img.convertToFormat(QImage::Format_RGBA8888);
     drawRect_ = drawRect;
+    // Lage im Quellbild merken: bei Zoom und Verschieben wird das Bild sofort passend gezeichnet,
+    // bis die neue Vorschau da ist
+    const ViewMapping m = mapping();
+    const QPointF a = m.toNorm(drawRect.topLeft());
+    const QPointF b = m.toNorm(drawRect.bottomRight());
+    imageNorm_ = QRectF(a, b);
     dirty_ = true;
+    refresh();
+}
+
+QRectF ImageCanvas::currentRect() const
+{
+    const ViewMapping m = mapping();
+    return {m.toWidget(imageNorm_.topLeft()), m.toWidget(imageNorm_.bottomRight())};
+}
+
+bool ImageCanvas::transformed() const
+{
+    const QRectF r = currentRect();
+    return std::abs(r.x() - drawRect_.x()) > 0.5 || std::abs(r.y() - drawRect_.y()) > 0.5 ||
+           std::abs(r.width() - drawRect_.width()) > 0.5 || std::abs(r.height() - drawRect_.height()) > 0.5;
+}
+
+void ImageCanvas::refresh()
+{
     update();
     overlay_->update();
+}
+
+void ImageCanvas::clampCenter()
+{
+    // Bildkanten nicht ins Fenster ziehen: Mitte so begrenzen, dass das Fenster im Bild bleibt
+    const ViewMapping m = mapping();
+    const double hw = m.imageRect.width() > 0 ? width() / 2.0 / m.imageRect.width() : 0.5;
+    const double hh = m.imageRect.height() > 0 ? height() / 2.0 / m.imageRect.height() : 0.5;
+    center_ = {hw >= 0.5 ? 0.5 : std::clamp(center_.x(), hw, 1.0 - hw),
+               hh >= 0.5 ? 0.5 : std::clamp(center_.y(), hh, 1.0 - hh)};
 }
 
 void ImageCanvas::setClipping(const QImage& mask, bool on)
@@ -103,7 +137,7 @@ void ImageCanvas::setZoom(Zoom z)
             center_ = {0.5, 0.5};
             Q_EMIT viewChanged();
             Q_EMIT zoomChanged();
-            overlay_->update();
+            refresh();
         }
         break;
     case Zoom::Actual:
@@ -145,7 +179,11 @@ double ImageCanvas::scale() const
 
 void ImageCanvas::setScale(double s, std::optional<QPointF> anchor)
 {
-    s = std::clamp(s, kMinScale, kMaxScale);
+    s = std::min(s, kMaxScale);
+    if (s <= fitScale() * 1.0001) {
+        setZoom(Zoom::Fit); // kleiner als das Fenster geht nicht
+        return;
+    }
     const QPointF a = anchor.value_or(QPointF(width() / 2.0, height() / 2.0));
     const QPointF norm = mapping().toNorm(a); // Bildstelle unter dem Anker
     if (!fit_ && std::abs(s - scale_) < 1e-12) {
@@ -158,19 +196,20 @@ void ImageCanvas::setScale(double s, std::optional<QPointF> anchor)
         const double logical = s / devicePixelRatioF();
         const double iw = source_.width() * logical;
         const double ih = source_.height() * logical;
-        center_ = {std::clamp(norm.x() - (a.x() - width() / 2.0) / iw, 0.0, 1.0),
-                   std::clamp(norm.y() - (a.y() - height() / 2.0) / ih, 0.0, 1.0)};
+        center_ = {norm.x() - (a.x() - width() / 2.0) / iw, norm.y() - (a.y() - height() / 2.0) / ih};
+        clampCenter();
     }
     Q_EMIT viewChanged();
     Q_EMIT zoomChanged();
-    overlay_->update();
+    refresh();
 }
 
 void ImageCanvas::setCenter(QPointF c)
 {
-    center_ = {std::clamp(c.x(), 0.0, 1.0), std::clamp(c.y(), 0.0, 1.0)};
+    center_ = c;
+    clampCenter();
     Q_EMIT viewChanged();
-    overlay_->update();
+    refresh();
 }
 
 ViewMapping ImageCanvas::mapping() const
@@ -227,7 +266,7 @@ void ImageCanvas::render(QRhiCommandBuffer* cb)
     // Hintergrund löschen, danach das Bild 1:1 an seine Stelle kopieren (kein Shader nötig)
     cb->beginPass(renderTarget(), QColor(40, 40, 40), {1.0F, 0}, u);
     QRhiResourceUpdateBatch* copy = nullptr;
-    if (texture_ && colorTexture() != nullptr && !image_.isNull()) {
+    if (texture_ && colorTexture() != nullptr && !image_.isNull() && !transformed()) {
         const double dpr = devicePixelRatioF();
         QPoint dst(static_cast<int>(std::lround(drawRect_.x() * dpr)),
                    static_cast<int>(std::lround(drawRect_.y() * dpr)));
@@ -264,6 +303,9 @@ void ImageCanvas::resizeEvent(QResizeEvent* e)
 {
     QRhiWidget::resizeEvent(e);
     overlay_->setGeometry(rect());
+    if (!fit_) {
+        clampCenter();
+    }
     Q_EMIT viewChanged();
     if (fit_) {
         Q_EMIT zoomChanged(); // Prozentwert des Einpassens ändert sich
@@ -273,8 +315,15 @@ void ImageCanvas::resizeEvent(QResizeEvent* e)
 void ImageCanvas::overlayPaint(QPainter& p)
 {
     const ViewMapping m = mapping();
+    if (!image_.isNull() && transformed()) {
+        // Zoom/Verschieben läuft: das letzte Bild sofort an der neuen Stelle (skaliert), bis die
+        // passende Vorschau kommt
+        p.fillRect(rect(), QColor(40, 40, 40));
+        p.setRenderHint(QPainter::SmoothPixmapTransform, false);
+        p.drawImage(currentRect(), image_);
+    }
     if (showClipping_ && !clipping_.isNull()) {
-        p.drawImage(drawRect_, clipping_);
+        p.drawImage(currentRect(), clipping_);
     }
     if (tool_ != nullptr) {
         tool_->paint(p, m);
@@ -298,6 +347,9 @@ bool ImageCanvas::overlayMouse(QMouseEvent* e)
             panFrom_ = e->position();
             panWith_ = pan;
             panCenter_ = center_;
+            if (!fit_) {
+                overlay_->setCursor(Qt::SizeAllCursor); // Pfeil in vier Richtungen
+            }
             return true;
         }
         break;
@@ -305,8 +357,9 @@ bool ImageCanvas::overlayMouse(QMouseEvent* e)
         if (panFrom_) {
             if (!fit_) {
                 const QPointF d = e->position() - *panFrom_;
-                center_ = {std::clamp(panCenter_.x() - d.x() / m.imageRect.width(), 0.0, 1.0),
-                           std::clamp(panCenter_.y() - d.y() / m.imageRect.height(), 0.0, 1.0)};
+                center_ = {panCenter_.x() - d.x() / m.imageRect.width(), panCenter_.y() - d.y() / m.imageRect.height()};
+                clampCenter();
+                update(); // Bildfläche: altes Bild nicht mehr an der alten Stelle
             }
             return true;
         }
@@ -316,6 +369,7 @@ bool ImageCanvas::overlayMouse(QMouseEvent* e)
             const QPointF from = *panFrom_;
             const bool moved = (e->position() - from).manhattanLength() > 3.0;
             panFrom_.reset();
+            overlay_->unsetCursor();
             if (moved && !fit_) {
                 Q_EMIT viewChanged();
                 return true;

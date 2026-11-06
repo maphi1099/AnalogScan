@@ -34,7 +34,7 @@ public:
         Custom  ///< jeder andere Faktor
     };
     static constexpr double kMaxScale = 8.0;  ///< 800 %
-    static constexpr double kMinScale = 0.02; ///< 2 %
+    static constexpr double kMinScale = 0.02; ///< Untergrenze des Reglers; kleiner als Einpassen geht nicht
 
     explicit ImageCanvas(QWidget* parent = nullptr);
     ~ImageCanvas() override;
@@ -53,8 +53,8 @@ public:
     [[nodiscard]] Zoom zoom() const;
     /// Vergrößerung: Gerätepixel je Quellpixel (1 = 100 %); bei Einpassen der passende Wert.
     [[nodiscard]] double scale() const;
-    /// Vergrößerung setzen (2 … 800 %); anchor (Widget-Pixel) bleibt an derselben Bildstelle.
-    /// Einpassen nur über setZoom(Zoom::Fit).
+    /// Vergrößerung setzen (Einpassen … 800 %); anchor (Widget-Pixel) bleibt an derselben
+    /// Bildstelle. Werte bis zum Einpassen schalten auf Einpassen (kleiner als das Fenster nicht).
     void setScale(double s, std::optional<QPointF> anchor = std::nullopt);
     void zoomBy(double factor, std::optional<QPointF> anchor = std::nullopt) { setScale(scale() * factor, anchor); }
     [[nodiscard]] double fitScale() const;
@@ -88,6 +88,12 @@ private:
     class Overlay;
     friend class Overlay;
     void overlayPaint(QPainter& p);
+    /// Lage des aktuellen Bilds im Widget bei der jetzigen Ansicht.
+    [[nodiscard]] QRectF currentRect() const;
+    /// Ansicht seit dem Bild geändert (Zoom/Verschieben): Bild skaliert zeichnen statt 1:1.
+    [[nodiscard]] bool transformed() const;
+    void refresh();
+    void clampCenter();
     bool overlayMouse(QMouseEvent* e);
     bool overlayWheel(QWheelEvent* e);
     [[nodiscard]] Qt::MouseButton effectivePanButton() const;
@@ -97,6 +103,7 @@ private:
     QImage clipping_;
     bool showClipping_ = false;
     QRectF drawRect_;
+    QRectF imageNorm_; ///< Teil des Quellbilds, den image_ zeigt (normiert)
     QSize source_{3, 2};
     bool fit_ = true;
     double scale_ = 1.0; ///< ohne Einpassen: Gerätepixel je Quellpixel
@@ -104,7 +111,7 @@ private:
     ICanvasTool* tool_ = nullptr;
     std::unique_ptr<QRhiTexture> texture_;
     bool dirty_ = true;
-    Qt::MouseButton panButton_ = Qt::LeftButton;
+    Qt::MouseButton panButton_ = Qt::RightButton; ///< Standard: rechts ziehen (Werkzeuge behalten links)
     std::optional<QPointF> panFrom_;
     Qt::MouseButton panWith_ = Qt::NoButton;
     QPointF panCenter_;

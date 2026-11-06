@@ -177,12 +177,39 @@ void Composition::releaseUnlessCurrent(const model::FrameId& f)
 void Composition::setCurrent(const model::FrameId& f)
 {
     const std::scoped_lock lock(currentMutex_);
+    // vorheriges Bild freigeben: seine volle Auflösung belegt bei 61 MP rund 730 MB
+    if (current_ != f && current_ != model::FrameId{}) {
+        sources_.release(current_);
+    }
     current_ = f;
 }
 
 base::Expected<model::SourceInfo> Composition::sourceInfo(const model::Frame& f)
 {
     return sources_.info(f.id, f.path);
+}
+
+void Composition::prefetchFull(const model::Frame& f)
+{
+    class Prefetch final : public application::Job
+    {
+    public:
+        Prefetch(pipeline::SourceProvider& s, model::Frame f)
+            : sources_(s)
+            , frame_(std::move(f))
+        {}
+        [[nodiscard]] std::string name() const override { return "Volle Auflösung laden"; }
+        [[nodiscard]] base::Expected<void> run(application::JobContext& /*c*/) override
+        {
+            sources_.prefetch(frame_.id, frame_.path);
+            return {};
+        }
+
+    private:
+        pipeline::SourceProvider& sources_;
+        model::Frame frame_;
+    };
+    (void)jobs_.submit(std::make_unique<Prefetch>(sources_, f), ports::Priority::Background);
 }
 
 model::JsonValue Composition::encodeEdits(const model::EditList& l) const

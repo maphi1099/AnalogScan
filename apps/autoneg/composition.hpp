@@ -95,6 +95,8 @@ public:
     [[nodiscard]] ports::ISettingsStore& settings() { return config_; }
     /// Protokoll: autoneg.log (rotierend) und im Debug-Bau zusätzlich das Sitzungsprotokoll.
     [[nodiscard]] ports::ILogger& logger() { return events_; }
+    /// Volle Auflösung im Hintergrund dekodieren (Detailansicht), Ergebnis im Zwischenspeicher.
+    void prefetchFull(const model::Frame& f);
     /// Sitzungsprotokoll dieser Sitzung (nur Debug-Bau, sonst leer).
     [[nodiscard]] const std::filesystem::path& sessionLog() const { return sessionLogFile_; }
     [[nodiscard]] ports::ITaskExecutor& executor() { return executor_; }

@@ -37,6 +37,7 @@ class QSlider;
 class QSpinBox;
 class QStackedWidget;
 class QTabBar;
+class QTimer;
 class QTableView;
 class QToolButton;
 class QTabWidget;
@@ -91,6 +92,7 @@ struct AppServices
     ports::ILogger* logger = nullptr;
     /// Arbeitsspeicher des Rechners (0 = unbekannt), für die Einstellung Speicherbudget.
     std::uint64_t physicalMemory = 0;
+    std::function<void(const model::Frame&)> prefetchFull; ///< volle Auflösung im Hintergrund laden
 };
 
 /// Hauptfenster (Architektur 9.14, LF-UI-01): Filmstreifen, Arbeitsfläche, Werkzeuge,
@@ -274,6 +276,8 @@ private:
     View view_ = View::Start;
     QProgressBar* progress_ = nullptr;
     QWidget* zoomBar_ = nullptr;
+    QTimer* viewTimer_ = nullptr; ///< Zoom/Verschieben: Vorschau erst nach kurzer Ruhe
+    model::FrameId prefetched_;   ///< Bild, dessen volle Auflösung schon geladen wird
     QSlider* zoomSlider_ = nullptr;
     QSpinBox* zoomPercent_ = nullptr;
     QPushButton* cancel_ = nullptr;

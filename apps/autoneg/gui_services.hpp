@@ -32,6 +32,7 @@ namespace autoneg::app {
         [&c](const model::JsonValue& j) { return c.decodeEdits(j); },
         &c.logger(),
         adapter::tbb::physicalMemoryBytes(),
+        [&c](const model::Frame& f) { c.prefetchFull(f); },
     };
 }
 

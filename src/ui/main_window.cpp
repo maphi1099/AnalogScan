@@ -176,7 +176,24 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
             requestThumbnail(*fr);
         }
     });
-    connect(canvas_, &ImageCanvas::viewChanged, this, [this] { requestPreview(ui_->currentList()); });
+    // Zoom und Verschieben: die Fläche zeigt das letzte Bild sofort skaliert; gerechnet wird erst,
+    // wenn die Bewegung kurz ruht (sonst rechnet jeder Mausradschritt ein ganzes Bild)
+    viewTimer_ = new QTimer(this);
+    viewTimer_->setSingleShot(true);
+    viewTimer_->setInterval(150);
+    connect(viewTimer_, &QTimer::timeout, this, [this] { requestPreview(ui_->currentList()); });
+    connect(canvas_, &ImageCanvas::viewChanged, this, [this] { viewTimer_->start(); });
+    // Erster Zoom über Einpassen: volle Auflösung schon im Hintergrund laden (das Dekodieren eines
+    // großen Scans dauert einige Sekunden; bis dahin zeigt die Fläche die vergrößerte Vorschau)
+    connect(canvas_, &ImageCanvas::zoomChanged, this, [this] {
+        if (canvas_->zoom() == ImageCanvas::Zoom::Fit || prefetched_ == s_.session.current || !s_.prefetchFull) {
+            return;
+        }
+        if (const model::Frame* fr = frame(s_.session.current)) {
+            prefetched_ = fr->id;
+            s_.prefetchFull(*fr);
+        }
+    });
     connect(canvas_, &ImageCanvas::picked, this, [this](QPointF norm) {
         if (pickWhite_) {
             pickWhite_ = false;
@@ -714,18 +731,20 @@ void MainWindow::buildUi()
     zoomLayout->addWidget(zoomSlider_);
     zoomLayout->addWidget(zoomPercent_);
     statusBar()->addPermanentWidget(zoomBar_);
-    static const double lo = std::log(ImageCanvas::kMinScale);
     static const double hi = std::log(ImageCanvas::kMaxScale);
+    // Untergrenze ist Einpassen (hängt von Bild und Fenster ab)
+    const auto lo = [this] { return std::log(std::min(canvas_->fitScale(), ImageCanvas::kMaxScale * 0.99)); };
     connect(fitButton, &QToolButton::clicked, this, [this] { canvas_->setZoom(ImageCanvas::Zoom::Fit); });
-    connect(zoomSlider_, &QSlider::valueChanged, this, [this](int v) {
-        canvas_->setScale(std::exp(lo + (hi - lo) * v / 1000.0));
+    connect(zoomSlider_, &QSlider::valueChanged, this, [this, lo](int v) {
+        canvas_->setScale(std::exp(lo() + (hi - lo()) * v / 1000.0));
     });
     connect(zoomPercent_, &QSpinBox::valueChanged, this, [this](int p) { canvas_->setScale(p / 100.0); });
-    connect(canvas_, &ImageCanvas::zoomChanged, this, [this] {
+    connect(canvas_, &ImageCanvas::zoomChanged, this, [this, lo] {
         const double s = canvas_->scale();
         const QSignalBlocker b1(zoomSlider_);
         const QSignalBlocker b2(zoomPercent_);
-        zoomSlider_->setValue(static_cast<int>(std::lround((std::log(s) - lo) / (hi - lo) * 1000.0)));
+        zoomSlider_->setValue(static_cast<int>(std::lround((std::log(s) - lo()) / (hi - lo()) * 1000.0)));
+        zoomPercent_->setMinimum(std::max(1, static_cast<int>(std::floor(canvas_->fitScale() * 100.0))));
         zoomPercent_->setValue(static_cast<int>(std::lround(s * 100.0)));
     });
     resize(1400, 900);
@@ -1440,6 +1459,16 @@ void MainWindow::selectFrame(const model::FrameId& f)
         return;
     }
     trace(QStringLiteral("Bild gewählt: ") + qs(fr->path.filename()));
+    // Bleibt man auf dem Bild, die volle Auflösung schon laden: der erste Zoom über Einpassen ist
+    // dann sofort scharf (Dekodieren eines großen Scans dauert Sekunden)
+    QTimer::singleShot(1500, this, [this, id = fr->id] {
+        if (id == s_.session.current && prefetched_ != id && s_.prefetchFull && view_ == View::Image) {
+            if (const model::Frame* f = frame(id)) {
+                prefetched_ = id;
+                s_.prefetchFull(*f);
+            }
+        }
+    });
     s_.session.current = f;
     stripModel_->setActive(f);
     if (s_.currentChanged) {
@@ -1581,16 +1610,17 @@ void MainWindow::refreshCurrent()
     if (const auto it = sources_.find(s_.session.current); it != sources_.end() && it->second.width > 0) {
         double w = it->second.width;
         double h = it->second.height;
+        // erst die Lage (Vierteldrehung tauscht Breite und Höhe), dann der Zuschnitt in ihr
+        if (const model::EditEntry* e = l.get(model::StepId(std::string(id::orientation))); e && e->enabled) {
+            if (e->params.get<int>(key::quarterTurns).value_or(0) % 2 == 1) {
+                std::swap(w, h);
+            }
+        }
         if (canvas_->tool() != cropTool_.get()) {
             if (const model::EditEntry* e = l.get(model::StepId(std::string(id::crop))); e && e->enabled) {
                 const auto r = e->params.get<model::NormRect>(key::rect).value_or(model::NormRect{});
                 w *= r.w;
                 h *= r.h;
-            }
-        }
-        if (const model::EditEntry* e = l.get(model::StepId(std::string(id::orientation))); e && e->enabled) {
-            if (e->params.get<int>(key::quarterTurns).value_or(0) % 2 == 1) {
-                std::swap(w, h);
             }
         }
         canvas_->setSourceSize(QSize(static_cast<int>(w), static_cast<int>(h)));
@@ -1639,8 +1669,14 @@ void MainWindow::requestPreview(const model::EditList& l)
         const QSizeF want = canvas_->zoom() == ImageCanvas::Zoom::Fit
                                 ? QSizeF(canvas_->width() * dpr, canvas_->height() * dpr)
                                 : QSizeF(canvas_->sourceSize()) * scale;
-        r.profile.target = {std::max(1, static_cast<int>(want.width() / fw)),
-                            std::max(1, static_cast<int>(want.height() / fh))};
+        // Das Ziel gilt für den Scan vor der Lage: bei Vierteldrehung (Hochkant) Breite und Höhe
+        // tauschen, sonst wird das Bild zu groß und abgeschnitten
+        QSizeF target(want.width() / fw, want.height() / fh);
+        if (const model::EditEntry* o = r.list->get(model::StepId(std::string(id::orientation))); o && o->enabled &&
+            o->params.get<int>(key::quarterTurns).value_or(0) % 2 == 1) {
+            target = QSizeF(want.height() / fh, want.width() / fw);
+        }
+        r.profile.target = {std::max(1, static_cast<int>(target.width())), std::max(1, static_cast<int>(target.height()))};
         detail_.reset();
     } else {
         // ab 100 %: volle Auflösung, nur der sichtbare Ausschnitt; vergrößert wird in der Brücke
@@ -2359,7 +2395,7 @@ void MainWindow::doSettings()
     before.threads = num("threads", 0);
     before.memoryMb = num("memoryBudgetMb", 0); // Standard: unbegrenzt
     before.ramMb = static_cast<int>(s_.physicalMemory >> 20U);
-    before.panButton = num("panButton", static_cast<int>(Qt::LeftButton));
+    before.panButton = num("panButton", static_cast<int>(Qt::RightButton));
     for (const QAction* menu : menuBar()->actions()) {
         for (const QAction* a : menu->menu()->actions()) {
             if (actions_.contains(a->objectName())) {

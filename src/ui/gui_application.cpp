@@ -66,7 +66,7 @@ MainWindow& GuiApplication::createWindow(const GuiServices& s)
         s.registry,    s.jobs,        s.bus,        s.session,       s.sync,       s.clipboard,
         s.render,      s.rolls,       s.thumbnails, s.analysis,      s.exports,    s.contactSheet,
         s.color,       s.presets,     s.settings,   impl_->bridge,   s.sourceInfo, s.currentChanged,
-        s.encodeEdits, s.decodeEdits, s.logger,     s.physicalMemory});
+        s.encodeEdits, s.decodeEdits, s.logger,     s.physicalMemory, s.prefetchFull});
     return *impl_->window;
 }
 

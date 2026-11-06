@@ -136,8 +136,9 @@ schließt die aktive Ansicht.
 
 \begin{description}
   \item[Bildfläche] In der Mitte: das aktuelle Bild als Positiv. Ist es größer als die
-        Fläche, verschiebt man den Ausschnitt mit gedrückter linker Maustaste (andere Taste unter
-        \menu{Einstellungen}).
+        Fläche, verschiebt man den Ausschnitt mit gedrückter \emph{rechter} Maustaste (Mauszeiger:
+        Pfeil in vier Richtungen; andere Taste unter \menu{Einstellungen}). Die linke Taste bleibt
+        so den Werkzeugen, etwa der Staubretusche.
   \item[Filmstreifen] Unten: alle Bilder der Rolle mit Bildnummer und Sternen. Er funktioniert
         wie ein Datei-Explorer: Ein Klick wählt ein Bild aus, \taste{Strg}+Klick wählt weitere
         dazu oder wieder ab, ebenso das Kästchen oben rechts in jedem Bild. Ein Doppelklick
@@ -272,7 +273,8 @@ ungeschnittene Bild mit dem Zuschnittrahmen:
 Beim Loslassen werden Zuschnitt und Feindrehung als ein Schritt übernommen.
 Vierteldrehungen und Spiegeln: \menu{90\textdegree{} nach links drehen} (\taste{Strg+[}),
 \menu{90\textdegree{} nach rechts drehen} (\taste{Strg+]}), \menu{Waagerecht spiegeln}
-(\taste{Strg+H}). Liegen alle Bilder einer Rolle gleich, dreht man eines und wählt
+(\taste{Strg+H}). Zuschnitt, Feindrehung und Retusche drehen dabei mit, der Bildausschnitt bleibt derselbe.
+Liegen alle Bilder einer Rolle gleich, dreht man eines und wählt
 \menu{Ansicht \textrightarrow{} Drehung für alle übernehmen}; auf dem Leuchttisch nimmt
 \taste{Strg+Z} das wieder zurück.
 
@@ -366,14 +368,18 @@ Alle Formen eines Bilds bilden eine Bearbeitungsoption \enquote{Staubretusche}.
 
 \subsection{Ansicht}
 \begin{itemize}
-  \item Zoom stufenlos von 2 bis 800\,\%: \taste{Strg}+Mausrad zoomt um die Stelle unter der
-        Maus, \taste{Strg+Plus}/\taste{Strg+Minus} in Stufen; unten rechts in der Statusleiste
+  \item Zoom stufenlos von \menu{Einpassen} bis 800\,\% (kleiner als das Fenster geht nicht):
+        \taste{Strg}+Mausrad zoomt um die Stelle unter der Maus, \taste{Strg+Plus}/\taste{Strg+Minus} in Stufen; unten rechts in der Statusleiste
         stehen Regler und Prozentfeld. Fest: \menu{Einpassen} (\taste{Strg+0}), \menu{100\,\%}
         (\taste{Strg+1}), \menu{200\,\%} (\taste{Strg+2}). Ab 100\,\% rechnet AutoNeg nur den
         sichtbaren Ausschnitt, dafür in voller Auflösung.
-  \item Ausschnitt verschieben: im Bild ziehen, standardmäßig mit der linken Maustaste. Unter
-        \menu{Einstellungen \textrightarrow{} Bild ziehen mit} wählt man links, rechts oder die
-        mittlere Taste; ist ein Werkzeug aktiv, das die linke Taste braucht, zieht die mittlere.
+  \item Ausschnitt verschieben: im Bild mit der rechten Maustaste ziehen; ein Rechtsklick ohne
+        Ziehen bleibt beim Werkzeug (in der Staubretusche: Auswahl aufheben). Unter
+        \menu{Einstellungen \textrightarrow{} Bild ziehen mit} wählt man rechts, links oder die
+        mittlere Taste; ist ein Werkzeug aktiv und die linke Taste gewählt, zieht die mittlere.
+  \item Zoomen und Verschieben zeigen das Bild sofort; scharf nachgerechnet wird, sobald die
+        Bewegung kurz ruht. Bleibt man gut eine Sekunde auf einem Bild, lädt AutoNeg seine volle
+        Auflösung im Hintergrund, damit 100 und 200\,\% gleich scharf erscheinen.
   \item \menu{Vorheriges Bild} (\taste{Strg+\textleftarrow}) und \menu{Nächstes Bild}
         (\taste{Strg+\textrightarrow}).
   \item \menu{Vorher/Nachher} (\taste{\textbackslash}) zeigt den unkonvertierten Scan.
@@ -525,8 +531,8 @@ Rollenordner), \menu{Drucken …} öffnet den Druckdialog.
         Auslagerung). Wer den Haken entfernt, stellt ein Budget ein; vorgeschlagen werden
         50\,\% des Arbeitsspeichers. Ein kleineres Budget lässt weniger Bilder gleichzeitig
         rechnen, entlastet aber den Rechner.
-  \item[Bild ziehen mit] Maustaste, mit der man den Bildausschnitt verschiebt: links (Standard),
-        rechts oder die mittlere Taste.
+  \item[Bild ziehen mit] Maustaste, mit der man den Bildausschnitt verschiebt: rechts (Standard),
+        links oder die mittlere Taste.
   \item[Tastenkürzel] Jede Aktion lässt sich frei belegen: Feld anklicken und die neue
         Tastenkombination drücken, das Kreuz entfernt die Belegung. Ist eine Kombination
         doppelt vergeben, nennt der Dialog sie und \menu{OK} ist gesperrt. \menu{Alle auf

@@ -368,7 +368,8 @@ TEST_F(E2E, E_42_BrokenFileDoesNotCrash)
 // E-43: LF-UI-02
 TEST_F(E2E, E_43_ZoomLevels)
 {
-    start(1);
+    // größeres Bild: 100 % liegt über Einpassen (kleiner als Einpassen gibt es nicht, K-M10-25)
+    start(1, model::FilmType::ColorNegative, 1600, 1066);
     const auto shown = [this] { return window->previewsShown(); };
     for (const char* a : {"zoom100", "zoom200", "zoomFit"}) {
         const auto before = shown();
@@ -378,9 +379,9 @@ TEST_F(E2E, E_43_ZoomLevels)
     action("zoom100")->trigger();
     EXPECT_EQ(window->canvas()->zoom(), ui::ImageCanvas::Zoom::Actual);
     ASSERT_TRUE(waitFor([this] { return !window->canvas()->image().isNull(); }));
-    // 100 %: ein Quellpixel je Gerätepixel (Quelle 480 × 320)
+    // 100 %: ein Quellpixel je Gerätepixel (Quelle 1600 × 1066)
     const double dpr = window->canvas()->devicePixelRatioF();
-    EXPECT_NEAR(window->canvas()->mapping().imageRect.width() * dpr, 480.0, 1.0);
+    EXPECT_NEAR(window->canvas()->mapping().imageRect.width() * dpr, 1600.0, 1.0);
 }
 
 // Reflexion: die Detailansicht rechnete das ganze Bild (aus der halben Auflösung). Bei 100 % und
@@ -449,30 +450,33 @@ TEST_F(E2E, M10_FreeZoomAndPan)
     EXPECT_LT(c->scale(), 3.0);
     EXPECT_EQ(percent->value(), static_cast<int>(std::lround(c->scale() * 100)));
 
-    // Ziehen mit der linken Taste verschiebt den Ausschnitt
+    // Standard: Ziehen mit der rechten Taste verschiebt den Ausschnitt (Pfeil in vier Richtungen),
+    // die linke bleibt den Werkzeugen
     percent->setValue(300);
     const QPointF center = c->center();
     const QPoint from(c->width() / 2, c->height() / 2);
-    QTest::mousePress(overlay, Qt::LeftButton, {}, from);
+    QTest::mousePress(overlay, Qt::RightButton, {}, from);
+    EXPECT_EQ(overlay->cursor().shape(), Qt::SizeAllCursor);
     QTest::mouseMove(overlay, from + QPoint(60, 0));
-    QTest::mouseRelease(overlay, Qt::LeftButton, {}, from + QPoint(60, 0));
+    QTest::mouseRelease(overlay, Qt::RightButton, {}, from + QPoint(60, 0));
     EXPECT_LT(c->center().x(), center.x());
+    EXPECT_NE(overlay->cursor().shape(), Qt::SizeAllCursor);
 
-    // Einstellung: rechte Taste zieht, linke nicht mehr
-    c->setPanButton(Qt::RightButton);
+    // Einstellung: linke Taste zieht, rechte nicht mehr
+    c->setPanButton(Qt::LeftButton);
     const QPointF c2 = c->center();
-    QTest::mousePress(overlay, Qt::LeftButton, {}, from);
-    QTest::mouseMove(overlay, from + QPoint(60, 0));
-    QTest::mouseRelease(overlay, Qt::LeftButton, {}, from + QPoint(60, 0));
-    EXPECT_EQ(c->center(), c2);
     QTest::mousePress(overlay, Qt::RightButton, {}, from);
     QTest::mouseMove(overlay, from + QPoint(60, 0));
     QTest::mouseRelease(overlay, Qt::RightButton, {}, from + QPoint(60, 0));
+    EXPECT_EQ(c->center(), c2);
+    QTest::mousePress(overlay, Qt::LeftButton, {}, from);
+    QTest::mouseMove(overlay, from + QPoint(60, 0));
+    QTest::mouseRelease(overlay, Qt::LeftButton, {}, from + QPoint(60, 0));
     EXPECT_LT(c->center().x(), c2.x());
 
-    // Grenzen 2 … 800 %; Einpassen nur ausdrücklich
+    // Grenzen: nicht kleiner als Einpassen (Wunsch des Nutzers), höchstens 800 %
     c->setScale(0.0001);
-    EXPECT_NEAR(c->scale(), ui::ImageCanvas::kMinScale, 1e-9);
+    EXPECT_EQ(c->zoom(), ui::ImageCanvas::Zoom::Fit);
     c->setScale(100.0);
     EXPECT_NEAR(c->scale(), ui::ImageCanvas::kMaxScale, 1e-9);
     action("zoomFit")->trigger();
@@ -551,7 +555,8 @@ TEST_F(E2E, M10_DenoiseMethodChoice)
 // E-45, E-11: LF-UI-04, LF-KON-08
 TEST_F(E2E, E_45_ShortcutsTriggerFunctions)
 {
-    start(1);
+    // größeres Bild: 100 % liegt über Einpassen (kleiner als Einpassen gibt es nicht, K-M10-25)
+    start(1, model::FilmType::ColorNegative, 1600, 1066);
     QTest::keyClick(window, Qt::Key_Backslash);
     EXPECT_TRUE(action("compare")->isChecked());
     QTest::keyClick(window, Qt::Key_Backslash);

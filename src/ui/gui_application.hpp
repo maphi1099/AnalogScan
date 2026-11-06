@@ -51,6 +51,8 @@ struct GuiServices
     /// Protokoll (NF-REL-03); Meldungen der Oberfläche landen auch dort.
     ports::ILogger* logger = nullptr;
     std::uint64_t physicalMemory = 0; ///< Arbeitsspeicher (Einstellung Speicherbudget)
+    /// Volle Auflösung eines Bilds im Hintergrund laden (erster Zoom über Einpassen).
+    std::function<void(const model::Frame&)> prefetchFull;
 };
 
 /// Qt-Anwendung der Oberfläche: besitzt QApplication, die Brücke (QtSessionBridge) und das
