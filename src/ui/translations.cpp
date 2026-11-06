@@ -170,7 +170,7 @@ const QHash<QString, QString>& english()
             {"Profil „%1“ löschen? Bereits bearbeitete Bilder behalten ihre Werte.", "Delete profile “%1”? Images already edited keep their values."},
             {"RGB: Rot, Grün, Blau. CMY: Cyan, Magenta, Gelb (die Farbstoffe des Negativs)", "RGB: red, green, blue. CMY: cyan, magenta, yellow (the dyes of the negative)"},
             {"Rot", "Red"},
-            {"Schwarz- und Weißpunkt aus dem Bild, für alle Kanäle gleich", "Black and white point from the image, equal for all channels"},
+            {"Standard: Schwarz- und Weißpunkt automatisch aus dem Bild je Kanal (gleicht Farbstiche aus); alle Werte als Regler unter „Licht und Farbe“", "Default: black and white point automatically from the image per channel (removes colour casts); all values as sliders under “Light and colour”"},
             {"Schwarzpunkt", "Black point"},
             {"Tonwerte (Dichte des Negativs)", "Tones (density of the negative)"},
             {"Unbearbeitet", "Unprocessed"},

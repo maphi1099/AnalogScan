@@ -56,10 +56,11 @@ model::EditEntry automatic(std::string_view step, model::ParamSet p)
     return e;
 }
 
-/// Neutrale Tonwertgrenzen eines Negativs (LF-KON-05, Film-Farbprofil „Neutral“): Dichte
-/// D = −log10(T / Basis) aller drei Kanäle im Bildfeld (Rand 3 % weggelassen) zusammen, davon
-/// 0,1 % und 99,9 %. Alle Kanäle bekommen denselben Bereich: kein versteckter Farbausgleich.
-std::optional<std::pair<double, double>> negativeLevels(const image::ImageBuffer& img,
+/// Automatische Tonwertgrenzen eines Negativs (LF-KON-05, -06; Film-Farbprofil „Neutral“, der
+/// Standard): Dichte D = −log10(T / Basis) je Kanal im Bildfeld (Rand 3 % weggelassen), davon
+/// 0,1 % und 99,9 %. Jeder Kanal bekommt seinen Bereich; das gleicht Farbstiche aus. Die Werte
+/// sind als Regler sichtbar (Film-Farbprofil in „Licht und Farbe“), „Unbearbeitet“ setzt keine.
+std::optional<analysis::DensityRange> negativeLevels(const image::ImageBuffer& img,
                                                         const model::NormRect& frame, const base::Vec3& base)
 {
     const auto& spec = img.spec();
@@ -85,32 +86,32 @@ std::optional<std::pair<double, double>> negativeLevels(const image::ImageBuffer
             }
         }
     }
-    const int samples = static_cast<int>(density.size());
-    if (samples < 300) {
+    const int pixels = static_cast<int>(density.size() / 3);
+    if (pixels < 100) {
         return std::nullopt;
     }
-    // alle Kanäle als eine Ebene: ein gemeinsamer Bereich
     auto d = image::ImageBuffer::fromFloats(
-        image::ImageSpec{samples, 1, 1, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, density);
+        image::ImageSpec{pixels, 1, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, density);
     if (!d) {
         return std::nullopt;
     }
-    const analysis::DensityRange r = analysis::AutoLevels{}.compute(*d, 0.002);
-    return std::pair{r.dMin.x, r.dMax.x};
+    return analysis::AutoLevels{}.compute(*d, 0.002);
 }
 
 } // namespace
 
-model::ParamSet AnalysisService::FilmProfile::params(double black, double white) const
+model::ParamSet AnalysisService::FilmProfile::params(const base::Vec3& black, const base::Vec3& white) const
 {
     model::ParamSet p = model::ParamSet{}.with(key::profile, name);
     if (kind == Kind::Unprocessed) {
         return p; // Neutralwerte des Schritts: nur umkehren
     }
+    // gemessene Automatik merken: eigene Profile speichern ihre Abweichung davon
+    p = p.with(key::autoMin, black).with(key::autoMax, white);
     const base::Vec3 bo = kind == Kind::Custom ? blackOffset : base::Vec3{0, 0, 0};
     const base::Vec3 wo = kind == Kind::Custom ? whiteOffset : base::Vec3{0, 0, 0};
-    p = p.with(key::dMin, base::Vec3{black + bo.x, black + bo.y, black + bo.z})
-            .with(key::dMax, base::Vec3{white + wo.x, white + wo.y, white + wo.z});
+    p = p.with(key::dMin, base::Vec3{black.x + bo.x, black.y + bo.y, black.z + bo.z})
+            .with(key::dMax, base::Vec3{white.x + wo.x, white.y + wo.y, white.z + wo.z});
     if (kind == Kind::Custom && (gamma.x != 1.0 || gamma.y != 1.0 || gamma.z != 1.0)) {
         p = p.with(key::gamma, gamma);
     }
@@ -124,10 +125,14 @@ AnalysisService::FilmProfile AnalysisService::FilmProfile::fromEntry(const model
     f.name = std::move(name);
     const auto lo = e.params.get<base::Vec3>(key::dMin).value_or(base::Vec3{0, 0, 0});
     const auto hi = e.params.get<base::Vec3>(key::dMax).value_or(base::Vec3{1, 1, 1});
+    // Abweichung von der Automatik des Bilds, auf dem gespeichert wurde (ältere Vorgaben ohne
+    // diese Angabe: Abweichung vom Mittel der Kanäle)
     const double ml = (lo.x + lo.y + lo.z) / 3.0;
     const double mh = (hi.x + hi.y + hi.z) / 3.0;
-    f.blackOffset = {lo.x - ml, lo.y - ml, lo.z - ml};
-    f.whiteOffset = {hi.x - mh, hi.y - mh, hi.z - mh};
+    const auto al = e.params.get<base::Vec3>(key::autoMin).value_or(base::Vec3{ml, ml, ml});
+    const auto ah = e.params.get<base::Vec3>(key::autoMax).value_or(base::Vec3{mh, mh, mh});
+    f.blackOffset = {lo.x - al.x, lo.y - al.y, lo.z - al.z};
+    f.whiteOffset = {hi.x - ah.x, hi.y - ah.y, hi.z - ah.z};
     f.gamma = e.params.get<base::Vec3>(key::gamma).value_or(base::Vec3{1, 1, 1});
     return f;
 }
@@ -416,10 +421,10 @@ JobHandle AnalysisService::run(const model::Frame& f, std::shared_ptr<const mode
                 if ((parts_ & Levels) != 0 && base) {
                     // Film-Farbprofil: „Unbearbeitet“ misst nichts, sonst gemeinsame Grenzen
                     if (profile_.kind == FilmProfile::Kind::Unprocessed) {
-                        entries.push_back(automatic(id::densityrange, profile_.params(0.0, 1.0)));
+                        entries.push_back(automatic(id::densityrange, profile_.params({0, 0, 0}, {1, 1, 1})));
                     } else if (auto levels = negativeLevels(*img, area, *base)) {
                         entries.push_back(
-                            automatic(id::densityrange, profile_.params(levels->first, levels->second)));
+                            automatic(id::densityrange, profile_.params(levels->dMin, levels->dMax)));
                     }
                 }
             }

@@ -133,24 +133,24 @@ public:
     void setFrameHint(const analysis::FrameHint& h) { hint_ = h; }
 
     /// Film-Farbprofil: bestimmt die Tonwertgrenzen (autoneg.densityrange) beim Konvertieren.
-    /// Es gibt keinen Farbausgleich je Kanal aus dem Bild; jede Farbverschiebung kommt aus dem
-    /// Profil und ist als Regler sichtbar.
+    /// Standard „Neutral“ gleicht Farbstiche automatisch je Kanal aus, „Unbearbeitet“ setzt nichts;
+    /// alle gesetzten Werte sind als Regler sichtbar und änderbar.
     struct FilmProfile
     {
         enum class Kind
         {
             Unprocessed, ///< „Unbearbeitet“: nur umkehren, keine Streckung (Neutralwerte des Schritts)
-            Neutral,     ///< „Neutral“: Grenzen aus dem Bild, für alle Kanäle gleich
-            Custom       ///< eigenes Profil: Neutral plus Abweichung je Kanal und Gamma
+            Neutral,     ///< „Neutral“ (Standard): Grenzen automatisch aus dem Bild je Kanal
+            Custom       ///< eigenes Profil: Automatik plus Abweichung je Kanal und Gamma
         };
         Kind kind = Kind::Neutral;
         std::string name;                ///< Anzeigename (bei Custom der gespeicherte Name)
-        base::Vec3 blackOffset{0, 0, 0}; ///< dMin je Kanal minus Mittel der drei
-        base::Vec3 whiteOffset{0, 0, 0}; ///< dMax je Kanal minus Mittel der drei
+        base::Vec3 blackOffset{0, 0, 0}; ///< dMin je Kanal minus Automatik (autoMin)
+        base::Vec3 whiteOffset{0, 0, 0}; ///< dMax je Kanal minus Automatik (autoMax)
         base::Vec3 gamma{1, 1, 1};
 
-        /// Tonwertgrenzen für ein Bild mit den gemessenen neutralen Grenzen black/white.
-        [[nodiscard]] model::ParamSet params(double black, double white) const;
+        /// Tonwertgrenzen für ein Bild mit den automatisch gemessenen Grenzen je Kanal.
+        [[nodiscard]] model::ParamSet params(const base::Vec3& black, const base::Vec3& white) const;
         /// Profil aus einem gespeicherten Eintrag autoneg.densityrange (Name aus dem Eintrag).
         [[nodiscard]] static FilmProfile fromEntry(const model::EditEntry& e, std::string name);
     };

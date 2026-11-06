@@ -473,7 +473,7 @@ void FilmProfilePanel::fillProfiles(QComboBox* box, const QStringList& names, co
     box->addItem(tr("Unbearbeitet"), kUnprocessed);
     box->setItemData(0, tr("Nur umkehren: keine Streckung, keine Farbanpassung"), Qt::ToolTipRole);
     box->addItem(tr("Neutral"), kNeutral);
-    box->setItemData(1, tr("Schwarz- und Weißpunkt aus dem Bild, für alle Kanäle gleich"), Qt::ToolTipRole);
+    box->setItemData(1, tr("Standard: Schwarz- und Weißpunkt automatisch aus dem Bild je Kanal (gleicht Farbstiche aus); alle Werte als Regler unter „Licht und Farbe“"), Qt::ToolTipRole);
     for (const QString& n : names) {
         box->addItem(n, n);
     }

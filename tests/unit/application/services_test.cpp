@@ -691,23 +691,24 @@ TEST(PlaceholdersTest, M6_InferenceAndProfilesArePresent)
     EXPECT_FALSE(profiles.load("kodak-portra-400").has_value());
 }
 
-// Film-Farbprofil (Wunsch des Nutzers, LF-KON-05): Unbearbeitet setzt keine Grenzen, Neutral
-// gleiche Grenzen für alle Kanäle, ein eigenes Profil seine Abweichungen je Kanal und Gamma
+// Film-Farbprofil (Wunsch des Nutzers, LF-KON-05/-06): Unbearbeitet setzt keine Grenzen, Neutral
+// die automatisch gemessenen je Kanal, ein eigenes Profil die Automatik plus seine Abweichungen
 TEST(FilmProfileTest, M10_ProfileParams)
 {
     using P = AnalysisService::FilmProfile;
     P raw;
     raw.kind = P::Kind::Unprocessed;
     raw.name = "Unbearbeitet";
-    const ParamSet r = raw.params(0.3, 1.8);
+    const ParamSet r = raw.params({0.3, 0.3, 0.3}, {1.8, 1.8, 1.8});
     EXPECT_FALSE(r.get<base::Vec3>("dMin").has_value());
     EXPECT_FALSE(r.get<base::Vec3>("dMax").has_value());
     EXPECT_EQ(r.get<std::string>("profile").value_or(""), "Unbearbeitet");
 
     P neutral;
-    const ParamSet n = neutral.params(0.3, 1.8);
-    EXPECT_EQ(n.get<base::Vec3>("dMin").value(), (base::Vec3{0.3, 0.3, 0.3}));
-    EXPECT_EQ(n.get<base::Vec3>("dMax").value(), (base::Vec3{1.8, 1.8, 1.8}));
+    const ParamSet n = neutral.params({0.2, 0.3, 0.4}, {1.6, 1.8, 2.0});
+    EXPECT_EQ(n.get<base::Vec3>("dMin").value(), (base::Vec3{0.2, 0.3, 0.4}));
+    EXPECT_EQ(n.get<base::Vec3>("dMax").value(), (base::Vec3{1.6, 1.8, 2.0}));
+    EXPECT_EQ(n.get<base::Vec3>("autoMin").value(), (base::Vec3{0.2, 0.3, 0.4})); // gemessene Automatik
     EXPECT_FALSE(n.get<base::Vec3>("gamma").has_value());
 
     // gespeichert von einem Bild mit dMin (0,2/0,3/0,4), dMax (1,6/1,8/2,0), Gamma Rot 1,2
@@ -719,8 +720,8 @@ TEST(FilmProfileTest, M10_ProfileParams)
                        .with("gamma", base::Vec3{1.2, 1.0, 1.0});
     const P portra = P::fromEntry(saved, "Portra 160");
     EXPECT_EQ(portra.kind, P::Kind::Custom);
-    // auf ein anderes Bild mit neutralen Grenzen 0,5 / 2,0: Mittel neu, Abweichungen bleiben
-    const ParamSet c = portra.params(0.5, 2.0);
+    // ältere Vorgabe ohne Automatik: Abweichung vom Mittel; auf ein Bild mit Automatik 0,5 / 2,0
+    const ParamSet c = portra.params({0.5, 0.5, 0.5}, {2.0, 2.0, 2.0});
     const auto lo = c.get<base::Vec3>("dMin").value();
     const auto hi = c.get<base::Vec3>("dMax").value();
     EXPECT_NEAR(lo.x, 0.4, 1e-12);
@@ -730,11 +731,20 @@ TEST(FilmProfileTest, M10_ProfileParams)
     EXPECT_NEAR(hi.z, 2.2, 1e-12);
     EXPECT_EQ(c.get<base::Vec3>("gamma").value(), (base::Vec3{1.2, 1.0, 1.0}));
     EXPECT_EQ(c.get<std::string>("profile").value_or(""), "Portra 160");
+    // gespeichert mit Automatik: nur die Abweichung davon wird übertragen (kein doppelter Ausgleich)
+    model::EditEntry withAuto = saved;
+    withAuto.params = withAuto.params.with("autoMin", base::Vec3{0.2, 0.25, 0.4})
+                          .with("autoMax", base::Vec3{1.6, 1.8, 2.0});
+    const ParamSet d = P::fromEntry(withAuto, "Portra 160").params({0.1, 0.2, 0.3}, {1.5, 1.7, 1.9});
+    const auto lo2 = d.get<base::Vec3>("dMin").value();
+    EXPECT_NEAR(lo2.x, 0.1, 1e-12);
+    EXPECT_NEAR(lo2.y, 0.25, 1e-12); // +0,05 Grün aus dem Profil
+    EXPECT_NEAR(lo2.z, 0.3, 1e-12);
 }
 
-// Fehler-Vorbeugung (Wunsch des Nutzers): Konvertieren gleicht keine Farbe je Kanal aus; mit
-// „Neutral“ haben alle Kanäle dieselben Grenzen, obwohl die Kanäle verschieden dicht sind
-TEST(AnalysisServiceTest, M10_NeutralLevelsHaveNoChannelBalance)
+// Entscheidung des Nutzers: das Standardprofil „Neutral“ gleicht Farbstiche automatisch je Kanal
+// aus (Kanäle verschieden dicht, verschiedene Grenzen); „Unbearbeitet“ setzt nichts
+TEST(AnalysisServiceTest, M10_NeutralLevelsBalanceChannels)
 {
     steps::FlatFieldCache flat;
     pipeline::StepRegistry registry;
@@ -793,11 +803,10 @@ TEST(AnalysisServiceTest, M10_NeutralLevelsHaveNoChannelBalance)
     const model::EditEntry n = levels();
     const auto lo = n.params.get<base::Vec3>("dMin").value();
     const auto hi = n.params.get<base::Vec3>("dMax").value();
-    EXPECT_EQ(lo.x, lo.y);
-    EXPECT_EQ(lo.y, lo.z);
-    EXPECT_EQ(hi.x, hi.y);
-    EXPECT_EQ(hi.y, hi.z);
+    EXPECT_NE(lo.x, lo.z); // Rot hell, Blau dunkel: eigene Grenzen je Kanal
     EXPECT_LT(lo.x, hi.x);
+    EXPECT_LT(lo.z, hi.z);
+    EXPECT_EQ(n.params.get<base::Vec3>("autoMin").value(), lo);
 
     AnalysisService::FilmProfile raw;
     raw.kind = AnalysisService::FilmProfile::Kind::Unprocessed;

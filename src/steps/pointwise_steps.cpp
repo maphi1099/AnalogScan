@@ -75,7 +75,8 @@ DensityRangeStep::DensityRangeStep()
     : DescribedPointwise(describe(id::densityrange, rank::densityrange, "Tonwertgrenzen", Phase::Conversion,
                                   {vec3Param(key::dMin, {0, 0, 0}), vec3Param(key::dMax, {1, 1, 1}),
                                    doubleParam(key::clip, 0.001, 0.0, 0.02, ""),
-                                   vec3Param(key::gamma, {1, 1, 1}), stringParam(key::profile, "")},
+                                   vec3Param(key::gamma, {1, 1, 1}), stringParam(key::profile, ""),
+                                   vec3Param(key::autoMin, {0, 0, 0}), vec3Param(key::autoMax, {1, 1, 1})},
                                   pipeline::FilmTypeMask::all(), Options{.alwaysActive = true}))
 {}
 
