@@ -77,6 +77,6 @@
     "foreign": ["gtest", "platform"],
     "componentDir": "tests/component",
     "componentForeign": "*",
-    "foreignDirs": { "tests/unit/ui": ["qt"], "tests/e2e": ["qt"] }
+    "foreignDirs": { "tests/unit/ui": ["qt"], "tests/e2e": ["qt"], "tests/tools/cvcompare": ["opencv"] }
   }
 }

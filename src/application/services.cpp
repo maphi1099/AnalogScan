@@ -54,11 +54,11 @@ model::EditEntry automatic(std::string_view step, model::ParamSet p)
     return e;
 }
 
-/// Tonwertgrenzen eines Negativs (LF-KON-05): Dichte D = −log10(T / Basis) je Kanal im
-/// Bildfeld (Rand 3 % weggelassen), davon 0,1 % und 99,9 %. Jeder Kanal bekommt so seinen
-/// eigenen Bereich; das gleicht die Farbschichten des Negativs aus.
-std::optional<analysis::DensityRange> negativeLevels(const image::ImageBuffer& img,
-                                                     const model::NormRect& frame, const base::Vec3& base)
+/// Neutrale Tonwertgrenzen eines Negativs (LF-KON-05, Film-Farbprofil „Neutral“): Dichte
+/// D = −log10(T / Basis) aller drei Kanäle im Bildfeld (Rand 3 % weggelassen) zusammen, davon
+/// 0,1 % und 99,9 %. Alle Kanäle bekommen denselben Bereich: kein versteckter Farbausgleich.
+std::optional<std::pair<double, double>> negativeLevels(const image::ImageBuffer& img,
+                                                        const model::NormRect& frame, const base::Vec3& base)
 {
     const auto& spec = img.spec();
     if (spec.channels < 3 || img.host().empty()) {
@@ -83,17 +83,54 @@ std::optional<analysis::DensityRange> negativeLevels(const image::ImageBuffer& i
             }
         }
     }
-    const int pixels = static_cast<int>(density.size() / 3);
-    if (pixels < 100) {
+    const int samples = static_cast<int>(density.size());
+    if (samples < 300) {
         return std::nullopt;
     }
+    // alle Kanäle als eine Ebene: ein gemeinsamer Bereich
     auto d = image::ImageBuffer::fromFloats(
-        image::ImageSpec{pixels, 1, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, density);
+        image::ImageSpec{samples, 1, 1, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, density);
     if (!d) {
         return std::nullopt;
     }
-    return analysis::AutoLevels{}.compute(*d, 0.002);
+    const analysis::DensityRange r = analysis::AutoLevels{}.compute(*d, 0.002);
+    return std::pair{r.dMin.x, r.dMax.x};
 }
+
+} // namespace
+
+model::ParamSet AnalysisService::FilmProfile::params(double black, double white) const
+{
+    model::ParamSet p = model::ParamSet{}.with(key::profile, name);
+    if (kind == Kind::Unprocessed) {
+        return p; // Neutralwerte des Schritts: nur umkehren
+    }
+    const base::Vec3 bo = kind == Kind::Custom ? blackOffset : base::Vec3{0, 0, 0};
+    const base::Vec3 wo = kind == Kind::Custom ? whiteOffset : base::Vec3{0, 0, 0};
+    p = p.with(key::dMin, base::Vec3{black + bo.x, black + bo.y, black + bo.z})
+            .with(key::dMax, base::Vec3{white + wo.x, white + wo.y, white + wo.z});
+    if (kind == Kind::Custom && (gamma.x != 1.0 || gamma.y != 1.0 || gamma.z != 1.0)) {
+        p = p.with(key::gamma, gamma);
+    }
+    return p;
+}
+
+AnalysisService::FilmProfile AnalysisService::FilmProfile::fromEntry(const model::EditEntry& e, std::string name)
+{
+    FilmProfile f;
+    f.kind = Kind::Custom;
+    f.name = std::move(name);
+    const auto lo = e.params.get<base::Vec3>(key::dMin).value_or(base::Vec3{0, 0, 0});
+    const auto hi = e.params.get<base::Vec3>(key::dMax).value_or(base::Vec3{1, 1, 1});
+    const double ml = (lo.x + lo.y + lo.z) / 3.0;
+    const double mh = (hi.x + hi.y + hi.z) / 3.0;
+    f.blackOffset = {lo.x - ml, lo.y - ml, lo.z - ml};
+    f.whiteOffset = {hi.x - mh, hi.y - mh, hi.z - mh};
+    f.gamma = e.params.get<base::Vec3>(key::gamma).value_or(base::Vec3{1, 1, 1});
+    return f;
+}
+
+namespace {
 
 const char* filmName(model::FilmType f)
 {
@@ -284,11 +321,12 @@ JobHandle AnalysisService::run(const model::Frame& f, std::shared_ptr<const mode
     {
     public:
         DetectJob(model::Frame f, std::shared_ptr<const model::Roll> roll, model::FilmType film,
-                  unsigned parts, model::EditList current, analysis::FrameHint hint, Report report,
+                  unsigned parts, model::EditList current, analysis::FrameHint hint, FilmProfile profile, Report report,
                   AnalysisFunctions fns, std::shared_ptr<AnalysisCache> cache, CommandBus& bus,
                   UiDispatcher ui)
             : f_(std::move(f))
             , hint_(hint)
+            , profile_(std::move(profile))
             , report_(std::move(report))
             , roll_(std::move(roll))
             , film_(film)
@@ -374,10 +412,12 @@ JobHandle AnalysisService::run(const model::Frame& f, std::shared_ptr<const mode
                     area = c2->params.get<model::NormRect>(key::rect).value_or(crop);
                 }
                 if ((parts_ & Levels) != 0 && base) {
-                    if (auto levels = negativeLevels(*img, area, *base)) {
-                        entries.push_back(automatic(
-                            id::densityrange,
-                            model::ParamSet{}.with(key::dMin, levels->dMin).with(key::dMax, levels->dMax)));
+                    // Film-Farbprofil: „Unbearbeitet“ misst nichts, sonst gemeinsame Grenzen
+                    if (profile_.kind == FilmProfile::Kind::Unprocessed) {
+                        entries.push_back(automatic(id::densityrange, profile_.params(0.0, 1.0)));
+                    } else if (auto levels = negativeLevels(*img, area, *base)) {
+                        entries.push_back(
+                            automatic(id::densityrange, profile_.params(levels->first, levels->second)));
                     }
                 }
             }
@@ -402,6 +442,7 @@ JobHandle AnalysisService::run(const model::Frame& f, std::shared_ptr<const mode
     private:
         model::Frame f_;
         analysis::FrameHint hint_;
+        FilmProfile profile_;
         Report report_;
         std::shared_ptr<const model::Roll> roll_;
         model::FilmType film_;
@@ -413,7 +454,7 @@ JobHandle AnalysisService::run(const model::Frame& f, std::shared_ptr<const mode
         UiDispatcher ui_;
     };
     return jobs_.submit(std::make_unique<DetectJob>(f, std::move(roll), film, parts, std::move(current),
-                                                    hint_, report_, fns_, cache_, bus_, ui_),
+                                                    hint_, profile_, report_, fns_, cache_, bus_, ui_),
                         ports::Priority::Batch);
 }
 

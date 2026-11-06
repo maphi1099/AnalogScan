@@ -691,5 +691,122 @@ TEST(PlaceholdersTest, M6_InferenceAndProfilesArePresent)
     EXPECT_FALSE(profiles.load("kodak-portra-400").has_value());
 }
 
+// Film-Farbprofil (Wunsch des Nutzers, LF-KON-05): Unbearbeitet setzt keine Grenzen, Neutral
+// gleiche Grenzen für alle Kanäle, ein eigenes Profil seine Abweichungen je Kanal und Gamma
+TEST(FilmProfileTest, M10_ProfileParams)
+{
+    using P = AnalysisService::FilmProfile;
+    P raw;
+    raw.kind = P::Kind::Unprocessed;
+    raw.name = "Unbearbeitet";
+    const ParamSet r = raw.params(0.3, 1.8);
+    EXPECT_FALSE(r.get<base::Vec3>("dMin").has_value());
+    EXPECT_FALSE(r.get<base::Vec3>("dMax").has_value());
+    EXPECT_EQ(r.get<std::string>("profile").value_or(""), "Unbearbeitet");
+
+    P neutral;
+    const ParamSet n = neutral.params(0.3, 1.8);
+    EXPECT_EQ(n.get<base::Vec3>("dMin").value(), (base::Vec3{0.3, 0.3, 0.3}));
+    EXPECT_EQ(n.get<base::Vec3>("dMax").value(), (base::Vec3{1.8, 1.8, 1.8}));
+    EXPECT_FALSE(n.get<base::Vec3>("gamma").has_value());
+
+    // gespeichert von einem Bild mit dMin (0,2/0,3/0,4), dMax (1,6/1,8/2,0), Gamma Rot 1,2
+    model::EditEntry saved;
+    saved.step = StepId("autoneg.densityrange");
+    saved.params = ParamSet{}
+                       .with("dMin", base::Vec3{0.2, 0.3, 0.4})
+                       .with("dMax", base::Vec3{1.6, 1.8, 2.0})
+                       .with("gamma", base::Vec3{1.2, 1.0, 1.0});
+    const P portra = P::fromEntry(saved, "Portra 160");
+    EXPECT_EQ(portra.kind, P::Kind::Custom);
+    // auf ein anderes Bild mit neutralen Grenzen 0,5 / 2,0: Mittel neu, Abweichungen bleiben
+    const ParamSet c = portra.params(0.5, 2.0);
+    const auto lo = c.get<base::Vec3>("dMin").value();
+    const auto hi = c.get<base::Vec3>("dMax").value();
+    EXPECT_NEAR(lo.x, 0.4, 1e-12);
+    EXPECT_NEAR(lo.y, 0.5, 1e-12);
+    EXPECT_NEAR(lo.z, 0.6, 1e-12);
+    EXPECT_NEAR(hi.x, 1.8, 1e-12);
+    EXPECT_NEAR(hi.z, 2.2, 1e-12);
+    EXPECT_EQ(c.get<base::Vec3>("gamma").value(), (base::Vec3{1.2, 1.0, 1.0}));
+    EXPECT_EQ(c.get<std::string>("profile").value_or(""), "Portra 160");
+}
+
+// Fehler-Vorbeugung (Wunsch des Nutzers): Konvertieren gleicht keine Farbe je Kanal aus; mit
+// „Neutral“ haben alle Kanäle dieselben Grenzen, obwohl die Kanäle verschieden dicht sind
+TEST(AnalysisServiceTest, M10_NeutralLevelsHaveNoChannelBalance)
+{
+    steps::FlatFieldCache flat;
+    pipeline::StepRegistry registry;
+    ASSERT_TRUE(steps::registerStandardSteps(registry, flat).has_value());
+    NullRepository repo;
+    PersistenceQueue queue(repo);
+    CommandBus bus(registry, queue);
+    mocks::FakeTaskExecutor executor(2);
+    JobScheduler jobs(executor);
+    std::deque<std::function<void()>> uiQueue;
+    std::mutex mutex;
+    const UiDispatcher ui = [&](std::function<void()> f) {
+        const std::scoped_lock lock(mutex);
+        uiQueue.push_back(std::move(f));
+    };
+    AnalysisFunctions fns;
+    fns.image = [](const model::Frame&) {
+        // Kanäle verschieden: Rot hell, Blau dunkel, mit Verlauf
+        std::vector<float> v(64 * 64 * 3);
+        for (std::size_t i = 0; i < 64 * 64; ++i) {
+            const float t = 0.2F + 0.6F * static_cast<float>(i % 64) / 63.0F;
+            v[i * 3] = 0.7F * t;
+            v[i * 3 + 1] = 0.4F * t;
+            v[i * 3 + 2] = 0.2F * t;
+        }
+        return image::ImageBuffer::fromFloats({64, 64, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear},
+                                              v);
+    };
+    fns.detect = [](const image::ImageBuffer&, model::FilmType,
+                    const analysis::FrameHint&) -> base::Expected<analysis::FrameDetection> {
+        analysis::FrameDetection d;
+        d.frame = {0.0, 0.0, 1.0, 1.0};
+        return d;
+    };
+    fns.measureBase = [](const image::ImageBuffer&,
+                         const analysis::RegionMap&) -> base::Expected<analysis::BaseMeasurement> {
+        analysis::BaseMeasurement m;
+        m.transmission = {0.9, 0.9, 0.9};
+        return m;
+    };
+    AnalysisService service(jobs, bus, ui, fns);
+    auto roll = std::make_shared<model::Roll>();
+    roll->filmType = model::FilmType::ColorNegative;
+    const model::Frame f1 = frame(1);
+    bus.open(f1, {});
+    const auto levels = [&] {
+        bus.execute(RemoveEntryCommand(StepId("autoneg.densityrange")), std::vector{f1.id}, *roll);
+        EXPECT_TRUE(service.autoConvert(f1, roll, roll->filmType, bus.history(f1.id).current()).wait());
+        const std::scoped_lock lock(mutex);
+        for (auto& task : uiQueue) {
+            task();
+        }
+        uiQueue.clear();
+        return *bus.history(f1.id).current().get(StepId("autoneg.densityrange"));
+    };
+    const model::EditEntry n = levels();
+    const auto lo = n.params.get<base::Vec3>("dMin").value();
+    const auto hi = n.params.get<base::Vec3>("dMax").value();
+    EXPECT_EQ(lo.x, lo.y);
+    EXPECT_EQ(lo.y, lo.z);
+    EXPECT_EQ(hi.x, hi.y);
+    EXPECT_EQ(hi.y, hi.z);
+    EXPECT_LT(lo.x, hi.x);
+
+    AnalysisService::FilmProfile raw;
+    raw.kind = AnalysisService::FilmProfile::Kind::Unprocessed;
+    raw.name = "Unbearbeitet";
+    service.setFilmProfile(raw);
+    const model::EditEntry r = levels();
+    EXPECT_FALSE(r.params.get<base::Vec3>("dMin").has_value()); // nichts gemessen
+    EXPECT_EQ(r.params.get<std::string>("profile").value_or(""), "Unbearbeitet");
+}
+
 } // namespace
 } // namespace autoneg::application

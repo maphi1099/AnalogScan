@@ -270,6 +270,30 @@ TEST_F(Steps, U_STP_05_ClipShareOfDensityRange)
     EXPECT_NEAR(static_cast<double>(clipped) / w, clip, 0.001);
 }
 
+// Film-Farbprofil: Gamma je Kanal v' = v^(1/γ); Schwarz und Weiß bleiben, nur Rot ändert sich
+TEST_F(Steps, M10_DensityRangeGammaPerChannel)
+{
+    const int w = 64;
+    const image::ImageBuffer src = t::imageFrom(w, 1, 3, [](int x, int /*y*/, int /*c*/) {
+        return static_cast<float>(std::pow(10.0, -(1.0 * (x + 0.5) / w))); // D 0 … 1
+    });
+    const auto range = ParamSet{}.with("dMin", base::Vec3{0, 0, 0}).with("dMax", base::Vec3{1, 1, 1});
+    const image::ImageBuffer plain =
+        apply(film(FilmType::ColorNegative).with(entry(id::densityrange, range)), src, FilmType::ColorNegative);
+    const image::ImageBuffer bent = apply(
+        film(FilmType::ColorNegative)
+            .with(entry(id::densityrange, range.with("gamma", base::Vec3{2.0, 1.0, 1.0}))),
+        src, FilmType::ColorNegative);
+    const auto a = plain.host();
+    const auto b = bent.host();
+    for (std::size_t i = 0; i < a.size(); i += 3) {
+        const float v = std::max(a[i], 1e-6F);
+        EXPECT_NEAR(b[i], std::sqrt(v), 1e-4 + 1e-3 * std::sqrt(v)) << i;
+        EXPECT_FLOAT_EQ(b[i + 1], a[i + 1]);
+        EXPECT_FLOAT_EQ(b[i + 2], a[i + 2]);
+    }
+}
+
 // LF-KON-03
 TEST_F(Steps, U_STP_06_BwMixSelectsChannel)
 {

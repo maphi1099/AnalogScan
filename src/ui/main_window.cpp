@@ -531,7 +531,14 @@ void MainWindow::buildUi()
     tools_->addTab(conversion_, tr("Konvertierung"));
     tools_->addTab(gradation_, tr("Gradation"));
     auto* adjustScroll = new QScrollArea(tools_);
-    adjustScroll->setWidget(adjust_);
+    auto* adjustPage = new QWidget(adjustScroll);
+    auto* adjustLayout = new QVBoxLayout(adjustPage);
+    adjustLayout->setContentsMargins(0, 0, 0, 0);
+    filmProfile_ = new FilmProfilePanel(*ui_, adjustPage);
+    filmProfile_->setObjectName(QStringLiteral("filmProfilePanel"));
+    adjustLayout->addWidget(adjust_);
+    adjustLayout->addWidget(filmProfile_); // am Ende von Licht und Farbe
+    adjustScroll->setWidget(adjustPage);
     adjustScroll->setWidgetResizable(true);
     tools_->addTab(adjustScroll, tr("Licht und Farbe"));
     imageTools_ = new QWidget(tools_);
@@ -644,49 +651,26 @@ void MainWindow::buildUi()
                QStringLiteral("convert"));
     });
     connect(conversion_, &ConversionPanel::frameOptionsRequested, this, [this] { doFrameOptions(); });
-    connect(conversion_, &ConversionPanel::autoLevelsRequested, this, [this] {
-        detect(targets(), tr("Tonwerte"), automatic(&application::AnalysisService::autoLevels));
-    });
     connect(conversion_, &ConversionPanel::autoConvertToggled, this, [this](bool on) { setAutoConvert(on); });
-    connect(conversion_, &ConversionPanel::levelPresetChosen, this, [this](const QString& name) {
-        if (!roll_ || !s_.decodeEdits) {
+    // Film-Farbprofil: Wahl in Konvertierung oder Licht und Farbe; gilt für die markierten Bilder
+    connect(conversion_, &ConversionPanel::filmProfileChosen, this,
+            [this](const QString& key) { chooseFilmProfile(key, true); });
+    connect(filmProfile_, &FilmProfilePanel::filmProfileChosen, this,
+            [this](const QString& key) { chooseFilmProfile(key, true); });
+    connect(filmProfile_, &FilmProfilePanel::saveRequested, this, [this] { saveFilmProfile(); });
+    connect(filmProfile_, &FilmProfilePanel::deleteRequested, this, [this](const QString& name) {
+        if (name.startsWith(QLatin1Char(':'))) {
             return;
         }
-        const auto j = s_.presets.load({ports::PresetKind::Base, name.toStdString()});
-        if (!j) {
-            report(QString::fromStdString(j.error().message));
+        if (QMessageBox::question(this, tr("Film-Farbprofil löschen"),
+                                  tr("Profil „%1“ löschen? Bereits bearbeitete Bilder behalten ihre Werte.")
+                                      .arg(name)) != QMessageBox::Yes) {
             return;
         }
-        const model::EditList l = s_.decodeEdits(*j);
-        const model::EditEntry* e = l.get(model::StepId(std::string(id::densityrange)));
-        if (e == nullptr) {
-            report(tr("Die Filmvorgabe enthält keine Tonwerte."));
-            return;
-        }
-        model::EditEntry copy = *e;
-        copy.origin = model::Origin::Preset;
-        s_.bus.execute(application::SetEntryCommand(copy), targets(), *roll_);
-        refreshCurrent();
-    });
-    connect(conversion_, &ConversionPanel::saveLevelsRequested, this, [this] {
-        const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::densityrange)));
-        if (e == nullptr || !s_.encodeEdits) {
-            report(tr("Das Bild hat noch keine Tonwerte (Tonwerte: Automatisch)."));
-            return;
-        }
-        bool ok = false;
-        const QString name = QInputDialog::getText(this, tr("Filmvorgabe speichern"),
-                                                   tr("Name, z. B. der Film (Kodak Gold 200)"),
-                                                   QLineEdit::Normal, QString(), &ok);
-        if (!ok || name.trimmed().isEmpty()) {
-            return;
-        }
-        if (auto r = s_.presets.save(ports::PresetKind::Base, name.trimmed().toStdString(),
-                                     s_.encodeEdits(model::EditList{}.with(*e)));
-            !r) {
+        if (auto r = s_.presets.remove({ports::PresetKind::Base, name.toStdString()}); !r) {
             report(QString::fromStdString(r.error().message));
         }
-        refreshLevelPresets();
+        chooseFilmProfile(FilmProfilePanel::kNeutral, false);
     });
     connect(conversion_, &ConversionPanel::showBaseAreaToggled, this, [this](bool on) {
         showArea_ = on;
@@ -1033,6 +1017,11 @@ void MainWindow::buildActions()
         a->setProperty("standardShortcut", a->shortcut());
     }
     applyShortcuts();
+    {
+        const auto v = s_.settings.get("filmProfile");
+        const std::string* k = v ? v->asString() : nullptr;
+        chooseFilmProfile(k != nullptr ? QString::fromStdString(*k) : FilmProfilePanel::kNeutral, false);
+    }
     if (const auto v = s_.settings.get("panButton"); v && v->number()) {
         canvas_->setPanButton(static_cast<Qt::MouseButton>(static_cast<int>(*v->number())));
     }
@@ -1352,7 +1341,7 @@ void MainWindow::onRollOpened(application::OpenedRoll r)
         filmstrip_->selectFrame(frames_.front().id);
     }
     report(tr("%n Bild(er) geöffnet", nullptr, static_cast<int>(frames_.size())));
-    refreshLevelPresets();
+    refreshFilmProfiles();
     // beide Ansichten als Reiter; Entwickeln ist danach aktiv
     showView(View::Overview);
     // Neue Rolle: erst der Import-Bildschirm (Filmtyp festlegen), sonst gleich die Bildansicht
@@ -1526,6 +1515,7 @@ void MainWindow::refreshCurrent()
     conversion_->bindList(l);
     gradation_->bindList(l);
     adjust_->bindList(l);
+    filmProfile_->bindList(l);
     // Bedienelemente nach Filmtyp: Gradation (Ilford Multigrade) nur bei S/W-Negativ
     const model::FilmType film = filmOf(s_.session.current);
     conversion_->setFilm(film);
@@ -1536,6 +1526,7 @@ void MainWindow::refreshCurrent()
     }
     gradation_->setFilm(film);
     adjust_->setFilm(film);
+    filmProfile_->setFilm(film);
     tools_->setTabVisible(tools_->indexOf(gradation_), film == model::FilmType::BwNegative);
     // Größe des Ergebnisses in Quellpixeln: Zuschnitt und Vierteldrehung berücksichtigt
     if (const auto it = sources_.find(s_.session.current); it != sources_.end() && it->second.width > 0) {
@@ -1992,13 +1983,79 @@ void MainWindow::doFrameOptions()
     applyFrameHint();
 }
 
-void MainWindow::refreshLevelPresets()
+void MainWindow::refreshFilmProfiles()
 {
     QStringList names;
     for (const ports::PresetInfo& p : s_.presets.list(ports::PresetKind::Base)) {
         names << QString::fromStdString(p.id.name);
     }
-    conversion_->setLevelPresets(names);
+    conversion_->setFilmProfiles(names, filmProfileKey_);
+    filmProfile_->setFilmProfiles(names, filmProfileKey_);
+}
+
+void MainWindow::chooseFilmProfile(const QString& key, bool apply)
+{
+    using Profile = application::AnalysisService::FilmProfile;
+    Profile p;
+    if (key == FilmProfilePanel::kUnprocessed) {
+        p.kind = Profile::Kind::Unprocessed;
+        p.name = tr("Unbearbeitet").toStdString();
+    } else if (key == FilmProfilePanel::kNeutral || !s_.decodeEdits) {
+        p.kind = Profile::Kind::Neutral;
+        p.name = tr("Neutral").toStdString();
+    } else {
+        const auto j = s_.presets.load({ports::PresetKind::Base, key.toStdString()});
+        const model::EditList l = j ? s_.decodeEdits(*j) : model::EditList{};
+        const model::EditEntry* e = l.get(model::StepId(std::string(id::densityrange)));
+        if (e == nullptr) {
+            report(tr("Film-Farbprofil „%1“ nicht lesbar, Neutral wird verwendet.").arg(key));
+            chooseFilmProfile(FilmProfilePanel::kNeutral, apply);
+            return;
+        }
+        p = Profile::fromEntry(*e, key.toStdString());
+    }
+    filmProfileKey_ = key;
+    s_.analysis.setFilmProfile(p);
+    s_.settings.set("filmProfile", model::JsonValue(key.toStdString()));
+    refreshFilmProfiles();
+    if (!apply || !roll_) {
+        return;
+    }
+    // Tonwerte der markierten Bilder mit dem Profil neu setzen (auch von Hand geänderte)
+    removeSteps({id::densityrange});
+    detect(targets(), tr("Film-Farbprofil"), automatic(&application::AnalysisService::autoLevels));
+}
+
+void MainWindow::saveFilmProfile()
+{
+    const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::densityrange)));
+    if (e == nullptr || !s_.encodeEdits) {
+        report(tr("Das Bild ist noch nicht konvertiert: es gibt keine Werte zum Speichern."));
+        return;
+    }
+    bool ok = false;
+    const QString name =
+        QInputDialog::getText(this, tr("Film-Farbprofil speichern"), tr("Name, z. B. der Film (Portra 160)"),
+                              QLineEdit::Normal, QString(), &ok)
+            .trimmed();
+    if (!ok || name.isEmpty()) {
+        return;
+    }
+    if (name.startsWith(QLatin1Char(':'))) {
+        report(tr("Der Name darf nicht mit einem Doppelpunkt beginnen."));
+        return;
+    }
+    model::EditEntry copy = *e;
+    copy.params = copy.params.with(key::profile, name.toStdString());
+    if (auto r = s_.presets.save(ports::PresetKind::Base, name.toStdString(),
+                                 s_.encodeEdits(model::EditList{}.with(copy)));
+        !r) {
+        report(QString::fromStdString(r.error().message));
+        return;
+    }
+    ui_->apply(std::make_unique<application::SetEntryCommand>(copy)); // Bild trägt jetzt den Profilnamen
+    chooseFilmProfile(name, false);
+    report(tr("Film-Farbprofil „%1“ gespeichert").arg(name));
 }
 
 void MainWindow::excludeFrames(const std::vector<model::FrameId>& frames)

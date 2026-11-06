@@ -123,8 +123,9 @@ public:
     /// Autokonvertierung an: die einzelnen Einstellungen verschwinden (kommen beim Abwählen zurück).
     void setAutoMode(bool on);
     [[nodiscard]] bool autoMode() const;
-    /// Gespeicherte Filmvorgaben für die Tonwerte (Namen).
-    void setLevelPresets(const QStringList& names);
+    /// Film-Farbprofile: „Unbearbeitet“, „Neutral“ und die gespeicherten (Namen); current wie
+    /// filmProfileChosen.
+    void setFilmProfiles(const QStringList& names, const QString& current);
     void setShowArea(bool on);
     /// Bewertung der letzten Bildfelderkennung (Debug-Anzeige unter Auto-Bildfeld).
     void setQuality(const QString& text);
@@ -143,9 +144,8 @@ Q_SIGNALS:
     void pickBaseToggled(bool on);
     void convertToggled(bool on);
     void frameOptionsRequested();
-    void autoLevelsRequested();
-    void levelPresetChosen(const QString& name);
-    void saveLevelsRequested();
+    /// Film-Farbprofil gewählt: kUnprocessed, kNeutral oder der Name eines gespeicherten.
+    void filmProfileChosen(const QString& key);
     void showBaseAreaToggled(bool on);
     void autoConvertToggled(bool on);
 
@@ -154,7 +154,7 @@ private:
 
     QCheckBox* auto_ = nullptr;
     QWidget* manual_ = nullptr; ///< alles, was bei Autokonvertierung verschwindet
-    QComboBox* levels_ = nullptr;
+    QComboBox* profiles_ = nullptr;
     QPushButton* autoFrame_ = nullptr;
     QPushButton* autoBase_ = nullptr;
     QPushButton* pickBase_ = nullptr;
@@ -191,6 +191,88 @@ private:
     std::vector<ParamSlider*> sliders_;
     QLabel* hint_ = nullptr;
     QPushButton* picker_ = nullptr;
+};
+
+/// Schieberegler mit Zahlenfeld für einen frei skalierten Wert (nicht an ein Parameterschema
+/// gebunden, z. B. eine Komponente eines Vec3). Ziehen meldet moving, Loslassen bzw. Eingabe
+/// committed; Doppelklick setzt auf neutral.
+class NumberSlider final : public QWidget
+{
+    Q_OBJECT
+
+public:
+    NumberSlider(const QString& label, double min, double max, int decimals, double neutral,
+                 const QString& tip, QWidget* parent = nullptr);
+    void setValue(double v);
+    [[nodiscard]] double value() const;
+    void setLabel(const QString& text);
+    void setTip(const QString& tip);
+    [[nodiscard]] QSlider* slider() const { return slider_; }
+    [[nodiscard]] QDoubleSpinBox* spin() const { return spin_; }
+
+Q_SIGNALS:
+    void moving(double v);
+    void committed(double v);
+
+protected:
+    bool eventFilter(QObject* o, QEvent* e) override;
+
+private:
+    [[nodiscard]] double fromTicks(int t) const { return min_ + (max_ - min_) * t / 1000.0; }
+    [[nodiscard]] int toTicks(double v) const;
+
+    double min_;
+    double max_;
+    double neutral_;
+    QLabel* label_ = nullptr;
+    QSlider* slider_ = nullptr;
+    QDoubleSpinBox* spin_ = nullptr;
+};
+
+/// Film-Farbprofil (am Ende von „Licht und Farbe“): alles, was das Konvertieren an Farbe und
+/// Tonwerten setzt, als Regler mit Zahl. Filmbasis R/G/B, Schwarz- und Weißpunkt gesamt (Dichte),
+/// je Kanal Abweichung von Schwarz-/Weißpunkt und Gamma; Bearbeitung in RGB oder CMY
+/// (Cyan = Rotkanal usw., Vorzeichen so, dass „mehr Cyan“ das Bild cyanfarbener macht).
+/// Geänderte Werte lassen sich als eigenes Profil dauerhaft speichern (für alle Rollen).
+class FilmProfilePanel final : public ToolPanel
+{
+    Q_OBJECT
+
+public:
+    static inline const QString kUnprocessed = QStringLiteral(":unprocessed");
+    static inline const QString kNeutral = QStringLiteral(":neutral");
+
+    explicit FilmProfilePanel(UiController& ui, QWidget* parent = nullptr);
+    /// Auswahl füllen: „Unbearbeitet“, „Neutral“, gespeicherte Namen (auch für die Konvertierung).
+    static void fillProfiles(QComboBox* box, const QStringList& names, const QString& current);
+    void bindList(const model::EditList& l) override;
+    void setFilm(model::FilmType film) override;
+    void setFilmProfiles(const QStringList& names, const QString& current);
+    [[nodiscard]] bool cmy() const;
+    void setCmy(bool on);
+
+Q_SIGNALS:
+    void filmProfileChosen(const QString& key);
+    void saveRequested();
+    void deleteRequested(const QString& name);
+
+private:
+    /// Eintrag autoneg.densityrange mit den Reglerwerten.
+    [[nodiscard]] model::EditEntry levelsEntry() const;
+    [[nodiscard]] model::EditEntry baseEntry() const;
+    void relabel();
+
+    model::EditList list_;
+    QComboBox* profiles_ = nullptr;
+    QComboBox* model_ = nullptr;
+    QPushButton* delete_ = nullptr;
+    std::array<NumberSlider*, 3> base_{};
+    NumberSlider* black_ = nullptr;
+    NumberSlider* white_ = nullptr;
+    std::array<NumberSlider*, 3> blackOffset_{};
+    std::array<NumberSlider*, 3> whiteOffset_{};
+    std::array<NumberSlider*, 3> gamma_{};
+    std::vector<QWidget*> negativeOnly_;
 };
 
 } // namespace autoneg::ui

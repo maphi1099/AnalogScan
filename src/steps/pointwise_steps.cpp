@@ -74,7 +74,8 @@ void DensityStep::emit(pipeline::PixelProgramBuilder& b, const model::ParamSet& 
 DensityRangeStep::DensityRangeStep()
     : DescribedPointwise(describe(id::densityrange, rank::densityrange, "Tonwertgrenzen", Phase::Conversion,
                                   {vec3Param(key::dMin, {0, 0, 0}), vec3Param(key::dMax, {1, 1, 1}),
-                                   doubleParam(key::clip, 0.001, 0.0, 0.02, "")},
+                                   doubleParam(key::clip, 0.001, 0.0, 0.02, ""),
+                                   vec3Param(key::gamma, {1, 1, 1}), stringParam(key::profile, "")},
                                   pipeline::FilmTypeMask::all(), Options{.alwaysActive = true}))
 {}
 
@@ -85,9 +86,19 @@ void DensityRangeStep::emit(pipeline::PixelProgramBuilder& b, const model::Param
     const base::Vec3 hi = param(p, key::dMax, base::Vec3{1, 1, 1});
     const auto span = [](double l, double h) { return std::max(h - l, 1e-4); };
     const base::Vec3 inv{1.0 / span(lo.x, hi.x), 1.0 / span(lo.y, hi.y), 1.0 / span(lo.z, hi.z)};
+    // Gamma je Kanal (Film-Farbprofil): v' = v^(1/γ), Schwarz und Weiß bleiben
+    const base::Vec3 g = param(p, key::gamma, base::Vec3{1, 1, 1});
+    const auto gamma = [&b, &g] {
+        if (g.x == 1.0 && g.y == 1.0 && g.z == 1.0) {
+            return;
+        }
+        const auto safe = [](double v) { return 1.0 / std::clamp(v, 0.1, 10.0); };
+        b.clamp(1e-6F, 1e6F).log10().scale({safe(g.x), safe(g.y), safe(g.z)}).exp10();
+    };
     b.offset({-lo.x, -lo.y, -lo.z});
     if (ctx.film == FilmType::Slide) {
         b.scale(inv); // linear, ohne Inversion
+        gamma();
         return;
     }
     // v = (10^(R·(n − 1)) − 10^−R) / (1 − 10^−R), n = (D − dMin)/(dMax − dMin)
@@ -98,6 +109,7 @@ void DensityRangeStep::emit(pipeline::PixelProgramBuilder& b, const model::Param
     b.scale({r * inv.x, r * inv.y, r * inv.z}).offset({-r, -r, -r});
     b.clamp(static_cast<float>(-2.0 * r), static_cast<float>(0.5 * r)).exp10();
     b.offset({-floor, -floor, -floor}).scale({1.0 / (1.0 - floor), 1.0 / (1.0 - floor), 1.0 / (1.0 - floor)});
+    gamma();
 }
 
 ExposureStep::ExposureStep()

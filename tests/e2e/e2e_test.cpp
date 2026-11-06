@@ -477,6 +477,56 @@ TEST_F(E2E, M10_FreeZoomAndPan)
     EXPECT_EQ(c->zoom(), ui::ImageCanvas::Zoom::Fit);
 }
 
+// Film-Farbprofil (Wunsch des Nutzers): Werte als Regler mit Zahl in „Licht und Farbe“, RGB/CMY,
+// eigenes Profil speichern (dauerhaft, für alle Rollen) und in der Konvertierung wählen
+TEST_F(E2E, M10_FilmProfileSlidersAndSave)
+{
+    start(1);
+    model::EditEntry levels;
+    levels.step = model::StepId("autoneg.densityrange");
+    levels.params = model::ParamSet{}
+                        .with("dMin", base::Vec3{0.2, 0.3, 0.4})
+                        .with("dMax", base::Vec3{1.6, 1.8, 2.0});
+    ASSERT_TRUE(window->controller().apply(std::make_unique<application::SetEntryCommand>(levels)));
+    auto* panel = window->findChild<ui::FilmProfilePanel*>(QStringLiteral("filmProfilePanel"));
+    ASSERT_NE(panel, nullptr);
+    const auto slider = [&](const char* name) {
+        auto* s = panel->findChild<ui::NumberSlider*>(QString::fromLatin1(name));
+        EXPECT_NE(s, nullptr) << name;
+        return s;
+    };
+    // Gesamt = Mittel der Kanäle; RGB: Rot hat die niedrigste Grenze = mehr Rot (+0,1)
+    EXPECT_NEAR(slider("profileBlack")->value(), 0.3, 1e-9);
+    EXPECT_NEAR(slider("profileWhite")->value(), 1.8, 1e-9);
+    EXPECT_NEAR(slider("profileBlackR")->value(), 0.1, 1e-9);
+    EXPECT_NEAR(slider("profileBlackB")->value(), -0.1, 1e-9);
+    panel->setCmy(true); // Cyan ist der Rotkanal: weniger Cyan
+    EXPECT_NEAR(slider("profileBlackR")->value(), -0.1, 1e-9);
+    panel->setCmy(false);
+
+    // Regler ändern: Eintrag folgt (mehr Rot in den Lichtern = niedrigere Weißgrenze Rot)
+    slider("profileWhiteR")->spin()->setValue(0.3);
+    Q_EMIT slider("profileWhiteR")->spin()->editingFinished();
+    const auto hi = entry("autoneg.densityrange")->params.get<base::Vec3>("dMax").value();
+    EXPECT_NEAR(hi.x, 1.5, 1e-9);
+    EXPECT_NEAR(hi.y, 1.8, 1e-9);
+
+    // speichern: erscheint in beiden Auswahlen und bleibt nach dem Neustart
+    answerName(QStringLiteral("Portra 160"));
+    panel->findChild<QPushButton*>(QStringLiteral("filmProfileSave"))->click();
+    auto* conv = window->findChild<QComboBox*>(QStringLiteral("filmProfile"));
+    ASSERT_NE(conv, nullptr);
+    EXPECT_GE(conv->findText(QStringLiteral("Portra 160")), 0);
+    EXPECT_EQ(conv->currentText(), QStringLiteral("Portra 160"));
+    EXPECT_EQ(entry("autoneg.densityrange")->params.get<std::string>("profile").value_or(""), "Portra 160");
+    restart();
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->previewsShown() > 0; }));
+    conv = window->findChild<QComboBox*>(QStringLiteral("filmProfile"));
+    EXPECT_GE(conv->findText(QStringLiteral("Portra 160")), 0);
+    EXPECT_EQ(conv->currentText(), QStringLiteral("Portra 160")); // zuletzt gewählt
+}
+
 // E-45, E-11: LF-UI-04, LF-KON-08
 TEST_F(E2E, E_45_ShortcutsTriggerFunctions)
 {

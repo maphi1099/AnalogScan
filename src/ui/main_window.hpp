@@ -46,6 +46,7 @@ namespace autoneg::ui {
 
 class AdjustPanel;
 class ConversionPanel;
+class FilmProfilePanel;
 class CropRotateTool;
 class EditListModel;
 class FilmstripModel;
@@ -202,7 +203,10 @@ private:
     /// Autokonvertierung des aktiven Bilds (alle Automatiken, nicht abgewählt).
     [[nodiscard]] bool autoConverted(const model::FrameId& f) const;
     void setAutoConvert(bool on);
-    void refreshLevelPresets();
+    void refreshFilmProfiles();
+    /// Film-Farbprofil wählen (Schlüssel wie FilmProfilePanel); apply: Tonwerte der markierten Bilder neu setzen.
+    void chooseFilmProfile(const QString& key, bool apply);
+    void saveFilmProfile();
     /// Schritte der markierten Bilder entfernen (Schalter abgewählt).
     void removeSteps(std::initializer_list<std::string_view> steps);
     /// Alle Fenster wieder wie beim Start anordnen (auch losgelöste).
@@ -238,6 +242,8 @@ private:
     ConversionPanel* conversion_ = nullptr;
     GradationPanel* gradation_ = nullptr;
     AdjustPanel* adjust_ = nullptr;
+    FilmProfilePanel* filmProfile_ = nullptr;
+    QString filmProfileKey_; ///< gewähltes Film-Farbprofil (FilmProfilePanel::kNeutral usw. oder Name)
     QStackedWidget* stack_ = nullptr;
     QWidget* startPage_ = nullptr;
     ImportPage* import_ = nullptr;

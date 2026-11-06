@@ -54,6 +54,7 @@ inline constexpr std::string_view dMin = "dMin";
 inline constexpr std::string_view ev = "ev";
 inline constexpr std::string_view flipH = "flipH";
 inline constexpr std::string_view flipV = "flipV";
+inline constexpr std::string_view gamma = "gamma";
 inline constexpr std::string_view grade = "grade";
 inline constexpr std::string_view highlights = "highlights";
 inline constexpr std::string_view inset = "inset";

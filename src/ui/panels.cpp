@@ -373,37 +373,26 @@ ConversionPanel::ConversionPanel(UiController& ui, QWidget* parent)
     showArea_->setObjectName(QStringLiteral("showBaseArea"));
     showArea_->setToolTip(tr("Zeigt das ganze Bild mit dem Bereich, in dem die Filmbasis gemessen wurde"));
     m->addWidget(showArea_);
-    auto* levelRow = new QHBoxLayout;
-    auto* levelLabel = new QLabel(tr("Tonwerte"), manual_);
-    levels_ = new QComboBox(manual_);
-    levels_->setObjectName(QStringLiteral("levelsSource"));
-    levels_->setToolTip(
-        tr("Tonwertgrenzen automatisch aus dem Bild oder aus einer gespeicherten Filmvorgabe"));
-    QPushButton* saveLevels =
-        button(tr("Speichern …"), QStringLiteral("saveLevels"),
-               tr("Tonwerte des Bilds als Filmvorgabe speichern, z. B. unter dem Filmnamen"));
-    levelRow->addWidget(levelLabel);
-    levelRow->addWidget(levels_, 1);
-    levelRow->addWidget(saveLevels);
-    m->addLayout(levelRow);
+    auto* profileRow = new QHBoxLayout;
+    auto* profileLabel = new QLabel(tr("Film-Farbprofil"), manual_);
+    profiles_ = new QComboBox(manual_);
+    profiles_->setObjectName(QStringLiteral("filmProfile"));
+    profiles_->setToolTip(
+        tr("Wie das Negativ in Farbe umgesetzt wird; einstellen und eigene Profile speichern unter „Licht und Farbe“"));
+    profileRow->addWidget(profileLabel);
+    profileRow->addWidget(profiles_, 1);
+    m->addLayout(profileRow);
     m->addWidget(convert_);
     layout->addWidget(manual_);
     layout->addStretch(1);
-    setLevelPresets({});
+    setFilmProfiles({}, FilmProfilePanel::kNeutral);
     connect(autoFrame_, &QPushButton::clicked, this, &ConversionPanel::autoFrameToggled);
     connect(autoBase_, &QPushButton::clicked, this, &ConversionPanel::autoBaseToggled);
     connect(pickBase_, &QPushButton::clicked, this, &ConversionPanel::pickBaseToggled);
     connect(convert_, &QPushButton::clicked, this, &ConversionPanel::convertToggled);
     connect(frameOptions, &QPushButton::clicked, this, &ConversionPanel::frameOptionsRequested);
-    connect(saveLevels, &QPushButton::clicked, this, &ConversionPanel::saveLevelsRequested);
-    connect(levels_, &QComboBox::activated, this, [this](int i) {
-        const QString name = levels_->itemData(i).toString();
-        if (name.isEmpty()) {
-            Q_EMIT autoLevelsRequested();
-        } else {
-            Q_EMIT levelPresetChosen(name);
-        }
-    });
+    connect(profiles_, &QComboBox::activated, this,
+            [this](int i) { Q_EMIT filmProfileChosen(profiles_->itemData(i).toString()); });
     connect(auto_, &QCheckBox::toggled, this, [this](bool on) {
         manual_->setVisible(!on);
         Q_EMIT autoConvertToggled(on);
@@ -476,13 +465,23 @@ bool ConversionPanel::autoMode() const
     return auto_->isChecked();
 }
 
-void ConversionPanel::setLevelPresets(const QStringList& names)
+void FilmProfilePanel::fillProfiles(QComboBox* box, const QStringList& names, const QString& current)
 {
-    levels_->clear();
-    levels_->addItem(tr("Automatisch"), QString());
+    const QSignalBlocker block(box);
+    box->clear();
+    box->addItem(tr("Unbearbeitet"), kUnprocessed);
+    box->setItemData(0, tr("Nur umkehren: keine Streckung, keine Farbanpassung"), Qt::ToolTipRole);
+    box->addItem(tr("Neutral"), kNeutral);
+    box->setItemData(1, tr("Schwarz- und Weißpunkt aus dem Bild, für alle Kanäle gleich"), Qt::ToolTipRole);
     for (const QString& n : names) {
-        levels_->addItem(n, n);
+        box->addItem(n, n);
     }
+    box->setCurrentIndex(std::max(0, box->findData(current)));
+}
+
+void ConversionPanel::setFilmProfiles(const QStringList& names, const QString& current)
+{
+    FilmProfilePanel::fillProfiles(profiles_, names, current);
 }
 
 void ConversionPanel::setShowArea(bool on)
@@ -529,7 +528,7 @@ void ConversionPanel::setFilm(model::FilmType film)
     for (QWidget* b : filmButtons_) {
         b->setEnabled(chosen && !busy(b->objectName()));
     }
-    levels_->setEnabled(negative);
+    profiles_->setEnabled(negative);
     for (QWidget* w : baseControls_) {
         w->setEnabled(negative && !busy(w->objectName()));
     }
@@ -633,6 +632,321 @@ void AdjustPanel::bindList(const model::EditList& l)
     for (ParamSlider* s : sliders_) {
         s->setValue(paramOr(l, s->step(), s->param(), s->neutral()));
     }
+}
+
+// --- NumberSlider ------------------------------------------------------------------------------
+
+NumberSlider::NumberSlider(const QString& label, double min, double max, int decimals, double neutral,
+                           const QString& tip, QWidget* parent)
+    : QWidget(parent)
+    , min_(min)
+    , max_(max)
+    , neutral_(neutral)
+{
+    auto* row = new QHBoxLayout(this);
+    row->setContentsMargins(0, 0, 0, 0);
+    label_ = new QLabel(label, this);
+    label_->setMinimumWidth(110);
+    slider_ = new QSlider(Qt::Horizontal, this);
+    slider_->setRange(0, ticks);
+    spin_ = new QDoubleSpinBox(this);
+    spin_->setRange(min, max);
+    spin_->setDecimals(decimals);
+    spin_->setSingleStep((max - min) / 100.0);
+    row->addWidget(label_);
+    row->addWidget(slider_, 1);
+    row->addWidget(spin_);
+    setToolTip(tip);
+    slider_->setToolTip(tip);
+    spin_->setToolTip(tip);
+    slider_->installEventFilter(this);
+    setValue(neutral);
+    connect(slider_, &QSlider::valueChanged, this, [this](int t) {
+        const QSignalBlocker block(spin_);
+        spin_->setValue(fromTicks(t));
+        if (slider_->isSliderDown()) {
+            Q_EMIT moving(fromTicks(t));
+        }
+    });
+    connect(slider_, &QSlider::sliderReleased, this, [this] { Q_EMIT committed(fromTicks(slider_->value())); });
+    connect(slider_, &QSlider::actionTriggered, this, [this](int action) {
+        if (action != QAbstractSlider::SliderMove) {
+            QMetaObject::invokeMethod(
+                this, [this] { Q_EMIT committed(fromTicks(slider_->value())); }, Qt::QueuedConnection);
+        }
+    });
+    connect(spin_, &QDoubleSpinBox::editingFinished, this, [this] {
+        const QSignalBlocker block(slider_);
+        slider_->setValue(toTicks(spin_->value()));
+        Q_EMIT committed(spin_->value());
+    });
+}
+
+int NumberSlider::toTicks(double v) const
+{
+    return static_cast<int>(std::lround((v - min_) / (max_ - min_) * ticks));
+}
+
+void NumberSlider::setValue(double v)
+{
+    const QSignalBlocker a(slider_);
+    const QSignalBlocker b(spin_);
+    slider_->setValue(toTicks(std::clamp(v, min_, max_)));
+    spin_->setValue(v);
+}
+
+double NumberSlider::value() const
+{
+    return spin_->value();
+}
+
+void NumberSlider::setLabel(const QString& text)
+{
+    label_->setText(text);
+}
+
+void NumberSlider::setTip(const QString& tip)
+{
+    setToolTip(tip);
+    slider_->setToolTip(tip);
+    spin_->setToolTip(tip);
+}
+
+bool NumberSlider::eventFilter(QObject* o, QEvent* e)
+{
+    if (o == slider_ && e->type() == QEvent::MouseButtonDblClick) {
+        setValue(neutral_);
+        Q_EMIT committed(neutral_);
+        return true;
+    }
+    return QWidget::eventFilter(o, e);
+}
+
+// --- FilmProfilePanel --------------------------------------------------------------------------
+
+namespace {
+
+base::Vec3 vec3Or(const model::EditEntry* e, std::string_view name, base::Vec3 fallback)
+{
+    if (e != nullptr) {
+        if (const auto v = e->params.get<base::Vec3>(name)) {
+            return *v;
+        }
+    }
+    return fallback;
+}
+
+double& at(base::Vec3& v, std::size_t c)
+{
+    return c == 0 ? v.x : c == 1 ? v.y : v.z;
+}
+
+double at(const base::Vec3& v, std::size_t c)
+{
+    return c == 0 ? v.x : c == 1 ? v.y : v.z;
+}
+
+} // namespace
+
+FilmProfilePanel::FilmProfilePanel(UiController& ui, QWidget* parent)
+    : ToolPanel(ui, parent)
+{
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto* group = new QGroupBox(tr("Film-Farbprofil"), this);
+    group->setObjectName(QStringLiteral("filmProfileGroup"));
+    auto* g = new QVBoxLayout(group);
+    auto* top = new QHBoxLayout;
+    profiles_ = new QComboBox(group);
+    profiles_->setObjectName(QStringLiteral("filmProfileAdjust"));
+    profiles_->setToolTip(tr("Profil wählen: setzt die Regler unten; eigene Profile gelten für alle Rollen"));
+    delete_ = new QPushButton(tr("Löschen"), group);
+    delete_->setObjectName(QStringLiteral("filmProfileDelete"));
+    delete_->setToolTip(tr("Gewähltes eigenes Profil löschen"));
+    top->addWidget(profiles_, 1);
+    top->addWidget(delete_);
+    g->addLayout(top);
+    auto* save = new QPushButton(tr("Als Film-Farbprofil speichern …"), group);
+    save->setObjectName(QStringLiteral("filmProfileSave"));
+    save->setToolTip(tr("Die Werte unten unter einem Namen speichern, z. B. Portra 160"));
+    g->addWidget(save);
+
+    const auto add = [&](const QString& label, double min, double max, int decimals, double neutral,
+                         const QString& tip, const QString& name) {
+        auto* s = new NumberSlider(label, min, max, decimals, neutral, tip, group);
+        s->setObjectName(name);
+        g->addWidget(s);
+        return s;
+    };
+    const std::array<QString, 3> rgb{tr("Rot"), tr("Grün"), tr("Blau")};
+    const std::array<QString, 3> code{QStringLiteral("R"), QStringLiteral("G"), QStringLiteral("B")};
+    g->addWidget(new QLabel(tr("Filmbasis (Durchlässigkeit des unbelichteten Films)"), group));
+    for (std::size_t c = 0; c < 3; ++c) {
+        base_[c] = add(rgb[c], 0.001, 1.0, 3, 1.0, tr("Gemessene Filmbasis, Kanal %1").arg(rgb[c]),
+                       QStringLiteral("filmBase") + code[c]);
+        negativeOnly_.push_back(base_[c]);
+    }
+    g->addWidget(new QLabel(tr("Tonwerte (Dichte des Negativs)"), group));
+    black_ = add(tr("Schwarzpunkt"), -0.5, 2.5, 3, 0.0,
+                 tr("Dichte, die Schwarz wird (alle Kanäle); höher = dunkler"), QStringLiteral("profileBlack"));
+    white_ = add(tr("Weißpunkt"), 0.0, 4.0, 3, 1.0,
+                 tr("Dichte, die Weiß wird (alle Kanäle); niedriger = heller"), QStringLiteral("profileWhite"));
+    auto* modelRow = new QHBoxLayout;
+    modelRow->addWidget(new QLabel(tr("Farben bearbeiten in"), group));
+    model_ = new QComboBox(group);
+    model_->setObjectName(QStringLiteral("colorModel"));
+    model_->addItem(QStringLiteral("RGB"));
+    model_->addItem(QStringLiteral("CMY"));
+    model_->setToolTip(tr("RGB: Rot, Grün, Blau. CMY: Cyan, Magenta, Gelb (die Farbstoffe des Negativs)"));
+    modelRow->addWidget(model_, 1);
+    g->addLayout(modelRow);
+    for (std::size_t c = 0; c < 3; ++c) {
+        blackOffset_[c] = add(QString(), -0.5, 0.5, 3, 0.0, QString(), QStringLiteral("profileBlack") + code[c]);
+        whiteOffset_[c] = add(QString(), -0.5, 0.5, 3, 0.0, QString(), QStringLiteral("profileWhite") + code[c]);
+        gamma_[c] = add(QString(), 0.3, 3.0, 2, 1.0, QString(), QStringLiteral("profileGamma") + code[c]);
+    }
+    layout->addWidget(group);
+    relabel();
+
+    connect(profiles_, &QComboBox::activated, this,
+            [this](int i) { Q_EMIT filmProfileChosen(profiles_->itemData(i).toString()); });
+    connect(save, &QPushButton::clicked, this, &FilmProfilePanel::saveRequested);
+    connect(delete_, &QPushButton::clicked, this,
+            [this] { Q_EMIT deleteRequested(profiles_->currentData().toString()); });
+    connect(model_, &QComboBox::currentIndexChanged, this, [this] {
+        relabel();
+        bindList(list_);
+    });
+    const auto levels = [this](NumberSlider* s) {
+        connect(s, &NumberSlider::moving, this, [this] { previewWith(levelsEntry()); });
+        connect(s, &NumberSlider::committed, this, [this] { commit(levelsEntry()); });
+    };
+    levels(black_);
+    levels(white_);
+    for (std::size_t c = 0; c < 3; ++c) {
+        levels(blackOffset_[c]);
+        levels(whiteOffset_[c]);
+        levels(gamma_[c]);
+        connect(base_[c], &NumberSlider::moving, this, [this] { previewWith(baseEntry()); });
+        connect(base_[c], &NumberSlider::committed, this, [this] { commit(baseEntry()); });
+    }
+    connect(profiles_, &QComboBox::currentIndexChanged, this, [this] {
+        delete_->setEnabled(!profiles_->currentData().toString().startsWith(QLatin1Char(':')));
+    });
+    delete_->setEnabled(false);
+}
+
+bool FilmProfilePanel::cmy() const
+{
+    return model_->currentIndex() == 1;
+}
+
+void FilmProfilePanel::setCmy(bool on)
+{
+    model_->setCurrentIndex(on ? 1 : 0);
+}
+
+void FilmProfilePanel::setFilmProfiles(const QStringList& names, const QString& current)
+{
+    fillProfiles(profiles_, names, current);
+    delete_->setEnabled(!current.startsWith(QLatin1Char(':')));
+}
+
+void FilmProfilePanel::relabel()
+{
+    // CMY: Cyan ist der Rotkanal (der Farbstoff, der Rot sperrt), Magenta Grün, Gelb Blau
+    const std::array<QString, 3> names = cmy() ? std::array{tr("Cyan"), tr("Magenta"), tr("Gelb")}
+                                               : std::array{tr("Rot"), tr("Grün"), tr("Blau")};
+    for (std::size_t c = 0; c < 3; ++c) {
+        blackOffset_[c]->setLabel(tr("%1 Schatten").arg(names[c]));
+        whiteOffset_[c]->setLabel(tr("%1 Lichter").arg(names[c]));
+        gamma_[c]->setLabel(tr("%1 Mitten").arg(names[c]));
+        const QString more = tr("Plus = mehr %1").arg(names[c]);
+        blackOffset_[c]->setTip(tr("Farbe in den Schatten (Schwarzpunkt des Kanals).") + QLatin1Char(' ') + more);
+        whiteOffset_[c]->setTip(tr("Farbe in den Lichtern (Weißpunkt des Kanals).") + QLatin1Char(' ') + more);
+        gamma_[c]->setTip(tr("Farbe in den Mitteltönen (Gamma des Kanals).") + QLatin1Char(' ') + more);
+    }
+}
+
+void FilmProfilePanel::bindList(const model::EditList& l)
+{
+    list_ = l;
+    const model::EditEntry* lv = l.get(model::StepId(std::string(id::densityrange)));
+    const base::Vec3 lo = vec3Or(lv, key::dMin, {0, 0, 0});
+    const base::Vec3 hi = vec3Or(lv, key::dMax, {1, 1, 1});
+    const base::Vec3 ga = vec3Or(lv, key::gamma, {1, 1, 1});
+    const double ml = (lo.x + lo.y + lo.z) / 3.0;
+    const double mh = (hi.x + hi.y + hi.z) / 3.0;
+    black_->setValue(ml);
+    white_->setValue(mh);
+    // RGB: Plus = mehr von der Farbe = niedrigere Grenzdichte im Kanal; CMY umgekehrt
+    const double sign = cmy() ? 1.0 : -1.0;
+    for (std::size_t c = 0; c < 3; ++c) {
+        blackOffset_[c]->setValue(sign * (at(lo, c) - ml));
+        whiteOffset_[c]->setValue(sign * (at(hi, c) - mh));
+        gamma_[c]->setValue(cmy() ? 1.0 / at(ga, c) : at(ga, c));
+    }
+    const base::Vec3 b = vec3Or(l.get(model::StepId(std::string(id::filmbase))), key::base, {1, 1, 1});
+    for (std::size_t c = 0; c < 3; ++c) {
+        base_[c]->setValue(at(b, c));
+    }
+    if (lv != nullptr) {
+        const QString name = QString::fromStdString(lv->params.get<std::string>(key::profile).value_or(""));
+        if (const int i = profiles_->findText(name); i >= 0) {
+            const QSignalBlocker block(profiles_);
+            profiles_->setCurrentIndex(i);
+        }
+    }
+}
+
+model::EditEntry FilmProfilePanel::levelsEntry() const
+{
+    model::EditEntry e;
+    if (const model::EditEntry* old = list_.get(model::StepId(std::string(id::densityrange)))) {
+        e = *old;
+    } else {
+        e.step = model::StepId(std::string(id::densityrange));
+    }
+    const double sign = cmy() ? 1.0 : -1.0;
+    base::Vec3 lo;
+    base::Vec3 hi;
+    base::Vec3 ga;
+    for (std::size_t c = 0; c < 3; ++c) {
+        at(lo, c) = black_->value() + sign * blackOffset_[c]->value();
+        at(hi, c) = white_->value() + sign * whiteOffset_[c]->value();
+        const double g = gamma_[c]->value();
+        at(ga, c) = cmy() ? 1.0 / std::max(g, 0.01) : g;
+    }
+    e.params = e.params.with(key::dMin, lo).with(key::dMax, hi).with(key::gamma, ga);
+    e.origin = model::Origin::Manual;
+    e.enabled = true;
+    e.copiedFrom.reset();
+    return e;
+}
+
+model::EditEntry FilmProfilePanel::baseEntry() const
+{
+    model::EditEntry e;
+    if (const model::EditEntry* old = list_.get(model::StepId(std::string(id::filmbase)))) {
+        e = *old;
+    } else {
+        e.step = model::StepId(std::string(id::filmbase));
+    }
+    e.params = e.params.with(key::base, base::Vec3{base_[0]->value(), base_[1]->value(), base_[2]->value()})
+                   .with(key::source, std::string("manual"));
+    e.origin = model::Origin::Manual;
+    e.enabled = true;
+    e.copiedFrom.reset();
+    return e;
+}
+
+void FilmProfilePanel::setFilm(model::FilmType film)
+{
+    const bool negative = film == model::FilmType::ColorNegative || film == model::FilmType::BwNegative;
+    for (QWidget* w : negativeOnly_) {
+        w->setEnabled(negative);
+    }
+    setEnabled(film != model::FilmType::Unconverted);
 }
 
 } // namespace autoneg::ui
