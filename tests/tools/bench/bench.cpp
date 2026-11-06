@@ -8,6 +8,7 @@
 // unberührt). --big erzeugt zusätzlich ein künstliches 100-MP-Negativ (TIFF 16 bit).
 // Nur im Release-Bau aussagekräftig.
 
+#include "application/commands.hpp"
 #include "autoneg/composition.hpp"
 #include "steps/step_ids.hpp"
 #include "support/synthetic.hpp"
@@ -172,6 +173,39 @@ model::EditEntry exposure(double ev)
     return e;
 }
 
+/// Typische Bearbeitung eines Farbnegativs: Geometrie, Konvertierung, alle Regler, Retusche. Ohne
+/// sie rechnet die Pipeline nichts (eine Rolle öffnet unkonvertiert, K-M10-08).
+void applyTypicalEdits(app::Composition& c, const model::Roll& roll,
+                       const std::vector<model::FrameId>& frames)
+{
+    namespace id = steps::id;
+    namespace key = steps::key;
+    const auto set = [&](std::string_view step, model::ParamSet p) {
+        model::EditEntry e;
+        e.step = steps::stepId(step);
+        e.params = std::move(p);
+        c.bus().execute(application::SetEntryCommand(std::move(e)), frames, roll);
+    };
+    const model::SpotList spots{{{0.4, 0.5}, {0.05, 0.0}, 0.01}, {{0.7, 0.3}, {0.0, 0.04}, 0.015}};
+    set(id::filmmode, model::ParamSet{}.with(key::type, std::string("color")));
+    set(id::rotation, model::ParamSet{}.with(key::angle, 0.6).with(key::autoFill, true));
+    set(id::crop, model::ParamSet{}.with(key::rect, model::NormRect{0.05, 0.05, 0.9, 0.9}));
+    set(id::retouch, model::ParamSet{}.with(key::spots, spots));
+    set(id::filmbase, model::ParamSet{}.with(key::base, base::Vec3{0.7, 0.42, 0.27}));
+    set(id::densityrange, model::ParamSet{}
+                              .with(key::dMin, base::Vec3{0.05, 0.05, 0.05})
+                              .with(key::dMax, base::Vec3{1.6, 1.7, 1.8}));
+    set(id::convert, model::ParamSet{}.with(key::on, true));
+    set(id::exposure, model::ParamSet{}.with(key::ev, 0.25));
+    set(id::whitebalance, model::ParamSet{}.with(key::temperature, 8.0).with(key::tint, -3.0));
+    set(id::colorgrade, model::ParamSet{}.with(key::level, 2));
+    set(id::shadowshighlights, model::ParamSet{}.with(key::shadows, 0.3).with(key::highlights, 0.2));
+    set(id::contrast, model::ParamSet{}.with(key::amount, 0.15));
+    set(id::saturation, model::ParamSet{}.with(key::saturation, 0.1).with(key::vibrance, 0.2));
+    set(id::denoise, model::ParamSet{}.with(key::strength, 0.2));
+    set(id::sharpen, model::ParamSet{}.with(key::amount, 0.5).with(key::radius, 1.0));
+}
+
 /// Zeit bis zur Vorschau (RenderService, Monitorgröße 2560 × 1440) nach Regleränderungen.
 std::vector<double> previewLatencies(app::Composition& c, const model::Frame& f, int n)
 {
@@ -263,10 +297,14 @@ int main(int argc, char** argv)
     }
     report.line("Rolle öffnen (" + std::to_string(opened->frames.size()) + " Scans, Prüfsummen)",
                 seconds(t0, Clock::now()), "s", "–");
+    opened->roll.filmType = model::FilmType::ColorNegative;
     auto shared = std::make_shared<const model::Roll>(opened->roll);
+    std::vector<model::FrameId> ids;
     for (const application::OpenedFrame& f : opened->frames) {
         c.bus().open(f.frame, f.data);
+        ids.push_back(f.frame.id);
     }
+    applyTypicalEdits(c, *shared, ids);
     const model::Frame first = opened->frames.front().frame;
     const auto info = c.sourceInfo(first);
     const double mp = info ? info->width * static_cast<double>(info->height) / 1e6 : 0.0;
@@ -452,6 +490,7 @@ int main(int argc, char** argv)
         if (broll && !broll->frames.empty()) {
             const model::Frame bf = broll->frames.front().frame;
             c.bus().open(bf, broll->frames.front().data);
+            applyTypicalEdits(c, *shared, {bf.id});
             c.setCurrent(bf.id);
             t0 = Clock::now();
             {

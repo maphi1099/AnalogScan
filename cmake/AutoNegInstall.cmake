@@ -43,7 +43,36 @@ if(WIN32)
     set(_licenses licenses)
 else()
     include(GNUInstallDirs)
-    install(TARGETS autoneg RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    # Qt und LibRaw sind gemeinsame Bibliotheken (LGPL, OE-03). Programm, Bibliotheken, Plugins
+    # und qt.conf liegen zusammen in lib/autoneg; bin/autoneg verweist darauf. So stört nichts
+    # andere Qt-Programme im selben bin-Ordner.
+    set(_app ${CMAKE_INSTALL_LIBDIR}/autoneg)
+    set_target_properties(autoneg PROPERTIES INSTALL_RPATH "$ORIGIN")
+    install(TARGETS autoneg RUNTIME DESTINATION ${_app})
+    foreach(_dir platforms xcbglintegrations imageformats platforminputcontexts)
+        if(EXISTS "${_triplet_dir}/Qt6/plugins/${_dir}")
+            install(DIRECTORY "${_triplet_dir}/Qt6/plugins/${_dir}" DESTINATION ${_app}/plugins)
+        endif()
+    endforeach()
+    install(CODE "
+        set(_app \"\${CMAKE_INSTALL_PREFIX}/${_app}\")
+        file(WRITE \"\${_app}/qt.conf\" \"[Paths]\nPlugins = plugins\n\")
+        file(GLOB_RECURSE _plugins \"\${_app}/plugins/*.so\")
+        file(GET_RUNTIME_DEPENDENCIES
+            EXECUTABLES \"\${_app}/autoneg\"
+            LIBRARIES \${_plugins}
+            DIRECTORIES \"${_triplet_dir}/lib\"
+            RESOLVED_DEPENDENCIES_VAR _deps
+            UNRESOLVED_DEPENDENCIES_VAR _missing
+            POST_INCLUDE_REGEXES \"^${_triplet_dir}/\"
+            POST_EXCLUDE_REGEXES \".*\")
+        file(INSTALL \${_deps} DESTINATION \"\${_app}\" FOLLOW_SYMLINK_CHAIN)
+        foreach(_p IN LISTS _plugins)
+            file(RPATH_SET FILE \"\${_p}\" NEW_RPATH \"\$ORIGIN/../..\")
+        endforeach()
+        file(MAKE_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}\")
+        file(CREATE_LINK ../${_app}/autoneg \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/autoneg\" SYMBOLIC)
+    ")
     install(FILES "${PROJECT_SOURCE_DIR}/installer/linux/autoneg.desktop"
         DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     set(_docs ${CMAKE_INSTALL_DATADIR}/doc/autoneg)

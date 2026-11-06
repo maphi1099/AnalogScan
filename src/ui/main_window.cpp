@@ -1541,14 +1541,19 @@ void MainWindow::requestPreview(const model::EditList& l)
         // 100 % und 200 %: volle Auflösung, nur der sichtbare Ausschnitt (200 % vergrößert die Brücke)
         const QSize full = canvas_->sourceSize();
         const QRectF vis = canvas_->visibleNorm();
-        const int x0 = std::clamp(static_cast<int>(std::floor(vis.left() * full.width())), 0, full.width() - 1);
-        const int y0 = std::clamp(static_cast<int>(std::floor(vis.top() * full.height())), 0, full.height() - 1);
-        const int x1 = std::clamp(static_cast<int>(std::ceil(vis.right() * full.width())), x0 + 1, full.width());
-        const int y1 = std::clamp(static_cast<int>(std::ceil(vis.bottom() * full.height())), y0 + 1, full.height());
+        const int x0 =
+            std::clamp(static_cast<int>(std::floor(vis.left() * full.width())), 0, full.width() - 1);
+        const int y0 =
+            std::clamp(static_cast<int>(std::floor(vis.top() * full.height())), 0, full.height() - 1);
+        const int x1 =
+            std::clamp(static_cast<int>(std::ceil(vis.right() * full.width())), x0 + 1, full.width());
+        const int y1 =
+            std::clamp(static_cast<int>(std::ceil(vis.bottom() * full.height())), y0 + 1, full.height());
         r.profile.mode = pipeline::RenderMode::Detail;
         r.profile.roi = image::Roi{x0, y0, x1 - x0, y1 - y0};
-        detail_ = QRectF(static_cast<double>(x0) / full.width(), static_cast<double>(y0) / full.height(),
-                         static_cast<double>(x1 - x0) / full.width(), static_cast<double>(y1 - y0) / full.height());
+        detail_ =
+            QRectF(static_cast<double>(x0) / full.width(), static_cast<double>(y0) / full.height(),
+                   static_cast<double>(x1 - x0) / full.width(), static_cast<double>(y1 - y0) / full.height());
     }
     lastSeq_ = s_.render.request(std::move(r));
 }
@@ -1574,17 +1579,30 @@ void MainWindow::onPreview(const PreviewFrame& p)
     // Bild mittig im Feld (falls die Vorschau kleiner ist, etwa am Rand der Quellauflösung);
     // Detailansicht: an der Stelle des angeforderten Ausschnitts
     QRectF place = canvas_->mapping().imageRect;
+    QImage image = p.image;
     if (detail_ && canvas_->zoom() != ImageCanvas::Zoom::Fit) {
         place = QRectF(place.x() + detail_->x() * place.width(), place.y() + detail_->y() * place.height(),
                        detail_->width() * place.width(), detail_->height() * place.height());
+    } else if (canvas_->zoom() == ImageCanvas::Zoom::Fit && !p.image.isNull()) {
+        // Einpassen: das Feld füllen, auch wenn die Vorschau kleiner ist (kleine Quelle, starker
+        // Zuschnitt); sonst passen Rahmen und Messrechteck der Werkzeuge nicht zum Bild
+        const QSizeF fitted = QSizeF(p.image.size()).scaled(place.size(), Qt::KeepAspectRatio);
+        place = QRectF(place.center().x() - fitted.width() / 2.0, place.center().y() - fitted.height() / 2.0,
+                       fitted.width(), fitted.height());
+        const double dpr = canvas_->devicePixelRatioF();
+        const QSize pixels(static_cast<int>(std::lround(fitted.width() * dpr)),
+                           static_cast<int>(std::lround(fitted.height() * dpr)));
+        if (p.image.width() < pixels.width()) {
+            image = p.image.scaled(pixels, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        }
     } else {
         const double dpr = canvas_->devicePixelRatioF();
         const QSizeF logical(p.image.width() / dpr, p.image.height() / dpr);
         place = QRectF(place.center().x() - logical.width() / 2.0,
                        place.center().y() - logical.height() / 2.0, logical.width(), logical.height());
     }
-    canvas_->setImage(p.image, place);
-    shown_ = p.image;
+    canvas_->setImage(image, place);
+    shown_ = image;
     canvas_->setClipping(p.clipping, false);
     histogram_->setHistogram(p.histogram);
     ++previewsShown_;
@@ -1781,7 +1799,8 @@ void MainWindow::pickWhite(QPointF norm)
     }
     // Detailansicht: die Vorschau zeigt nur den Ausschnitt
     if (detail_ && canvas_->zoom() != ImageCanvas::Zoom::Fit) {
-        norm = QPointF((norm.x() - detail_->x()) / detail_->width(), (norm.y() - detail_->y()) / detail_->height());
+        norm = QPointF((norm.x() - detail_->x()) / detail_->width(),
+                       (norm.y() - detail_->y()) / detail_->height());
     }
     // Mittel über 5 × 5 Pixel der Vorschau, sRGB zurück nach linear
     const int cx = std::clamp(static_cast<int>(norm.x() * shown_.width()), 2, shown_.width() - 3);

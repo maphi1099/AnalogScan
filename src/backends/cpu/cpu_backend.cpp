@@ -457,30 +457,47 @@ CpuBackend::Result CpuBackend::denoise(Ctx c, In in, float strength)
     constexpr float sigmaS = 1.5F;
     const float sigmaR = 0.02F + 0.2F * strength;
     const int ch = s.channels;
-    const auto at = [&](int x, int y, int k) {
-        return rowOf(in, std::clamp(y, 0, s.height - 1))[std::clamp(x, 0, s.width - 1) * ch + k];
-    };
+    // Gewicht exp(-(Abstand² / 2σs² + Farbabstand² / 2σr²)): Ortsanteil je Nachbar vorab
+    std::array<float, 25> spatial{};
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            spatial[static_cast<std::size_t>((dy + 2) * 5 + dx + 2)] =
+                static_cast<float>(dx * dx + dy * dy) / (2.0F * sigmaS * sigmaS);
+        }
+    }
+    const float range = 1.0F / (2.0F * sigmaR * sigmaR);
     Output out(s);
     const bool done = impl_->run([&] {
         return forBlocks(s.height, c.cancel, [&](int y0, int y1) {
             std::vector<float> acc(static_cast<std::size_t>(ch));
+            std::array<int, 5> col{};
+            std::array<const float*, 5> rows{};
             for (int y = y0; y < y1; ++y) {
+                for (int k = 0; k < 5; ++k) {
+                    rows[static_cast<std::size_t>(k)] = rowOf(in, std::clamp(y + k - 2, 0, s.height - 1));
+                }
+                const float* centerRow = rows[2];
                 float* o = out.row(y);
                 for (int x = 0; x < s.width; ++x) {
+                    for (int k = 0; k < 5; ++k) {
+                        col[static_cast<std::size_t>(k)] = std::clamp(x + k - 2, 0, s.width - 1) * ch;
+                    }
+                    const float* center = centerRow + static_cast<std::ptrdiff_t>(x) * ch;
                     std::ranges::fill(acc, 0.0F);
                     float wsum = 0.0F;
-                    for (int dy = -2; dy <= 2; ++dy) {
-                        for (int dx = -2; dx <= 2; ++dx) {
+                    for (int j = 0; j < 5; ++j) {
+                        const float* row = rows[static_cast<std::size_t>(j)];
+                        for (int i = 0; i < 5; ++i) {
+                            const float* n = row + col[static_cast<std::size_t>(i)];
                             float dist2 = 0.0F;
                             for (int k = 0; k < ch; ++k) {
-                                const float dd = at(x + dx, y + dy, k) - at(x, y, k);
+                                const float dd = n[k] - center[k];
                                 dist2 += dd * dd;
                             }
                             const float wgt =
-                                std::exp(-static_cast<float>(dx * dx + dy * dy) / (2.0F * sigmaS * sigmaS)) *
-                                std::exp(-dist2 / (2.0F * sigmaR * sigmaR));
+                                std::exp(-(spatial[static_cast<std::size_t>(j * 5 + i)] + dist2 * range));
                             for (int k = 0; k < ch; ++k) {
-                                acc[static_cast<std::size_t>(k)] += wgt * at(x + dx, y + dy, k);
+                                acc[static_cast<std::size_t>(k)] += wgt * n[k];
                             }
                             wsum += wgt;
                         }
@@ -609,6 +626,9 @@ CpuBackend::Result CpuBackend::warp(Ctx c, In in, const image::WarpPlan& plan)
         return forBlocks(plan.out.height, c.cancel, [&](int y0, int y1) {
             std::vector<float> wx(static_cast<std::size_t>(2 * sup));
             std::vector<float> wy(static_cast<std::size_t>(2 * sup));
+            std::vector<const float*> rows(static_cast<std::size_t>(2 * sup));
+            std::vector<int> cols(static_cast<std::size_t>(2 * sup));
+            std::vector<float> acc(static_cast<std::size_t>(ch));
             for (int y = y0; y < y1; ++y) {
                 float* o = out.row(y);
                 for (int x = 0; x < plan.out.width; ++x) {
@@ -637,18 +657,28 @@ CpuBackend::Result CpuBackend::warp(Ctx c, In in, const image::WarpPlan& plan)
                         wx[static_cast<std::size_t>(j)] =
                             filterKernel(plan.filter, static_cast<float>(sx - (ix - sup + 1 + j)));
                     }
-                    for (int k = 0; k < ch; ++k) {
-                        float acc = 0.0F;
-                        float wsum = 0.0F;
-                        for (int j = 0; j < 2 * sup; ++j) {
-                            for (int i = 0; i < 2 * sup; ++i) {
-                                const float wgt =
-                                    wy[static_cast<std::size_t>(j)] * wx[static_cast<std::size_t>(i)];
-                                acc += wgt * at(ix - sup + 1 + i, iy - sup + 1 + j, k);
-                                wsum += wgt;
+                    // Zeilen und Spalten einmal klemmen; je Kanal dieselbe Summationsreihenfolge
+                    for (int j = 0; j < 2 * sup; ++j) {
+                        rows[static_cast<std::size_t>(j)] =
+                            rowOf(in, std::clamp(iy - sup + 1 + j, 0, s.height - 1));
+                        cols[static_cast<std::size_t>(j)] = std::clamp(ix - sup + 1 + j, 0, s.width - 1) * ch;
+                    }
+                    std::ranges::fill(acc, 0.0F);
+                    float wsum = 0.0F;
+                    for (int j = 0; j < 2 * sup; ++j) {
+                        const float* row = rows[static_cast<std::size_t>(j)];
+                        for (int i = 0; i < 2 * sup; ++i) {
+                            const float wgt =
+                                wy[static_cast<std::size_t>(j)] * wx[static_cast<std::size_t>(i)];
+                            const float* px = row + cols[static_cast<std::size_t>(i)];
+                            for (int k = 0; k < ch; ++k) {
+                                acc[static_cast<std::size_t>(k)] += wgt * px[k];
                             }
+                            wsum += wgt;
                         }
-                        o[x * ch + k] = wsum != 0.0F ? acc / wsum : 0.0F;
+                    }
+                    for (int k = 0; k < ch; ++k) {
+                        o[x * ch + k] = wsum != 0.0F ? acc[static_cast<std::size_t>(k)] / wsum : 0.0F;
                     }
                 }
             }

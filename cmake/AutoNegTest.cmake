@@ -1,6 +1,6 @@
 # Testprogramme mit GoogleTest/GoogleMock anlegen.
 #
-#   autoneg_add_test(<name> LABEL unit|component|e2e SOURCES <dateien> DEPS <module>)
+#   autoneg_add_test(<name> LABEL unit|component|e2e|visual SOURCES <dateien> DEPS <module>)
 #     Legt autoneg_test_<name> an; jeder TEST() wird einzeln in CTest
 #     registriert und trägt das Label der Testebene.
 
@@ -8,8 +8,8 @@ include(GoogleTest)
 
 function(autoneg_add_test name)
     cmake_parse_arguments(PARSE_ARGV 1 arg "" "LABEL" "SOURCES;DEPS")
-    if(NOT arg_LABEL MATCHES "^(unit|component|e2e)$")
-        message(FATAL_ERROR "autoneg_add_test(${name}): LABEL muss unit, component oder e2e sein")
+    if(NOT arg_LABEL MATCHES "^(unit|component|e2e|visual)$")
+        message(FATAL_ERROR "autoneg_add_test(${name}): LABEL muss unit, component, e2e oder visual sein")
     endif()
     set(target autoneg_test_${name})
     add_executable(${target} ${arg_SOURCES})
