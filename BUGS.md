@@ -387,5 +387,21 @@ Format je Eintrag:
 - Plattform: Linux
 - Symptom: `cmake --preset linux-release` scheitert im Generate-Schritt, obwohl vcpkg fehlerfrei installiert hat.
 - Ursache: `CMakeCache.txt` behält `LCMS2_LIBRARY_*` und `TIFF_LIBRARY_*` aus `vcpkg_installed/x64-linux`; nach dem Wechsel auf `x64-linux-lgpl` (D-19) zeigen sie ins Leere.
-- Abhilfe: Bei einem Triplet-Wechsel `CMakeCache.txt` im Build-Ordner löschen (oder `cmake --fresh`).
+- Abhilfe: Bei einem Triplet-Wechsel `CMakeCache.txt` im Build-Ordner löschen (oder `cmake --fresh`). Danach den Linux-Bau mit `-DPython3_EXECUTABLE=/root/pyenv/bin/python` konfigurieren (B-17), sonst scheitern K-02, K-05, K-15.
+- Status: umgangen
+
+## B-47: `cv::inpaint` liefert mit 32-Bit-Gleitkomma falsche Werte
+- Erstmals: 06.11.2026, Häufigkeit: 1
+- Plattform: beide (OpenCV 4.14 aus vcpkg)
+- Symptom: Retusche ersetzt Staub durch Werte wie −0,8 oder 1,5 (Bild 0 … 1).
+- Ursache: `cv::inpaint` (Telea) mit `CV_32FC1` rechnet falsch; dokumentiert ist 32F einkanalig als zulässig.
+- Abhilfe: je Kanal nach `CV_16U` skalieren, füllen, zurückrechnen; ersetzt werden nur die Fehlerpixel (`CpuBackend::retouch`). Test `CpuBackendOpenCv.M10_RetouchRemovesDefectsOnlyInsideShapes`.
+- Status: umgangen
+
+## B-48: Release-Konfiguration ohne clang-cl im Suchpfad verwirft den Cache
+- Erstmals: 06.11.2026, Häufigkeit: 1
+- Plattform: Windows
+- Symptom: `cmake --preset windows-release` aus `vcvars64.bat` (Build Tools) meldet „CMAKE_CXX_COMPILER clang-cl not found“, löscht den Cache; danach findet die Konfiguration Qt nicht mehr, vcpkg baut alle Pakete neu (≈ 40 min).
+- Ursache: Die Build Tools bringen clang-cl nicht in den Pfad; LLVM liegt unter `C:\Program Files\LLVM\bin`.
+- Abhilfe: vor dem Konfigurieren `set PATH=C:\Program Files\LLVM\bin;%PATH%`; nach einem verworfenen Cache `CMakeCache.txt` und `CMakeFiles` löschen und neu konfigurieren.
 - Status: umgangen

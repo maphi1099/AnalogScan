@@ -101,9 +101,9 @@ ausführen; Einstellungen und Vorlagen bleiben erhalten.
         Bildfelderkennung richtet sich danach. Alle Scans sind gewählt (Haken oben rechts);
         ein Klick wählt einen Scan ab bzw. wieder an, etwa einen Fehlscan. Abgewählte Scans
         gehören nicht zur Rolle, die Datei bleibt unberührt.
-        \menu{Automatisch konvertieren} ist angekreuzt: AutoNeg erkennt dann Bildfeld,
-        Schräglage, Filmbasis und Tonwerte aller Bilder und konvertiert sie. Dann
-        \menu{Importieren}.
+        Wer \menu{Automatisch konvertieren} ankreuzt, lässt AutoNeg Bildfeld, Schräglage und
+        Filmbasis aller Bilder erkennen und sie mit dem gewählten Film-Farbprofil konvertieren.
+        Ohne Haken (Standard) verändert AutoNeg nichts. Dann \menu{Importieren}.
   \item Ohne \menu{Automatisch konvertieren} bleiben Negative der unveränderte Scan. Dann im
         Reiter \menu{Konvertierung} die \menu{Autokonvertierung} oder die Einzelschritte
         verwenden (Abschnitt~\ref{sec:konv}).
@@ -135,8 +135,9 @@ schließt die aktive Ansicht.
 \end{description}
 
 \begin{description}
-  \item[Bildfläche] In der Mitte: das aktuelle Bild als Positiv. Bei 100\,\% oder 200\,\%
-        verschiebt man den Ausschnitt mit gedrückter linker Maustaste.
+  \item[Bildfläche] In der Mitte: das aktuelle Bild als Positiv. Ist es größer als die
+        Fläche, verschiebt man den Ausschnitt mit gedrückter linker Maustaste (andere Taste unter
+        \menu{Einstellungen}).
   \item[Filmstreifen] Unten: alle Bilder der Rolle mit Bildnummer und Sternen. Er funktioniert
         wie ein Datei-Explorer: Ein Klick wählt ein Bild aus, \taste{Strg}+Klick wählt weitere
         dazu oder wieder ab, ebenso das Kästchen oben rechts in jedem Bild. Ein Doppelklick
@@ -154,8 +155,9 @@ schließt die aktive Ansicht.
   \item[Histogramm] Rot, Grün, Blau und Helligkeit. Markierungen in den Ecken oben links und
         oben rechts zeigen beschnittene Schatten bzw. Lichter.
   \item[Bearbeitungsoptionen] Alle Änderungen des aktuellen Bilds (Abschnitt~\ref{sec:liste}).
-  \item[Statusleiste] Meldungen, bei laufenden Aufträgen ein Fortschrittsbalken und die
-        Schaltfläche \menu{Abbrechen}.
+  \item[Statusleiste] Meldungen, bei laufenden Aufträgen ein Fortschrittsbalken (so breit wie
+        sein Text) und die Schaltfläche \menu{Abbrechen}; rechts der Zoom mit \menu{Einpassen},
+        Regler und Prozentfeld.
 \end{description}
 
 Die Werkzeugleiste enthält Rückgängig (\textlarrow) und Wiederholen (\textrarrow),
@@ -210,8 +212,9 @@ dafür braucht es eine Filmbasis. Bis dahin zeigt AutoNeg den Scan. Die Schalter
 \menu{Konvertierung} sind \emph{hellblau}, solange ihr Schritt eingetragen ist; ein zweiter
 Klick entfernt ihn wieder.
 \begin{description}
-  \item[Autokonvertierung] ganz oben: bestimmt Bildfeld, Schräglage, Filmbasis und Tonwerte
-        vollautomatisch und konvertiert; die Einzelschritte darunter verschwinden und kommen
+  \item[Autokonvertierung] ganz oben: bestimmt Bildfeld, Schräglage und Filmbasis
+        vollautomatisch und konvertiert mit dem gewählten Film-Farbprofil (keine eigene
+        Farbanpassung); die Einzelschritte darunter verschwinden und kommen
         zurück, wenn man den Haken entfernt.
   \item[Auto-Bildfeld] erkennt nur das Bildfeld (Zuschnitt knapp innerhalb der Bildkanten) und
         die Schräglage. Bei Kleinbild hilft die Perforation, das Bildfeld auch bei sehr dünnen
@@ -238,9 +241,12 @@ Klick entfernt ihn wieder.
         eine ersetzt die andere. Wird der gedrückte Schalter abgewählt, ist die Basis entfernt.
   \item[Messbereich anzeigen] zeigt das ganze, ungeschnittene Bild mit dem Bereich, in dem
         die Basis gemessen wurde.
-  \item[Tonwerte] \menu{Automatisch} bestimmt die Tonwertgrenzen je Farbkanal aus dem Bild.
-        Gespeicherte Filmvorgaben stehen in derselben Liste; \menu{Speichern …} legt die
-        Tonwerte des Bilds als Filmvorgabe ab, etwa unter dem Filmnamen.
+  \item[Film-Farbprofil] bestimmt, wie das Negativ in Farbe umgesetzt wird:
+        \menu{Unbearbeitet} kehrt nur um (keine Streckung, keine Farbanpassung),
+        \menu{Neutral} (Standard) setzt Schwarz- und Weißpunkt aus dem Bild, für alle drei
+        Kanäle gleich; dazu kommen eigene Profile (siehe \enquote{Film-Farbprofil} im
+        Abschnitt Licht und Farbe). Eine Wahl gilt für die markierten Bilder und für alle
+        weiteren Konvertierungen.
   \item[Konvertieren] kehrt das Negativ mit der gemessenen Filmbasis um. Ohne Basis geht das
         nicht: zuerst \menu{Auto-Basis} oder \menu{Basis messen}.
 \end{description}
@@ -310,21 +316,65 @@ den neutralen Wert zurück.
 \end{tabularx}
 \end{center}
 
+\paragraph{Rauschminderung: Schnell oder Stark} Unter den Reglern wählt man das Verfahren.
+\menu{Schnell} glättet Rauschen und schont Kanten. \menu{Stark (besser, langsam)} entfernt Filmkorn
+deutlich gründlicher, rechnet aber intern mit 8 Bit: In sehr weichen Verläufen (Himmel, Schatten)
+können feine Stufen entstehen, und die Berechnung dauert spürbar länger (beim Export eines
+großen Scans einige Sekunden je Bild).
+
+\paragraph{Film-Farbprofil} Am Ende des Reiters stehen alle Werte, die das Konvertieren
+setzt, als Regler mit Zahl -- nichts wird versteckt berechnet:
+\begin{itemize}
+  \item \menu{Filmbasis} Rot, Grün, Blau: die gemessene Durchlässigkeit des unbelichteten Films.
+  \item \menu{Schwarzpunkt} und \menu{Weißpunkt}: die Dichte des Negativs, die Schwarz bzw.
+        Weiß wird (für alle Kanäle).
+  \item Je Kanal \menu{Schatten}, \menu{Lichter} und \menu{Mitten}: Farbe in den dunklen,
+        hellen und mittleren Tönen. \menu{Farben bearbeiten in} wählt \menu{RGB} (Rot, Grün,
+        Blau) oder \menu{CMY} (Cyan, Magenta, Gelb, die Farbstoffe des Negativs); Plus
+        bedeutet jeweils \enquote{mehr von dieser Farbe}.
+\end{itemize}
+\menu{Als Film-Farbprofil speichern …} legt die Werte unter einem Namen ab, etwa
+\enquote{Portra 160}. Eigene Profile bleiben dauerhaft gespeichert und gelten für alle Rollen;
+gespeichert wird die Farbabweichung gegenüber \menu{Neutral}, Schwarz- und Weißpunkt misst
+AutoNeg je Bild neu. \menu{Löschen} entfernt ein eigenes Profil; bereits bearbeitete Bilder
+behalten ihre Werte.
+
 \paragraph{Weißabgleich-Pipette} Den Knopf \menu{Weißabgleich-Pipette} drücken und ins Bild auf
 eine Stelle klicken, die neutral grau oder weiß sein soll. AutoNeg stellt \menu{Farbtemperatur}
 und \menu{Tönung} so ein, dass diese Stelle neutral wird; ein zweiter Klick auf dieselbe Stelle
 ändert nichts mehr.
 
 \subsection{Staubretusche}
-Reiter \menu{Staubretusche} bzw. \menu{Ansicht \textrightarrow{} Staubretusche} (\taste{R}): Jeder Klick auf ein Staubkorn setzt
-eine Retuschestelle (cyanfarbener Kreis). AutoNeg füllt sie mit Bildinhalt aus der Nähe. Alle
-Stellen eines Bilds bilden eine Bearbeitungsoption \enquote{Staubretusche}.
+Reiter \menu{Staubretusche} bzw. \menu{Ansicht \textrightarrow{} Staubretusche} (\taste{R}).
+Man markiert Bereiche; innerhalb jedes Bereichs sucht AutoNeg nach Staub, Fusseln und Kratzern
+und entfernt \emph{nur diese}, der Rest des Bereichs bleibt unverändert.
+\begin{description}
+  \item[Werkzeuge] \menu{Auswählen} (Form anklicken), \menu{Kreis} (Klick setzt einen Kreis),
+        \menu{Pinsel} (Fläche malen) und \menu{Radierer} (Fläche wegnehmen). Darunter stehen die
+        Optionen des gewählten Werkzeugs: \menu{Kreisgröße} bzw. \menu{Pinselbreite} in Pixeln
+        des Scans; beides geht auch mit dem Mausrad über dem Bild (ist ein Kreis ausgewählt,
+        ändert das Mausrad seine Größe).
+  \item[Empfindlichkeit] höher: auch schwächere Flecken und Kratzer entfernen.
+  \item[Fehlerbreite] größte Breite eines Flecks oder Kratzers; Breiteres gilt als Bildinhalt.
+  \item[Formen] Liste aller Kreise und Flächen mit Namen (\enquote{Kreis 1}, \enquote{Fläche 2};
+        Doppelklick benennt um) und Haken: ohne Haken bleibt die Form erhalten, wird aber
+        nicht retuschiert. Ein Klick in der Liste oder auf die Form im Bild wählt sie aus,
+        ein Rechtsklick ins Bild hebt die Auswahl auf, \taste{Entf} bzw. \menu{Form löschen}
+        entfernt sie. Getrennt gemalte Flächen sind getrennte Einträge; malt man sie
+        zusammen, werden sie eine; teilt der Radierer eine Fläche, werden es zwei.
+\end{description}
+Alle Formen eines Bilds bilden eine Bearbeitungsoption \enquote{Staubretusche}.
 
 \subsection{Ansicht}
 \begin{itemize}
-  \item \menu{Einpassen} (\taste{Strg+0}), \menu{100\,\%} (\taste{Strg+1}),
-        \menu{200\,\%} (\taste{Strg+2}). Bei 100 und 200\,\% rechnet AutoNeg nur den
+  \item Zoom stufenlos von 2 bis 800\,\%: \taste{Strg}+Mausrad zoomt um die Stelle unter der
+        Maus, \taste{Strg+Plus}/\taste{Strg+Minus} in Stufen; unten rechts in der Statusleiste
+        stehen Regler und Prozentfeld. Fest: \menu{Einpassen} (\taste{Strg+0}), \menu{100\,\%}
+        (\taste{Strg+1}), \menu{200\,\%} (\taste{Strg+2}). Ab 100\,\% rechnet AutoNeg nur den
         sichtbaren Ausschnitt, dafür in voller Auflösung.
+  \item Ausschnitt verschieben: im Bild ziehen, standardmäßig mit der linken Maustaste. Unter
+        \menu{Einstellungen \textrightarrow{} Bild ziehen mit} wählt man links, rechts oder die
+        mittlere Taste; ist ein Werkzeug aktiv, das die linke Taste braucht, zieht die mittlere.
   \item \menu{Vorheriges Bild} (\taste{Strg+\textleftarrow}) und \menu{Nächstes Bild}
         (\taste{Strg+\textrightarrow}).
   \item \menu{Vorher/Nachher} (\taste{\textbackslash}) zeigt den unkonvertierten Scan.
@@ -476,6 +526,8 @@ Rollenordner), \menu{Drucken …} öffnet den Druckdialog.
         Auslagerung). Wer den Haken entfernt, stellt ein Budget ein; vorgeschlagen werden
         50\,\% des Arbeitsspeichers. Ein kleineres Budget lässt weniger Bilder gleichzeitig
         rechnen, entlastet aber den Rechner.
+  \item[Bild ziehen mit] Maustaste, mit der man den Bildausschnitt verschiebt: links (Standard),
+        rechts oder die mittlere Taste.
   \item[Tastenkürzel] Jede Aktion lässt sich frei belegen: Feld anklicken und die neue
         Tastenkombination drücken, das Kreuz entfernt die Belegung. Ist eine Kombination
         doppelt vergeben, nennt der Dialog sie und \menu{OK} ist gesperrt. \menu{Alle auf
@@ -508,6 +560,7 @@ weiter; nichts wird stillschweigend überschrieben.
   \taste{Strg+K} & Kontaktabzug           & \taste{\textbackslash} & Vorher/Nachher \\
   \taste{Strg+Z} & Rückgängig             & \taste{1}–\taste{5}    & Sterne (\taste{0}: keine) \\
   \taste{Strg+Y} & Wiederholen            & \taste{Strg+0}         & Einpassen \\
+  \taste{Strg+Plus} & Vergrößern          & \taste{Strg+Minus}     & Verkleinern \\
   \taste{Strg+C} & Optionen kopieren      & \taste{Strg+1}         & 100\,\% \\
   \taste{Strg+V} & Optionen einfügen      & \taste{Strg+2}         & 200\,\% \\
   \taste{Strg+L} & Synchronisieren        & \taste{Strg+[}         & 90\textdegree{} nach links \\

@@ -3,7 +3,7 @@
 Arbeitsgedächtnis zwischen Sitzungen. **Zu Beginn jeder Sitzung zuerst lesen**, nach jedem Arbeitsschritt aktualisieren.
 Wiederkehrende Entwicklungsprobleme stehen in `BUGS.md`, Abweichungen von der Planung in `../Planning/abweichungen_planung.txt`.
 
-Stand: 05.11.2026 – **Aufgeräumt (nur noch Programm `autoneg`, Build `build/<Bau>/autoneg` und `installer`), Planungsdokumente und Handbuch als LaTeX aktualisiert, kritische Reflexion in `../Planning/reflexion_autoneg.tex` mit Verbesserungsliste für den Nutzer.** Wartet auf Nutzer: Bestätigung von D-15…D-18 und der K-M7…K-M10/T-16…T-18-Einträge, Annotationen für K-11 (L-06/L-07), OE-03 (Lizenz), Zustimmung zu K-M3…K-M6, T-10…T-15 (siehe `abweichungen_planung.txt`).
+Stand: 06.11.2026 – **Rückmeldungen des Nutzers umgesetzt: Bedienung (Zoom, Ziehen, Import), Film-Farbprofil (D-22), OpenCV-Standardfunktionen im CpuBackend (D-21), Staubretusche mit Formen (K-M10-23); Windows 375/375.** Offen: Linux-Bau und -Tests (nur auf Ansage), Leistungsmessung mit OpenCV, Vorschau p95 noch über 100 ms, Annotationen für K-11, OE-03 (Lizenz der Anwendung).
 
 ## Ablage
 
@@ -294,6 +294,21 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 - Planung: Lastenheft 0.6, Architektur 0.4 und Handbuch als `.tex` aktualisiert (nicht gesetzt, kein LaTeX installiert).
 - Reflexion: `../Planning/reflexion_autoneg.tex` (Fehler, Schwächen, Testbewertung, Verbesserungsliste zum Ankreuzen).
 
+### Verbesserungsliste umgesetzt (06.11.2026)
+
+- Entscheidungen des Nutzers zu allen 21 Punkten der Reflexion: K-M10-20, K-M10-21, D-19 (Qt/LibRaw unter Linux dynamisch, Triplet `x64-linux-lgpl`), D-20 (Bewertung der Erkennung → 1.1), T-29.
+- Leistung (61 MP, typische Bearbeitung): Pipeline-Export 20,4 → 6,6 s, Export mit Dekodierung 21,2 → 9,1 s, Vorschau p95 499 → 208 ms (Ziel 100 ms weiter verfehlt).
+- Linux Release mit neuem Triplet: 305/305 (ohne GUI) + 48/48 E2E offscreen, Installer `.sh` installiert und startet.
+
+### Bedienung, Film-Farbprofil, OpenCV, Retusche (06.11.2026)
+
+- K-M10-22: Import ändert ohne Zutun nichts mehr; Zoom 2–800 % (Strg+Rad/Plus/Minus, Regler und Prozentfeld unten), Ziehen mit wählbarer Taste, Reiterkreuze, Fortschrittsbreite, „Schatten“.
+- D-22: Film-Farbprofil („Unbearbeitet“, „Neutral“, eigene, dauerhaft) statt Farbausgleich je Kanal; Regler mit Zahl am Ende von „Licht und Farbe“ (RGB/CMY), Gamma je Kanal in `autoneg.densityrange`.
+- D-21: OpenCV im `CpuBackend` (GaussianBlur, warpAffine, resize AREA, bilateralFilter, Non-Local Means „Stark“); Lichter/Schatten bleibt eigen. Messwerkzeug `tests/tools/cvcompare`. Neue Regel in `CLAUDE.md`: Standardfunktionen vor Eigenbau, keine versteckte Automatik.
+- K-M10-23: Staubretusche mit Formen (Kreis, Pinsel, Radierer, Liste mit Name/Haken), Fehlersuche Black-/Top-Hat + `cv::inpaint` (16 Bit, B-47).
+- D-23: Farbgenauigkeit des Bildschirms als LF-UI-11 für Version 1.1.
+- Tests: T-30, T-31. Windows Debug 375/375 (inkl. visual). Linux noch nicht gebaut (nur auf Ansage des Nutzers).
+
 ## Entscheidungen
 
 | Nr | Datum | Entscheidung |
@@ -321,6 +336,11 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 | D-16 | 23.10.2026 | Qt 6.11.2 (vcpkg, reduzierte Features), Option `AUTONEG_WITH_GUI`, TSan ohne GUI (ENTWICKLER) |
 | D-17 | 23.10.2026 | Farbumrechnung datenparallel im Backend, LibRaw mit OpenMP (ENTWICKLER) |
 | D-18 | 23.10.2026 | Matrix-Kurven-Farbumrechnung in geschlossener Form mit SIMD (ENTWICKLER) |
+| D-19 | 06.11.2026 | Qt und LibRaw unter Linux dynamisch (Triplet `x64-linux-lgpl`) |
+| D-20 | 06.11.2026 | Bewertung der Bildfelderkennung nur im Debug-Bau, Anforderung für 1.1 |
+| D-21 | 06.11.2026 | OpenCV-Standardfunktionen im CpuBackend, wo schneller; Rauschminderung wählbar |
+| D-22 | 06.11.2026 | Film-Farbprofil statt automatischem Farbausgleich je Kanal |
+| D-23 | 06.11.2026 | Farbgenauigkeit des Bildschirms (LF-UI-11) für Version 1.1 |
 
 ## Offene Fragen an den Nutzer
 
@@ -329,7 +349,9 @@ Skalierung 1 → 8 Threads beim Einzelexport jetzt 1,5× – der Rechenanteil is
 
 ## Plattformabhängiger Code (auf dem anderen System prüfen)
 
-- `cmake/triplets/*` und `tests/CMakeLists.txt` (taskset): nur Linux/TSan.
+- `cmake/triplets/*` und `tests/CMakeLists.txt` (taskset): nur Linux/TSan. `x64-linux-lgpl` (D-19): Qt und LibRaw als `.so`; `cmake/AutoNegInstall.cmake` legt unter Linux alles nach `lib/autoneg` (RPATH `$ORIGIN`), `bin/autoneg` ist ein Verweis.
+- `tests/e2e/visual_test.cpp`: braucht einen Bildschirm (Linux: `DISPLAY`/`WAYLAND_DISPLAY`, sonst übersprungen).
+- `src/backends/cpu/cpu_backend.cpp` (D-21): OpenCV wählt seine SIMD-Pfade je Rechner und hat einen eigenen Threadpool (Windows/Linux verschieden); Ergebnisse je Rechner threadunabhängig gleich (CpuBackendOpenCv-Tests), zwischen Rechnern nur innerhalb der Toleranzen. Unter Linux noch nicht geprüft.
 - `src/backends/cpu/kernels_hwy.cpp`: Highway-Zielauswahl zur Laufzeit; auf beiden Systemen AVX2 + EMU128 getestet (Rechner ohne AVX-512).
 - `src/pipeline/source_provider.cpp`: std::shared_future / Threads (U-PIP-16 auf beiden Systemen grün).
 
