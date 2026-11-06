@@ -1083,6 +1083,24 @@ TEST_F(E2E, M10_ManualStepsKeepManualMode)
     EXPECT_FALSE(window->findChild<QCheckBox*>(QStringLiteral("autoConvert"))->isChecked());
 }
 
+// Fehler: nach Öffnen und Importieren ohne weitere Eingabe lief die Autokonvertierung über alle Bilder,
+// weil „Automatisch konvertieren“ vorab angehakt war (NF-USE: nichts ändern, was der Nutzer nicht auslöst)
+TEST_F(E2E, M10_ImportChangesNothingByDefault)
+{
+    rollDir = tmp.path() / "rolle";
+    writeRoll(rollDir, 2);
+    launch();
+    window->openFolder(rollDir);
+    ASSERT_TRUE(waitFor([this] { return window->view() == ui::MainWindow::View::Import; }));
+    window->importPage()->choose(model::FilmType::ColorNegative);
+    EXPECT_FALSE(window->importPage()->findChild<QCheckBox*>(QStringLiteral("detectNow"))->isChecked());
+    window->importPage()->importButton()->click();
+    ASSERT_TRUE(waitFor([this] { return window->previewsShown() > 0; }));
+    QTest::qWait(1500); // eine Automatik hätte ihre Einträge inzwischen gesetzt
+    EXPECT_TRUE(list().entries().empty());
+    EXPECT_FALSE(window->findChild<QCheckBox*>(QStringLiteral("autoConvert"))->isChecked());
+}
+
 // LF-UI-01: eine laufende Automatik zeigt am Schalter ein drehendes Symbol und sperrt ihn bis zum Ende
 TEST_F(E2E, M10_AutomaticShowsBusyButton)
 {

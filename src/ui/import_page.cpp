@@ -137,7 +137,7 @@ void ImportPage::setRoll(const QString& folder, const QString& name, int frames)
         b->setChecked(false);
     }
     films_->setExclusive(true);
-    detect_->setChecked(true);
+    detect_->setChecked(false); // nichts verändern, was der Nutzer nicht ausdrücklich auslöst
     preview_->selectAll();
     updateState();
 }
