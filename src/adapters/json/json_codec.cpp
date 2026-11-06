@@ -185,13 +185,40 @@ JsonValue encodeValue(const model::ParamValue& v)
                     a.push_back(numbers({p.x, p.y}));
                 }
                 return JsonValue(std::move(a));
-            } else {
-                static_assert(std::is_same_v<T, model::SpotList>);
+            } else if constexpr (std::is_same_v<T, model::SpotList>) {
                 JsonValue::Array a;
                 for (const model::Spot& s : x) {
                     a.push_back(JsonValue::object({{"c", numbers({s.center.x, s.center.y})},
                                                    {"o", numbers({s.offset.x, s.offset.y})},
                                                    {"r", JsonValue(s.radius)}}));
+                }
+                return JsonValue(std::move(a));
+            } else {
+                static_assert(std::is_same_v<T, model::RetouchShapes>);
+                // {"k": "circle"|"brush", "n": Name, "on": Haken, "c": [x, y], "r": Radius,
+                //  "s": [{"e": Radierer, "w": Breite, "p": [[x, y], …]}, …]}
+                JsonValue::Array a;
+                for (const model::RetouchShape& s : x) {
+                    JsonValue o = JsonValue::object(
+                        {{"k", JsonValue(std::string(s.kind == model::RetouchShape::Kind::Circle ? "circle" : "brush"))},
+                         {"n", JsonValue(s.name)},
+                         {"on", JsonValue(s.enabled)}});
+                    o.set("c", numbers({s.center.x, s.center.y})); // Kreis: Mitte, Fläche: innerer Punkt
+                    if (s.kind == model::RetouchShape::Kind::Circle) {
+                        o.set("r", JsonValue(s.radius));
+                    } else {
+                        JsonValue::Array strokes;
+                        for (const model::RetouchStroke& st : s.strokes) {
+                            JsonValue::Array pts;
+                            for (const model::NormPoint& p : st.points) {
+                                pts.push_back(numbers({p.x, p.y}));
+                            }
+                            strokes.push_back(JsonValue::object(
+                                {{"e", JsonValue(st.erase)}, {"w", JsonValue(st.width)}, {"p", JsonValue(std::move(pts))}}));
+                        }
+                        o.set("s", JsonValue(std::move(strokes)));
+                    }
+                    a.push_back(std::move(o));
                 }
                 return JsonValue(std::move(a));
             }
@@ -281,6 +308,65 @@ std::optional<model::ParamValue> decodeValue(const JsonValue& j, ports::ParamKin
                 spots.push_back({{(*cv)[0], (*cv)[1]}, {(*ov)[0], (*ov)[1]}, *rv});
             }
             return spots;
+        }
+        break;
+    case ports::ParamKind::Shapes:
+        if (const auto* a = j.asArray()) {
+            model::RetouchShapes shapes;
+            for (const JsonValue& e : *a) {
+                model::RetouchShape s;
+                const JsonValue* kindJson = e.find("k");
+                const std::string* kind = kindJson != nullptr ? kindJson->asString() : nullptr;
+                if (kind == nullptr || (*kind != "circle" && *kind != "brush")) {
+                    return std::nullopt;
+                }
+                s.kind = *kind == "circle" ? model::RetouchShape::Kind::Circle : model::RetouchShape::Kind::Brush;
+                if (const JsonValue* n = e.find("n"); n != nullptr && n->asString() != nullptr) {
+                    s.name = *n->asString();
+                }
+                if (const JsonValue* on = e.find("on"); on != nullptr && on->asBool() != nullptr) {
+                    s.enabled = *on->asBool();
+                }
+                if (s.kind == model::RetouchShape::Kind::Circle) {
+                    const JsonValue* c = e.find("c");
+                    const JsonValue* r = e.find("r");
+                    const auto cv = c != nullptr ? numberArray(*c, 2) : std::nullopt;
+                    const auto rv = r != nullptr ? r->number() : std::nullopt;
+                    if (!cv || !rv) {
+                        return std::nullopt;
+                    }
+                    s.center = {(*cv)[0], (*cv)[1]};
+                    s.radius = *rv;
+                } else if (const JsonValue* st = e.find("s"); st != nullptr && st->asArray() != nullptr) {
+                    if (const JsonValue* c = e.find("c")) {
+                        if (const auto cv = numberArray(*c, 2)) {
+                            s.center = {(*cv)[0], (*cv)[1]};
+                        }
+                    }
+                    for (const JsonValue& sj : *st->asArray()) {
+                        model::RetouchStroke stroke;
+                        const JsonValue* er = sj.find("e");
+                        const JsonValue* w = sj.find("w");
+                        const JsonValue* p = sj.find("p");
+                        const auto wv = w != nullptr ? w->number() : std::nullopt;
+                        if (!wv || p == nullptr || p->asArray() == nullptr) {
+                            return std::nullopt;
+                        }
+                        stroke.erase = er != nullptr && er->asBool() != nullptr && *er->asBool();
+                        stroke.width = *wv;
+                        for (const JsonValue& pj : *p->asArray()) {
+                            const auto xy = numberArray(pj, 2);
+                            if (!xy) {
+                                return std::nullopt;
+                            }
+                            stroke.points.push_back({(*xy)[0], (*xy)[1]});
+                        }
+                        s.strokes.push_back(std::move(stroke));
+                    }
+                }
+                shapes.push_back(std::move(s));
+            }
+            return shapes;
         }
         break;
     }

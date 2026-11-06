@@ -68,7 +68,13 @@ QString describe(const std::string& name, const model::ParamValue& value)
         return labelled(EditListModel::tr("Fläche"), percent(r->w * r->h, false));
     }
     if (const auto* spots = std::get_if<model::SpotList>(&value)) {
-        return EditListModel::tr("%n Stelle(n)", nullptr, static_cast<int>(spots->size()));
+        return spots->empty() ? QString() : EditListModel::tr("%n Stelle(n)", nullptr, static_cast<int>(spots->size()));
+    }
+    if (const auto* shapes = std::get_if<model::RetouchShapes>(&value)) {
+        return shapes->empty() ? QString() : EditListModel::tr("%n Form(en)", nullptr, static_cast<int>(shapes->size()));
+    }
+    if (name == key::sensitivity || name == key::defectSize) {
+        return {}; // Einstellungen der Retusche: im Reiter Staubretusche sichtbar
     }
     if (str != nullptr && name == key::aspect) {
         return str->empty() ? QString() : labelled(EditListModel::tr("Format"), QString::fromStdString(*str));

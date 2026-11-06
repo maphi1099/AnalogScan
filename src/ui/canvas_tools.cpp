@@ -1,8 +1,12 @@
 #include "ui/canvas_tools.hpp"
 
+#include "ui/retouch_geometry.hpp"
+
+#include <QtGui/QImage>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
+#include <QtGui/QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
@@ -370,35 +374,193 @@ void RectPickerTool::paint(QPainter& p, const ViewMapping& m)
 
 // --- RetouchTool -------------------------------------------------------------------------------
 
+void RetouchTool::setShapes(model::RetouchShapes s, double aspect)
+{
+    shapes_ = std::move(s);
+    aspect_ = aspect > 0.0 ? aspect : 1.0;
+    if (selection_ && *selection_ >= shapes_.size()) {
+        selection_.reset();
+    }
+}
+
+std::string RetouchTool::nextName(model::RetouchShape::Kind k) const
+{
+    const std::string prefix = k == model::RetouchShape::Kind::Circle ? "Kreis " : "Fläche ";
+    int n = 0;
+    for (const model::RetouchShape& s : shapes_) {
+        if (s.name.starts_with(prefix)) {
+            n = std::max(n, std::atoi(s.name.c_str() + prefix.size()));
+        }
+    }
+    return prefix + std::to_string(n + 1);
+}
+
+void RetouchTool::select(std::optional<std::size_t> i)
+{
+    selection_ = i;
+    if (selected_) {
+        selected_(i);
+    }
+}
+
 bool RetouchTool::mouse(QMouseEvent* e, const ViewMapping& m)
 {
-    if (e->type() != QEvent::MouseButtonPress || e->button() != Qt::LeftButton) {
-        return false;
-    }
     const QPointF n = m.toNorm(e->position());
-    if (n.x() < 0.0 || n.y() < 0.0 || n.x() > 1.0 || n.y() > 1.0) {
+    const model::NormPoint np{std::clamp(n.x(), 0.0, 1.0), std::clamp(n.y(), 0.0, 1.0)};
+    const bool inside = n.x() >= 0.0 && n.y() >= 0.0 && n.x() <= 1.0 && n.y() <= 1.0;
+    const RetouchGeometry geo(aspect_);
+    switch (e->type()) {
+    case QEvent::MouseMove:
+        hover_ = e->position();
+        if (stroke_ && (e->buttons() & Qt::LeftButton) != 0) {
+            stroke_->points.push_back(np);
+        }
+        return true; // neu zeichnen (Vorschau der Größe)
+    case QEvent::MouseButtonPress:
+        if (e->button() == Qt::RightButton) {
+            return true; // Auswahl aufheben beim Loslassen
+        }
+        if (e->button() != Qt::LeftButton || !inside) {
+            return false;
+        }
+        if (mode_ == Mode::Brush || mode_ == Mode::Erase) {
+            stroke_ = model::RetouchStroke{mode_ == Mode::Erase, brushWidth_, {np}};
+            return true;
+        }
+        if (const auto hit = geo.hit(shapes_, np)) {
+            select(hit); // vorhandene Form anklicken: auswählen
+            return true;
+        }
+        if (mode_ == Mode::Circle) {
+            model::RetouchShape c;
+            c.kind = model::RetouchShape::Kind::Circle;
+            c.name = nextName(c.kind);
+            c.center = np;
+            c.radius = circleRadius_;
+            shapes_.push_back(c);
+            select(shapes_.size() - 1);
+            if (commit_) {
+                commit_(shapes_);
+            }
+        } else {
+            select(std::nullopt);
+        }
+        return true;
+    case QEvent::MouseButtonRelease:
+        if (e->button() == Qt::RightButton) {
+            select(std::nullopt);
+            return true;
+        }
+        if (e->button() == Qt::LeftButton && stroke_) {
+            const model::RetouchStroke st = std::move(*stroke_);
+            stroke_.reset();
+            const std::size_t before = shapes_.size();
+            shapes_ = geo.addStroke(shapes_, st, [this, counter = 0]() mutable {
+                // fortlaufend, damit mehrere neue Flächen einer Geste verschiedene Namen haben
+                const std::string base = nextName(model::RetouchShape::Kind::Brush);
+                const int n = std::atoi(base.c_str() + std::string("Fläche ").size()) + counter++;
+                return "Fläche " + std::to_string(n);
+            });
+            if (!st.erase && !shapes_.empty() && shapes_.size() >= before) {
+                // die Fläche, zu der der neue Strich gehört, auswählen
+                select(geo.hit(shapes_, st.points.front()));
+            } else {
+                select(std::nullopt);
+            }
+            if (commit_) {
+                commit_(shapes_);
+            }
+            return true;
+        }
+        return e->button() == Qt::LeftButton;
+    default:
         return false;
     }
-    model::Spot s;
-    s.center = {n.x(), n.y()};
-    // Quelle: rechts daneben im Abstand von 2,5 Radien (bzw. links am rechten Rand)
-    const double off = 2.5 * radius_;
-    s.offset = {n.x() + off <= 1.0 ? off : -off, 0.0};
-    s.radius = radius_;
-    spots_.push_back(s);
-    if (spot_) {
-        spot_(s);
+}
+
+bool RetouchTool::wheel(QWheelEvent* e, const ViewMapping& /*m*/)
+{
+    const double f = std::pow(1.15, e->angleDelta().y() / 120.0);
+    if (mode_ == Mode::Circle || mode_ == Mode::Select) {
+        if (selection_ && *selection_ < shapes_.size() &&
+            shapes_[*selection_].kind == model::RetouchShape::Kind::Circle) {
+            shapes_[*selection_].radius = std::clamp(shapes_[*selection_].radius * f, 0.0005, 0.5);
+            circleRadius_ = shapes_[*selection_].radius;
+            if (commit_) {
+                commit_(shapes_);
+            }
+        } else {
+            circleRadius_ = std::clamp(circleRadius_ * f, 0.0005, 0.5);
+        }
+    } else {
+        brushWidth_ = std::clamp(brushWidth_ * f, 0.0005, 0.5);
+    }
+    if (sizeChanged_) {
+        sizeChanged_();
     }
     return true;
 }
 
 void RetouchTool::paint(QPainter& p, const ViewMapping& m)
 {
-    p.setPen(QPen(QColor(0, 200, 255), 1.0));
-    for (const model::Spot& s : spots_) {
-        const QPointF c = m.toWidget(QPointF(s.center.x, s.center.y));
-        const double r = s.radius * m.imageRect.width();
-        p.drawEllipse(c, r, r);
+    p.setRenderHint(QPainter::Antialiasing);
+    const double w = m.imageRect.width();
+    const auto pt = [&m](const model::NormPoint& n) { return m.toWidget(QPointF(n.x, n.y)); };
+    // Flächen als halbdurchsichtige Ebene: Pinsel malt, Radierer löscht (wie die Retusche)
+    const QSize size = p.device() != nullptr ? QSize(p.device()->width(), p.device()->height()) : QSize();
+    for (std::size_t i = 0; i < shapes_.size(); ++i) {
+        const model::RetouchShape& s = shapes_[i];
+        const bool sel = selection_ == i;
+        const QColor color = !s.enabled ? QColor(160, 160, 160) : sel ? QColor(255, 200, 0) : QColor(0, 200, 255);
+        if (s.kind == model::RetouchShape::Kind::Circle) {
+            p.setPen(QPen(color, sel ? 2.5 : 1.5));
+            p.setBrush(Qt::NoBrush);
+            p.drawEllipse(pt(s.center), s.radius * w, s.radius * w);
+            continue;
+        }
+        if (size.isEmpty()) {
+            continue;
+        }
+        QImage layer(size, QImage::Format_ARGB32_Premultiplied);
+        layer.fill(Qt::transparent);
+        QPainter lp(&layer);
+        lp.setRenderHint(QPainter::Antialiasing);
+        for (const model::RetouchStroke& st : s.strokes) {
+            lp.setCompositionMode(st.erase ? QPainter::CompositionMode_Clear : QPainter::CompositionMode_SourceOver);
+            QColor fill = color;
+            fill.setAlpha(sel ? 110 : 70);
+            lp.setPen(QPen(fill, std::max(1.0, st.width * w), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            if (st.points.size() == 1) {
+                lp.setBrush(fill);
+                lp.drawEllipse(pt(st.points.front()), st.width * w / 2.0, st.width * w / 2.0);
+                lp.setBrush(Qt::NoBrush);
+            } else {
+                QPolygonF line;
+                for (const model::NormPoint& q : st.points) {
+                    line << pt(q);
+                }
+                lp.drawPolyline(line);
+            }
+        }
+        lp.end();
+        p.drawImage(0, 0, layer);
+    }
+    // laufender Strich
+    if (stroke_) {
+        QColor c = stroke_->erase ? QColor(255, 80, 80, 120) : QColor(0, 200, 255, 120);
+        p.setPen(QPen(c, std::max(1.0, stroke_->width * w), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        QPolygonF line;
+        for (const model::NormPoint& q : stroke_->points) {
+            line << pt(q);
+        }
+        p.drawPolyline(line);
+    }
+    // Größe des Werkzeugs an der Maus
+    if (hover_ && mode_ != Mode::Select) {
+        const double r = (mode_ == Mode::Circle ? circleRadius_ : brushWidth_ / 2.0) * w;
+        p.setPen(QPen(mode_ == Mode::Erase ? QColor(255, 80, 80) : QColor(255, 255, 255), 1.0, Qt::DashLine));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(*hover_, r, r);
     }
 }
 

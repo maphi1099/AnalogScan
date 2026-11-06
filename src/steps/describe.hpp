@@ -79,6 +79,11 @@ inline pipeline::ParamSpec curveParam(std::string_view name)
     return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Curve, model::Curve{}, 0, 0, ""};
 }
 
+inline pipeline::ParamSpec shapesParam(std::string_view name)
+{
+    return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Shapes, model::RetouchShapes{}, 0, 0, ""};
+}
+
 inline pipeline::ParamSpec spotsParam(std::string_view name)
 {
     return pipeline::ParamSpec{std::string(name), pipeline::ParamType::Spots, model::SpotList{}, 0, 0, ""};

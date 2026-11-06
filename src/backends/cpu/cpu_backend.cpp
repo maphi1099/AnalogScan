@@ -627,6 +627,120 @@ CpuBackend::Result CpuBackend::inpaint(Ctx c, In in, const model::SpotList& spot
     return out.finish();
 }
 
+CpuBackend::Result CpuBackend::retouch(Ctx c, In in, const model::RetouchShapes& shapes,
+                                       const ports::RetouchOptions& o)
+{
+    // Staubretusche mit Formen (K-M10-23), nur OpenCV-Standardfunktionen:
+    //  1. Fläche aus den eingeschalteten Formen (cv::circle, cv::line; Radierer je Form),
+    //  2. Auffälligkeiten in der Luminanz (log): Black-Hat und Top-Hat (cv::morphologyEx) mit einer
+    //     Scheibe der größten Fehlerbreite finden alles, was dunkler bzw. heller und schmaler ist
+    //     (Staub, Fussel, Kratzer); Schwelle aus der Empfindlichkeit,
+    //  3. Fehler (leicht vergrößert, cv::dilate) innerhalb der Fläche je Kanal füllen
+    //     (cv::inpaint, Telea; Gleitkomma geht nur einkanalig).
+    if (auto ok = requireHostF32(in); !ok) {
+        return std::unexpected(ok.error());
+    }
+    const image::ImageSpec& s = in.spec();
+    if (s.channels != 1 && s.channels != 3) {
+        return base::makeError(base::ErrorCode::Unsupported, "Retusche nur mit 1 oder 3 Kanälen");
+    }
+    if (c.cancel.cancelled()) {
+        return cancelled();
+    }
+    const double w = s.width;
+    const double h = s.height;
+    const auto px = [&](const model::NormPoint& p) {
+        return cv::Point(static_cast<int>(std::lround(p.x * w)), static_cast<int>(std::lround(p.y * h)));
+    };
+    cv::Mat area = cv::Mat::zeros(s.height, s.width, CV_8UC1);
+    for (const model::RetouchShape& shape : shapes) {
+        if (!shape.enabled) {
+            continue;
+        }
+        if (shape.kind == model::RetouchShape::Kind::Circle) {
+            cv::circle(area, px(shape.center), std::max(1, static_cast<int>(std::lround(shape.radius * w))),
+                       cv::Scalar(255), cv::FILLED);
+            continue;
+        }
+        // Fläche: eigene Maske, damit der Radierer nur in dieser Form wirkt
+        cv::Mat own = cv::Mat::zeros(s.height, s.width, CV_8UC1);
+        for (const model::RetouchStroke& st : shape.strokes) {
+            const int thick = std::max(1, static_cast<int>(std::lround(st.width * w)));
+            const cv::Scalar value(st.erase ? 0 : 255);
+            if (st.points.size() == 1) {
+                cv::circle(own, px(st.points.front()), std::max(1, thick / 2), value, cv::FILLED);
+            }
+            for (std::size_t i = 1; i < st.points.size(); ++i) {
+                cv::line(own, px(st.points[i - 1]), px(st.points[i]), value, thick); // runde Enden
+            }
+        }
+        // nur das zusammenhängende Stück um den inneren Punkt (vom Radierer geteilte Fläche)
+        const cv::Point seed = px(shape.center);
+        if (cv::Rect(0, 0, s.width, s.height).contains(seed) && own.at<unsigned char>(seed) == 255) {
+            cv::floodFill(own, seed, cv::Scalar(128), nullptr, cv::Scalar(), cv::Scalar(), 4);
+            own = own == 128;
+        }
+        cv::bitwise_or(area, own, area);
+    }
+    const cv::Rect used = cv::boundingRect(area);
+    if (used.empty()) {
+        return in;
+    }
+    const int defect = std::max(3, static_cast<int>(std::lround(o.defectPx)) | 1);
+    const int margin = defect + 8;
+    const cv::Rect box = (used + cv::Size(2 * margin, 2 * margin) - cv::Point(margin, margin)) &
+                         cv::Rect(0, 0, s.width, s.height);
+    Output out(s);
+    std::ranges::copy(in.host(), out.storage->floats().begin());
+    cv::Mat whole = matOf(out);
+    if (auto ok = guarded([&] {
+            impl_->run([&] {
+                cv::Mat roi = matOf(in)(box);
+                cv::Mat lum;
+                if (s.channels == 3) {
+                    cv::transform(roi, lum, cv::Matx13f(1.0F / 3.0F, 1.0F / 3.0F, 1.0F / 3.0F));
+                } else {
+                    lum = roi.clone();
+                }
+                cv::log(cv::max(lum, 1e-4), lum);
+                const cv::Mat disk = cv::getStructuringElement(cv::MORPH_ELLIPSE, {defect, defect});
+                cv::Mat dark;
+                cv::Mat bright;
+                cv::morphologyEx(lum, dark, cv::MORPH_BLACKHAT, disk, {-1, -1}, 1, cv::BORDER_REPLICATE);
+                cv::morphologyEx(lum, bright, cv::MORPH_TOPHAT, disk, {-1, -1}, 1, cv::BORDER_REPLICATE);
+                // Schwelle in ln-Einheiten: Empfindlichkeit 0,5 ≈ 30 % Kontrast, 1 ≈ 2 %
+                const double t = 0.02 + (1.0 - std::clamp(static_cast<double>(o.sensitivity), 0.0, 1.0)) * 0.5;
+                cv::Mat defects = (dark > t) | (bright > t);
+                cv::dilate(defects, defects, cv::getStructuringElement(cv::MORPH_ELLIPSE, {5, 5}));
+                cv::bitwise_and(defects, area(box), defects);
+                if (cv::countNonZero(defects) == 0) {
+                    return;
+                }
+                // cv::inpaint liefert mit 32-Bit-Gleitkomma falsche Werte (gemessen, OpenCV 4.14);
+                // deshalb je Kanal in 16 Bit füllen. Ersetzt werden nur die Fehlerpixel.
+                double hi = 0.0;
+                cv::minMaxLoc(roi.reshape(1), nullptr, &hi);
+                const double scale = 65535.0 / std::max(hi, 1e-6);
+                std::vector<cv::Mat> planes;
+                cv::split(roi, planes);
+                for (cv::Mat& p : planes) {
+                    cv::Mat p16;
+                    p.convertTo(p16, CV_16U, scale);
+                    cv::Mat filled;
+                    cv::inpaint(p16, defects, filled, 3.0, cv::INPAINT_TELEA);
+                    filled.convertTo(p, CV_32F, 1.0 / scale);
+                }
+                cv::Mat merged;
+                cv::merge(planes, merged);
+                merged.copyTo(whole(box), defects);
+            });
+        });
+        !ok) {
+        return std::unexpected(ok.error());
+    }
+    return c.cancel.cancelled() ? cancelled() : out.finish();
+}
+
 CpuBackend::Result CpuBackend::warpOpenCv(Ctx c, In in, const image::WarpPlan& plan)
 {
     // cv::warpAffine (Lanczos-4 statt -3, etwa 7× schneller; mittlere Abweichung 0,04 %).

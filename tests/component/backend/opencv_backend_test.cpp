@@ -142,6 +142,64 @@ TEST(CpuBackendOpenCv, M10_WarpIsWarpAffine)
     EXPECT_EQ(got.host()[0], 0.0F); // linke obere Ecke liegt nach 2° außerhalb der Quelle
 }
 
+// K-M10-23: Retusche mit Formen findet in der Form Staub (dunkel und hell) und einen langen
+// Kratzer und entfernt nur diese; außerhalb der Form und ohne Haken bleibt alles gleich
+TEST(CpuBackendOpenCv, M10_RetouchRemovesDefectsOnlyInsideShapes)
+{
+    const int w = 240;
+    const int h = 160;
+    std::vector<float> v(static_cast<std::size_t>(w * h * 3));
+    const auto put = [&](int x, int y, float value) {
+        for (int c = 0; c < 3; ++c) {
+            v[(static_cast<std::size_t>(y) * w + static_cast<std::size_t>(x)) * 3 + static_cast<std::size_t>(c)] = value;
+        }
+    };
+    const auto bg = [](int x, int y) { return 0.3F + 0.2F * static_cast<float>(x) / 240.0F + 0.05F * std::sin(static_cast<float>(y) * 0.1F); };
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            put(x, y, bg(x, y));
+        }
+    }
+    // Staub links (dunkel, 5 px), hell oben, Kratzer schräg (2 px, 40 px lang), Staub rechts außerhalb
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            if (std::hypot(x - 60, y - 80) < 2.5) {
+                put(x, y, 0.05F);
+            }
+            if (std::hypot(x - 70, y - 50) < 2.0) {
+                put(x, y, 0.95F);
+            }
+            if (std::abs((x - 40) - (y - 100)) <= 1 && x >= 40 && x < 80) {
+                put(x, y, 0.08F); // Kratzer
+            }
+            if (std::hypot(x - 200, y - 80) < 2.5) {
+                put(x, y, 0.05F);
+            }
+        }
+    }
+    const ImageBuffer in =
+        *ImageBuffer::fromFloats({w, h, 3, image::PixelFormat::F32, image::ColorSpace::WorkingLinear}, v);
+    model::RetouchShape area;
+    area.kind = model::RetouchShape::Kind::Brush;
+    area.center = {60.0 / w, 80.0 / h};
+    area.strokes.push_back({false, 70.0 / w, {{60.0 / w, 40.0 / h}, {60.0 / w, 130.0 / h}}});
+    CpuBackend cpu;
+    const ImageBuffer out = cpu.retouch(ctx, in, {area}, {0.5F, 12.0F}).value();
+    const auto at = [&out](int x, int y) {
+        return out.host()[(static_cast<std::size_t>(y) * 240 + static_cast<std::size_t>(x)) * 3];
+    };
+    EXPECT_NEAR(at(60, 80), bg(60, 80), 0.05);   // dunkler Staub entfernt
+    EXPECT_NEAR(at(70, 50), bg(70, 50), 0.05);   // heller Staub entfernt
+    EXPECT_NEAR(at(60, 120), bg(60, 120), 0.05); // Kratzer entfernt
+    EXPECT_FLOAT_EQ(at(200, 80), 0.05F);         // außerhalb der Form: bleibt
+    // ohne Fehler bleibt die Form unverändert (nur Auffälligkeiten werden ersetzt)
+    EXPECT_FLOAT_EQ(at(40, 60), bg(40, 60));
+    // ohne Haken: nichts
+    area.enabled = false;
+    const ImageBuffer off = cpu.retouch(ctx, in, {area}, {0.5F, 12.0F}).value();
+    EXPECT_TRUE(std::ranges::equal(off.hostBytes(), in.hostBytes()));
+}
+
 // D-21: Verkleinern = cv::resize INTER_AREA
 TEST(CpuBackendOpenCv, M10_ResampleIsInterArea)
 {

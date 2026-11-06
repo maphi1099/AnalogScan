@@ -32,6 +32,13 @@ enum class DenoiseMethod
     Strong ///< besser, langsam: Non-Local Means
 };
 
+/// Einstellungen der Staubretusche mit Formen.
+struct RetouchOptions
+{
+    float sensitivity = 0.5F; ///< 0 … 1: höher = auch schwächere Auffälligkeiten
+    float defectPx = 20.0F;   ///< größte Breite eines Fehlers in Pixeln des Eingabebilds
+};
+
 /// Rechen-Backend (NF-ARC-05). Datenparallel über alle Kerne (NF-PERF-05).
 /// Implementierungen: CpuBackend (Referenz); GPU ab Version 1.1 (D-03).
 ///
@@ -75,6 +82,12 @@ public:
     /// Retusche; Koordinaten der Stellen normiert auf das Eingabebild.
     [[nodiscard]] virtual base::Expected<image::ImageBuffer>
     inpaint(const KernelContext& c, const image::ImageBuffer& in, const model::SpotList& spots) = 0;
+    /// Staubretusche mit Formen (K-M10-23): innerhalb der eingeschalteten Formen Auffälligkeiten
+    /// (dunkle und helle Flecken, Fussel, Kratzer schmaler als defectPx) suchen und nur diese aus
+    /// der Umgebung füllen. Formen normiert auf das Eingabebild.
+    [[nodiscard]] virtual base::Expected<image::ImageBuffer>
+    retouch(const KernelContext& c, const image::ImageBuffer& in, const model::RetouchShapes& shapes,
+            const RetouchOptions& o) = 0;
     /// Feste Blockeinteilung, unabhängig von der Threadzahl (Kapitel 6.4).
     [[nodiscard]] virtual base::Expected<image::Histogram>
     histogram(const KernelContext& c, const image::ImageBuffer& in, int bins) = 0;

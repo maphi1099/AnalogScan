@@ -27,7 +27,8 @@ enum class ParamKind
     Vec3,
     Rect,
     Curve,
-    Spots
+    Spots,
+    Shapes
 };
 
 /// Bekannter Schritt für die Datenhaltung: Kennung, Rang in der Stufenfolge, Version und

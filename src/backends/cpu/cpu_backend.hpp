@@ -65,6 +65,7 @@ public:
     Result unsharp(Ctx c, In in, float a, float r, float t) override;
     Result denoise(Ctx c, In in, float strength, ports::DenoiseMethod m) override;
     Result inpaint(Ctx c, In in, const model::SpotList& spots) override;
+    Result retouch(Ctx c, In in, const model::RetouchShapes& shapes, const ports::RetouchOptions& o) override;
     base::Expected<image::Histogram> histogram(Ctx c, In in, int bins) override;
     base::Expected<image::ImageBuffer> colorTransform(Ctx c, In in,
                                                       const ports::IColorTransform& xf) override;

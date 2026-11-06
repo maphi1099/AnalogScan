@@ -13,7 +13,7 @@ autoneg_add_module(ui
         import_page.cpp
         main_window.cpp
         panels.cpp
-
+        retouch_geometry.cpp
         qt_session_bridge.cpp
         translations.cpp
         ui_controller.cpp

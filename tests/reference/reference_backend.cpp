@@ -86,6 +86,12 @@ ReferenceBackend::Result ReferenceBackend::denoise(Ctx c, In in, float strength,
     return begin(c, "denoise") ? Result(reference::denoise(in, strength)) : cancelled();
 }
 
+ReferenceBackend::Result ReferenceBackend::retouch(Ctx c, In in, const model::RetouchShapes& /*shapes*/,
+                                                   const ports::RetouchOptions& /*o*/)
+{
+    return begin(c, "retouch") ? Result(in) : cancelled();
+}
+
 ReferenceBackend::Result ReferenceBackend::inpaint(Ctx c, In in, const model::SpotList& spots)
 {
     return begin(c, "inpaint") ? Result(reference::inpaint(in, spots)) : cancelled();

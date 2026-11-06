@@ -87,7 +87,8 @@ enum class ParamType
     Vec3,
     Rect,
     Curve,
-    Spots
+    Spots,
+    Shapes ///< Formen der Staubretusche (model::RetouchShapes)
 };
 
 /// Beschreibung eines Parameters mit Neutralwert (NF-ARC-04: Parameterschema).

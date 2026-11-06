@@ -84,6 +84,8 @@ public:
     MOCK_METHOD(Expected<ImageBuffer>, unsharp, (Ctx, In, float, float, float), (override));
     MOCK_METHOD(Expected<ImageBuffer>, denoise, (Ctx, In, float, ports::DenoiseMethod), (override));
     MOCK_METHOD(Expected<ImageBuffer>, inpaint, (Ctx, In, const model::SpotList&), (override));
+    MOCK_METHOD(Expected<ImageBuffer>, retouch, (Ctx, In, const model::RetouchShapes&, const ports::RetouchOptions&),
+                (override));
     MOCK_METHOD(Expected<image::Histogram>, histogram, (Ctx, In, int), (override));
     MOCK_METHOD(Expected<ImageBuffer>, colorTransform, (Ctx, In, const ports::IColorTransform&), (override));
     MOCK_METHOD(Expected<ImageBuffer>, quantize, (Ctx, In, int), (override));

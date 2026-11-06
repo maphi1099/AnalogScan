@@ -47,6 +47,7 @@ namespace autoneg::ui {
 class AdjustPanel;
 class ConversionPanel;
 class FilmProfilePanel;
+class RetouchPanel;
 class CropRotateTool;
 class EditListModel;
 class FilmstripModel;
@@ -207,6 +208,10 @@ private:
     /// Film-Farbprofil wählen (Schlüssel wie FilmProfilePanel); apply: Tonwerte der markierten Bilder neu setzen.
     void chooseFilmProfile(const QString& key, bool apply);
     void saveFilmProfile();
+    /// Formen der Staubretusche als Eintrag setzen (leer: Eintrag entfernen).
+    void commitShapes(const model::RetouchShapes& shapes);
+    /// Werkzeug und Reiter Staubretusche auf den Stand der Liste bringen.
+    void syncRetouchTool();
     /// Schritte der markierten Bilder entfernen (Schalter abgewählt).
     void removeSteps(std::initializer_list<std::string_view> steps);
     /// Alle Fenster wieder wie beim Start anordnen (auch losgelöste).
@@ -243,6 +248,7 @@ private:
     GradationPanel* gradation_ = nullptr;
     AdjustPanel* adjust_ = nullptr;
     FilmProfilePanel* filmProfile_ = nullptr;
+    RetouchPanel* retouch_ = nullptr;
     QString filmProfileKey_; ///< gewähltes Film-Farbprofil (FilmProfilePanel::kNeutral usw. oder Name)
     QStackedWidget* stack_ = nullptr;
     QWidget* startPage_ = nullptr;

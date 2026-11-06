@@ -45,6 +45,21 @@ struct ValueHasher
             h.add(s.radius);
         }
     }
+    void operator()(const RetouchShapes& shapes) const
+    {
+        h.add(static_cast<std::uint64_t>(shapes.size()));
+        for (const RetouchShape& s : shapes) {
+            h.add(static_cast<int>(s.kind)).add(std::string_view(s.name)).add(s.enabled);
+            addPoint(h, s.center);
+            h.add(s.radius).add(static_cast<std::uint64_t>(s.strokes.size()));
+            for (const RetouchStroke& st : s.strokes) {
+                h.add(st.erase).add(st.width).add(static_cast<std::uint64_t>(st.points.size()));
+                for (const NormPoint& p : st.points) {
+                    addPoint(h, p);
+                }
+            }
+        }
+    }
 };
 
 } // namespace

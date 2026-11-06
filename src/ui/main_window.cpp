@@ -197,15 +197,10 @@ MainWindow::MainWindow(AppServices s, QWidget* parent)
                 return e;
             }()}));
     });
-    retouchTool_->setSpot([this](const model::Spot& spot) {
-        const model::EditList cur = ui_->currentList();
-        model::SpotList spots;
-        if (const model::EditEntry* e = cur.get(model::StepId(std::string(id::retouch)))) {
-            spots = e->params.get<model::SpotList>(key::spots).value_or(model::SpotList{});
-        }
-        spots.push_back(spot);
-        ui_->apply(
-            std::make_unique<application::SetEntryCommand>(entryWith(cur, id::retouch, key::spots, spots)));
+    retouchTool_->setCommit([this](const model::RetouchShapes& s) { commitShapes(s); });
+    retouchTool_->setSelectedCallback([this](std::optional<std::size_t> i) { retouch_->setSelection(i); });
+    retouchTool_->setSizeChanged([this] {
+        retouch_->setSizes(canvas_->sourceSize().width(), retouchTool_->circleRadius(), retouchTool_->brushWidth());
     });
     baseTool_->setPicked([this](const model::NormRect& r) {
         // Messrechteck im Filmrand (LF-BAS-04); die Fläche zeigt das ungeschnittene Bild
@@ -980,13 +975,36 @@ void MainWindow::buildActions()
     retouchButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
     retouchButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     retouchLayout->addWidget(retouchButton);
-    auto* retouchHint =
-        new QLabel(tr("Eingeschaltet setzt jeder Klick auf ein Staubkorn eine Retuschestelle.") +
-                       QLatin1Char(' ') + tr("Alle Stellen eines Bilds sind eine Bearbeitungsoption."),
-                   retouchTab_);
-    retouchHint->setWordWrap(true);
-    retouchLayout->addWidget(retouchHint);
-    retouchLayout->addStretch(1);
+    retouch_ = new RetouchPanel(*ui_, retouchTab_);
+    retouch_->setObjectName(QStringLiteral("retouchPanel"));
+    retouchLayout->addWidget(retouch_, 1);
+    // Werkzeugwahl schaltet die Retusche auf der Bildfläche ein
+    connect(retouch_, &RetouchPanel::toolChosen, this, [this](int mode) {
+        retouchTool_->setMode(static_cast<RetouchTool::Mode>(mode));
+        if (!action(QStringLiteral("toolRetouch"))->isChecked()) {
+            action(QStringLiteral("toolRetouch"))->setChecked(true);
+            setTool(3);
+        }
+    });
+    connect(retouch_, &RetouchPanel::circleRadiusChanged, this, [this](double r) {
+        retouchTool_->setCircleRadius(r);
+        // gewählter Kreis bekommt die Größe aus dem Regler
+        if (const auto sel = retouchTool_->selection(); sel && *sel < retouchTool_->shapes().size() &&
+                                                        retouchTool_->shapes()[*sel].kind ==
+                                                            model::RetouchShape::Kind::Circle) {
+            model::RetouchShapes s = retouchTool_->shapes();
+            s[*sel].radius = r;
+            commitShapes(s);
+        }
+    });
+    connect(retouch_, &RetouchPanel::brushWidthChanged, this, [this](double w) { retouchTool_->setBrushWidth(w); });
+    connect(retouch_, &RetouchPanel::selectionChanged, this, [this](std::optional<std::size_t> i) {
+        retouchTool_->setSelection(i);
+        canvas_->update();
+        canvas_->findChild<QWidget*>()->update();
+    });
+    connect(retouch_, &RetouchPanel::shapesEdited, this,
+            [this](const model::RetouchShapes& s) { commitShapes(s); });
 
     // Leuchttisch / Entwickeln: Reiter am linken Rand, schließbar, hier wieder zu öffnen (K-M10-08)
     QMenu* views = menuBar()->addMenu(tr("&Fenster"));
@@ -1254,15 +1272,10 @@ void MainWindow::setTool(int which)
         canvas_->setTool(areaTool_.get());
         break;
     }
-    case 3: {
-        model::SpotList spots;
-        if (const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::retouch)))) {
-            spots = e->params.get<model::SpotList>(key::spots).value_or(model::SpotList{});
-        }
-        retouchTool_->setSpots(spots);
+    case 3:
+        syncRetouchTool();
         canvas_->setTool(retouchTool_.get());
         break;
-    }
     default:
         canvas_->setTool(nullptr);
     }
@@ -1516,6 +1529,10 @@ void MainWindow::refreshCurrent()
     gradation_->bindList(l);
     adjust_->bindList(l);
     filmProfile_->bindList(l);
+    retouch_->bindList(l);
+    if (canvas_->tool() == retouchTool_.get()) {
+        syncRetouchTool();
+    }
     // Bedienelemente nach Filmtyp: Gradation (Ilford Multigrade) nur bei S/W-Negativ
     const model::FilmType film = filmOf(s_.session.current);
     conversion_->setFilm(film);
@@ -1981,6 +1998,35 @@ void MainWindow::doFrameOptions()
                     model::JsonValue(orientation->currentData().toString().toStdString()));
     s_.settings.set("maxSkewDeg", model::JsonValue(skew->value()));
     applyFrameHint();
+}
+
+void MainWindow::commitShapes(const model::RetouchShapes& shapes)
+{
+    const model::EditList cur = ui_->currentList();
+    const model::EditEntry* e = cur.get(model::StepId(std::string(id::retouch)));
+    const bool legacySpots =
+        e != nullptr && !e->params.get<model::SpotList>(key::spots).value_or(model::SpotList{}).empty();
+    if (shapes.empty() && !legacySpots) {
+        if (e != nullptr) {
+            ui_->apply(std::make_unique<application::RemoveEntryCommand>(model::StepId(std::string(id::retouch))));
+        }
+    } else {
+        ui_->apply(std::make_unique<application::SetEntryCommand>(entryWith(cur, id::retouch, key::shapes, shapes)));
+    }
+    syncRetouchTool();
+}
+
+void MainWindow::syncRetouchTool()
+{
+    model::RetouchShapes shapes;
+    if (const model::EditEntry* e = ui_->currentList().get(model::StepId(std::string(id::retouch)))) {
+        shapes = e->params.get<model::RetouchShapes>(key::shapes).value_or(model::RetouchShapes{});
+    }
+    const QSize src = canvas_->sourceSize();
+    retouchTool_->setShapes(std::move(shapes), src.width() > 0 ? static_cast<double>(src.height()) / src.width() : 1.0);
+    retouch_->setSizes(src.width(), retouchTool_->circleRadius(), retouchTool_->brushWidth());
+    retouch_->setSelection(retouchTool_->selection());
+    canvas_->findChild<QWidget*>()->update(); // Ebene der Werkzeuge neu zeichnen
 }
 
 void MainWindow::refreshFilmProfiles()

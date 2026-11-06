@@ -168,6 +168,9 @@ public:
     /// Stellen normiert auf das ganze Bild → normiert auf den Kachelausschnitt.
     [[nodiscard]] static model::SpotList toTile(const model::SpotList& spots, base::Size image,
                                                 const image::Roi& tile);
+    /// Formen normiert auf das ganze Bild → normiert auf den Kachelausschnitt.
+    [[nodiscard]] static model::RetouchShapes shapesToTile(const model::RetouchShapes& shapes, base::Size image,
+                                                           const image::Roi& tile);
 };
 
 /// Lichter und Schatten (LF-EDT-07), Radius in Pixeln der vollen Auflösung.

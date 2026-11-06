@@ -55,7 +55,7 @@ ports::StepCatalog catalog()
     return {
         {"autoneg.filmmode", 40, 1, {{"type", K::String}}},
         {"autoneg.crop", 30, 1, {{"rect", K::Rect}, {"aspect", K::String}, {"inset", K::Double}}},
-        {"autoneg.retouch", 35, 1, {{"spots", K::Spots}}},
+        {"autoneg.retouch", 35, 1, {{"spots", K::Spots}, {"shapes", K::Shapes}}},
         {"autoneg.filmbase", 50, 1, {{"base", K::Vec3}}},
         {"autoneg.exposure", 70, 1, {{"ev", K::Double}}},
         {"autoneg.colorgrade", 90, 1, {{"level", K::Int}}},
@@ -150,7 +150,22 @@ TEST_F(DataStore, U_DAT_01_SidecarRoundTrip)
                 model::Origin::Automatic))
             .with(
                 entry("autoneg.retouch", 35,
-                      model::ParamSet{}.with("spots", model::SpotList{{{0.5, 0.25}, {0.01, -0.02}, 0.004}})))
+                      model::ParamSet{}
+                          .with("spots", model::SpotList{{{0.5, 0.25}, {0.01, -0.02}, 0.004}})
+                          .with("shapes", [] {
+                              // K-M10-23: Kreis und Fläche mit Radierer, Name und Haken
+                              model::RetouchShape c;
+                              c.name = "Kreis 1";
+                              c.center = {0.3, 0.4};
+                              c.radius = 0.01;
+                              model::RetouchShape b;
+                              b.kind = model::RetouchShape::Kind::Brush;
+                              b.name = "Fläche 2";
+                              b.enabled = false;
+                              b.center = {0.6, 0.6};
+                              b.strokes = {{false, 0.02, {{0.6, 0.6}, {0.7, 0.65}}}, {true, 0.01, {{0.65, 0.62}}}};
+                              return model::RetouchShapes{c, b};
+                          }())))
             .with(entry("autoneg.filmbase", 50, model::ParamSet{}.with("base", base::Vec3{0.71, 0.43, 0.28})))
             .with(copied)
             .with(off)

@@ -279,13 +279,41 @@ FlatFieldStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, c
 
 RetouchStep::RetouchStep()
     : DescribedRegion(describe(id::retouch, rank::retouch, "Staubretusche", Phase::Geometry,
-                               {spotsParam(key::spots)}, pipeline::FilmTypeMask::any(),
-                               Options{.cacheAfter = true}))
+                               {spotsParam(key::spots), shapesParam(key::shapes),
+                                doubleParam(key::sensitivity, 0.5, 0.0, 1.0, ""),
+                                doubleParam(key::defectSize, 20.0, 2.0, 100.0, "px")},
+                               pipeline::FilmTypeMask::any(), Options{.cacheAfter = true}))
 {}
 
-int RetouchStep::halo(const model::ParamSet& p, double /*scale*/, base::Size image) const
+model::RetouchShapes RetouchStep::shapesToTile(const model::RetouchShapes& shapes, base::Size image,
+                                               const image::Roi& tile)
+{
+    const double w = image.width;
+    const double h = image.height;
+    const auto map = [&](const model::NormPoint& p) {
+        return model::NormPoint{(p.x * w - tile.x) / tile.w, (p.y * h - tile.y) / tile.h};
+    };
+    model::RetouchShapes out = shapes;
+    for (model::RetouchShape& s : out) {
+        s.center = map(s.center);
+        s.radius = s.radius * w / tile.w;
+        for (model::RetouchStroke& st : s.strokes) {
+            st.width = st.width * w / tile.w;
+            for (model::NormPoint& p : st.points) {
+                p = map(p);
+            }
+        }
+    }
+    return out;
+}
+
+int RetouchStep::halo(const model::ParamSet& p, double scale, base::Size image) const
 {
     int h = 0;
+    if (!param(p, key::shapes, model::RetouchShapes{}).empty()) {
+        // Erkennung (Scheibe der Fehlerbreite) und Füllen brauchen die Umgebung
+        h = static_cast<int>(std::ceil(2.0 * param(p, key::defectSize, 20.0) * scale)) + 12;
+    }
     for (const model::Spot& s : param(p, key::spots, model::SpotList{})) {
         const double r = s.radius * image.width;
         const double reach =
@@ -315,11 +343,24 @@ model::SpotList RetouchStep::toTile(const model::SpotList& spots, base::Size ima
 base::Expected<image::ImageBuffer>
 RetouchStep::process(pipeline::ExecContext& x, const image::ImageBuffer& in, const model::ParamSet& p) const
 {
+    // Alte Begleitdateien: Stellen mit Quelle (Kopierstempel); neu: Formen mit Fehlersuche
     const model::SpotList spots = param(p, key::spots, model::SpotList{});
-    if (x.tile) {
-        return x.backend.inpaint(x.kernel(), in, toTile(spots, x.imageSize, x.tile->padded));
+    const model::RetouchShapes shapes = param(p, key::shapes, model::RetouchShapes{});
+    image::ImageBuffer cur = in;
+    if (!spots.empty()) {
+        auto r = x.backend.inpaint(x.kernel(), cur, x.tile ? toTile(spots, x.imageSize, x.tile->padded) : spots);
+        if (!r) {
+            return r;
+        }
+        cur = std::move(*r);
     }
-    return x.backend.inpaint(x.kernel(), in, spots);
+    if (shapes.empty()) {
+        return cur;
+    }
+    const ports::RetouchOptions o{static_cast<float>(param(p, key::sensitivity, 0.5)),
+                                  static_cast<float>(param(p, key::defectSize, 20.0) * x.scale)};
+    return x.backend.retouch(x.kernel(), cur, x.tile ? shapesToTile(shapes, x.imageSize, x.tile->padded) : shapes,
+                             o);
 }
 
 // --- Lichter und Schatten, Rauschen, Schärfen ----------------------------------------------

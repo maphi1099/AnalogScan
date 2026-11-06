@@ -26,6 +26,8 @@ bool typeMatches(ParamType t, const model::ParamValue& v)
         return std::holds_alternative<model::Curve>(v);
     case ParamType::Spots:
         return std::holds_alternative<model::SpotList>(v);
+    case ParamType::Shapes:
+        return std::holds_alternative<model::RetouchShapes>(v);
     }
     return false;
 }

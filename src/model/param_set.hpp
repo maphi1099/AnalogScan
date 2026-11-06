@@ -16,7 +16,8 @@
 namespace autoneg::model {
 
 /// Wert eines Schrittparameters.
-using ParamValue = std::variant<double, int, bool, std::string, base::Vec3, NormRect, Curve, SpotList>;
+using ParamValue =
+    std::variant<double, int, bool, std::string, base::Vec3, NormRect, Curve, SpotList, RetouchShapes>;
 
 /// Unveränderliche Parametermenge eines Eintrags, nach Namen sortiert.
 ///

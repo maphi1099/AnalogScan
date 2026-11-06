@@ -15,6 +15,7 @@
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QListWidget>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QVBoxLayout>
@@ -656,6 +657,163 @@ void AdjustPanel::bindList(const model::EditList& l)
     }
     const QSignalBlocker block(denoiseMethod_);
     denoiseMethod_->setCurrentIndex(std::clamp(method, 0, 1));
+}
+
+// --- RetouchPanel ------------------------------------------------------------------------------
+
+RetouchPanel::RetouchPanel(UiController& ui, QWidget* parent)
+    : ToolPanel(ui, parent)
+{
+    auto* layout = new QVBoxLayout(this);
+    // Werkzeuge
+    auto* toolRow = new QHBoxLayout;
+    tools_ = new QButtonGroup(this);
+    const std::array<std::pair<QString, QString>, 4> defs{
+        std::pair{tr("Auswählen"), QStringLiteral("retouchSelect")},
+        std::pair{tr("Kreis"), QStringLiteral("retouchCircle")},
+        std::pair{tr("Pinsel"), QStringLiteral("retouchBrush")},
+        std::pair{tr("Radierer"), QStringLiteral("retouchErase")}};
+    const std::array<QString, 4> tips{tr("Form im Bild anklicken; Rechtsklick hebt die Auswahl auf"),
+                                      tr("Klick setzt einen Kreis; Mausrad ändert die Größe"),
+                                      tr("Fläche malen; Mausrad ändert die Breite"),
+                                      tr("Fläche wegnehmen; Mausrad ändert die Breite")};
+    for (std::size_t i = 0; i < defs.size(); ++i) {
+        auto* b = new QPushButton(defs[i].first, this);
+        b->setObjectName(defs[i].second);
+        b->setCheckable(true);
+        b->setToolTip(tips[i]);
+        tools_->addButton(b, static_cast<int>(i));
+        toolRow->addWidget(b);
+    }
+    tools_->button(1)->setChecked(true);
+    layout->addLayout(toolRow);
+    // Optionen des Werkzeugs
+    circleOptions_ = new QWidget(this);
+    auto* co = new QVBoxLayout(circleOptions_);
+    co->setContentsMargins(0, 0, 0, 0);
+    circleSize_ = new NumberSlider(tr("Kreisgröße"), 1.0, 500.0, 0, 10.0,
+                                   tr("Radius in Pixeln des Scans; auch mit dem Mausrad"), circleOptions_);
+    circleSize_->setObjectName(QStringLiteral("retouchCircleSize"));
+    co->addWidget(circleSize_);
+    brushOptions_ = new QWidget(this);
+    auto* bo = new QVBoxLayout(brushOptions_);
+    bo->setContentsMargins(0, 0, 0, 0);
+    brushSize_ = new NumberSlider(tr("Pinselbreite"), 1.0, 500.0, 0, 20.0,
+                                  tr("Breite in Pixeln des Scans; auch mit dem Mausrad"), brushOptions_);
+    brushSize_->setObjectName(QStringLiteral("retouchBrushSize"));
+    bo->addWidget(brushSize_);
+    layout->addWidget(circleOptions_);
+    layout->addWidget(brushOptions_);
+    // Fehlersuche (gilt für alle Formen des Bilds)
+    sensitivity_ = new ParamSlider(std::string(id::retouch), std::string(key::sensitivity), tr("Empfindlichkeit"),
+                                   tr("Höher: auch schwächere Flecken und Kratzer entfernen"), ui_.registry(), this);
+    defectSize_ = new ParamSlider(std::string(id::retouch), std::string(key::defectSize), tr("Fehlerbreite"),
+                                  tr("Größte Breite eines Flecks oder Kratzers in Pixeln; Breiteres bleibt"),
+                                  ui_.registry(), this);
+    layout->addWidget(sensitivity_);
+    layout->addWidget(defectSize_);
+    for (ParamSlider* s : {sensitivity_, defectSize_}) {
+        connect(s, &ParamSlider::committed, this, [this, s](double v) {
+            commit(withParam(std::string(id::retouch), s->param(), v));
+        });
+    }
+    // Liste der Formen
+    layout->addWidget(new QLabel(tr("Formen (Haken: an dieser Stelle retuschieren)"), this));
+    list_ = new QListWidget(this);
+    list_->setObjectName(QStringLiteral("retouchShapes"));
+    list_->setToolTip(tr("Doppelklick benennt um; Entf löscht die gewählte Form"));
+    layout->addWidget(list_, 1);
+    remove_ = new QPushButton(tr("Form löschen"), this);
+    remove_->setObjectName(QStringLiteral("retouchRemove"));
+    remove_->setShortcut(QKeySequence::Delete);
+    layout->addWidget(remove_);
+    auto* hint = new QLabel(
+        tr("Innerhalb jeder Form sucht AutoNeg nach Staub, Fusseln und Kratzern und entfernt nur diese; der Rest bleibt unverändert."),
+        this);
+    hint->setWordWrap(true);
+    layout->addWidget(hint);
+
+    connect(tools_, &QButtonGroup::idClicked, this, [this](int id) {
+        showOptions(id);
+        Q_EMIT toolChosen(id);
+    });
+    connect(circleSize_, &NumberSlider::committed, this,
+            [this](double v) { Q_EMIT circleRadiusChanged(v / std::max(1, imageWidth_)); });
+    connect(brushSize_, &NumberSlider::committed, this,
+            [this](double v) { Q_EMIT brushWidthChanged(v / std::max(1, imageWidth_)); });
+    connect(list_, &QListWidget::currentRowChanged, this, [this](int row) {
+        Q_EMIT selectionChanged(row >= 0 ? std::optional<std::size_t>(static_cast<std::size_t>(row)) : std::nullopt);
+    });
+    connect(list_, &QListWidget::itemChanged, this, [this](QListWidgetItem* item) {
+        const int row = list_->row(item);
+        if (row < 0 || static_cast<std::size_t>(row) >= shapes_.size()) {
+            return;
+        }
+        model::RetouchShape& s = shapes_[static_cast<std::size_t>(row)];
+        const bool on = item->checkState() == Qt::Checked;
+        const std::string name = item->text().trimmed().toStdString();
+        if (on == s.enabled && (name == s.name || name.empty())) {
+            return;
+        }
+        s.enabled = on;
+        if (!name.empty()) {
+            s.name = name;
+        }
+        Q_EMIT shapesEdited(shapes_);
+    });
+    connect(remove_, &QPushButton::clicked, this, [this] {
+        const int row = list_->currentRow();
+        if (row < 0 || static_cast<std::size_t>(row) >= shapes_.size()) {
+            return;
+        }
+        shapes_.erase(shapes_.begin() + row);
+        Q_EMIT shapesEdited(shapes_);
+    });
+    showOptions(1);
+}
+
+void RetouchPanel::showOptions(int mode)
+{
+    circleOptions_->setVisible(mode == 1);
+    brushOptions_->setVisible(mode == 2 || mode == 3);
+}
+
+void RetouchPanel::setSizes(int imageWidth, double circleRadius, double brushWidth)
+{
+    imageWidth_ = std::max(1, imageWidth);
+    circleSize_->setValue(circleRadius * imageWidth_);
+    brushSize_->setValue(brushWidth * imageWidth_);
+}
+
+void RetouchPanel::setSelection(std::optional<std::size_t> i)
+{
+    const QSignalBlocker block(list_);
+    list_->setCurrentRow(i ? static_cast<int>(*i) : -1);
+    remove_->setEnabled(i.has_value());
+}
+
+void RetouchPanel::bindList(const model::EditList& l)
+{
+    shapes_.clear();
+    const model::EditEntry* e = l.get(model::StepId(std::string(id::retouch)));
+    if (e != nullptr) {
+        shapes_ = e->params.get<model::RetouchShapes>(key::shapes).value_or(model::RetouchShapes{});
+    }
+    sensitivity_->setValue(paramOr(l, id::retouch, key::sensitivity, sensitivity_->neutral()));
+    defectSize_->setValue(paramOr(l, id::retouch, key::defectSize, defectSize_->neutral()));
+    const int current = list_->currentRow();
+    const QSignalBlocker block(list_);
+    list_->clear();
+    for (const model::RetouchShape& s : shapes_) {
+        auto* item = new QListWidgetItem(QString::fromStdString(s.name), list_);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEditable);
+        item->setCheckState(s.enabled ? Qt::Checked : Qt::Unchecked);
+        item->setToolTip(s.kind == model::RetouchShape::Kind::Circle ? tr("Kreis") : tr("Fläche"));
+    }
+    if (current >= 0 && current < list_->count()) {
+        list_->setCurrentRow(current);
+    }
+    remove_->setEnabled(list_->currentRow() >= 0);
 }
 
 // --- NumberSlider ------------------------------------------------------------------------------

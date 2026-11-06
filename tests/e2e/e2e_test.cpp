@@ -875,12 +875,81 @@ TEST_F(E2E, E_24_RetouchThreeSpots)
         ASSERT_NE(overlay, nullptr);
         QTest::mouseClick(overlay, Qt::LeftButton, {}, overlay->mapFrom(window->canvas(), w));
     }
+    // seit K-M10-23: drei Kreise (Werkzeug Kreis ist voreingestellt) statt drei Stellen
     ASSERT_NE(entry("autoneg.retouch"), nullptr);
-    EXPECT_EQ(entry("autoneg.retouch")->params.get<model::SpotList>("spots").value().size(), 3U);
+    const auto shapes = entry("autoneg.retouch")->params.get<model::RetouchShapes>("shapes").value();
+    ASSERT_EQ(shapes.size(), 3U);
+    EXPECT_EQ(shapes[0].kind, model::RetouchShape::Kind::Circle);
+    EXPECT_EQ(shapes[2].name, "Kreis 3");
+    EXPECT_EQ(window->findChild<QListWidget*>(QStringLiteral("retouchShapes"))->count(), 3);
     const model::EditList l = list();
     EXPECT_EQ(std::ranges::count_if(
                   l.entries(), [](const model::EditEntry& e) { return e.step.value() == "autoneg.retouch"; }),
               1);
+}
+
+// K-M10-23 (Wunsch des Nutzers): Werkzeuge Kreis/Pinsel/Radierer, Liste mit Namen und Haken,
+// Auswahl per Klick im Bild und in der Liste, Rechtsklick hebt sie auf, Mausrad ändert die Größe
+TEST_F(E2E, M10_RetouchShapesToolsAndList)
+{
+    start(1);
+    auto* panel = window->findChild<ui::RetouchPanel*>(QStringLiteral("retouchPanel"));
+    ASSERT_NE(panel, nullptr);
+    panel->findChild<QPushButton*>(QStringLiteral("retouchBrush"))->click();
+    ASSERT_NE(window->canvas()->tool(), nullptr);
+    QWidget* overlay = window->canvas()->findChild<QWidget*>();
+    const ui::ViewMapping m = window->canvas()->mapping();
+    const auto at = [&m](double x, double y) { return m.toWidget(QPointF(x, y)).toPoint(); };
+    const auto paint = [&](QPointF a, QPointF b) {
+        QTest::mousePress(overlay, Qt::LeftButton, {}, at(a.x(), a.y()));
+        for (int i = 1; i <= 10; ++i) {
+            const QPointF p = a + (b - a) * (i / 10.0);
+            QMouseEvent move(QEvent::MouseMove, at(p.x(), p.y()), overlay->mapToGlobal(at(p.x(), p.y())),
+                             Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(overlay, &move);
+        }
+        QTest::mouseRelease(overlay, Qt::LeftButton, {}, at(b.x(), b.y()));
+    };
+    const auto shapes = [this] {
+        const model::EditEntry* e = entry("autoneg.retouch");
+        return e != nullptr ? e->params.get<model::RetouchShapes>("shapes").value_or(model::RetouchShapes{})
+                            : model::RetouchShapes{};
+    };
+    paint({0.2, 0.3}, {0.3, 0.3});
+    paint({0.6, 0.7}, {0.7, 0.7});
+    ASSERT_EQ(shapes().size(), 2U); // zwei getrennte Flächen
+    paint({0.3, 0.3}, {0.6, 0.7});  // verbinden
+    ASSERT_EQ(shapes().size(), 1U);
+    EXPECT_EQ(panel->list()->count(), 1);
+
+    // Kreis, Größe mit dem Mausrad
+    panel->findChild<QPushButton*>(QStringLiteral("retouchCircle"))->click();
+    QTest::mouseClick(overlay, Qt::LeftButton, {}, at(0.8, 0.2));
+    ASSERT_EQ(shapes().size(), 2U);
+    EXPECT_EQ(shapes()[1].name, "Kreis 1");
+    EXPECT_EQ(panel->list()->currentRow(), 1); // neuer Kreis ist ausgewählt
+    const double r = shapes()[1].radius;
+    QWheelEvent wheel(at(0.8, 0.2), overlay->mapToGlobal(at(0.8, 0.2)), {}, {0, 120}, Qt::NoButton,
+                      Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(overlay, &wheel);
+    EXPECT_GT(shapes()[1].radius, r);
+
+    // Rechtsklick hebt die Auswahl auf, Klick auf die Fläche wählt sie
+    QTest::mouseClick(overlay, Qt::RightButton, {}, at(0.5, 0.5));
+    EXPECT_EQ(panel->list()->currentRow(), -1);
+    QTest::mouseClick(overlay, Qt::LeftButton, {}, at(0.25, 0.3));
+    EXPECT_EQ(panel->list()->currentRow(), 0);
+
+    // Haken aus: Form bleibt, wird aber nicht retuschiert
+    panel->list()->item(0)->setCheckState(Qt::Unchecked);
+    EXPECT_FALSE(shapes()[0].enabled);
+    // umbenennen
+    panel->list()->item(1)->setText(QStringLiteral("Fussel oben"));
+    EXPECT_EQ(shapes()[1].name, "Fussel oben");
+    // löschen
+    panel->list()->setCurrentRow(1);
+    panel->findChild<QPushButton*>(QStringLiteral("retouchRemove"))->click();
+    EXPECT_EQ(shapes().size(), 1U);
 }
 
 // E-26: LF-BAT-04 – Einfügen mit "neu erkennen": Zuschnitt wird nicht kopiert, sondern erkannt

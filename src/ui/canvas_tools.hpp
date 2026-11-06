@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <optional>
+#include <string>
 
 class QPainter;
 class QMouseEvent;
@@ -141,23 +142,61 @@ private:
     bool readOnly_ = false;
 };
 
-/// Reparaturpinsel für Staub (LF-EDT-12): jeder Klick setzt eine Stelle.
+/// Staubretusche mit Formen (LF-EDT-12, K-M10-23). Werkzeuge: Auswählen, Kreis (Klick setzt,
+/// Mausrad ändert die Größe), Pinsel (malt eine Fläche), Radierer (nimmt Fläche weg; Mausrad
+/// ändert die Breite). Klick auf eine Form wählt sie aus, Rechtsklick hebt die Auswahl auf.
+/// Jede abgeschlossene Geste übergibt die neue Formenliste (ein Befehl je Geste).
 class RetouchTool final : public ICanvasTool
 {
 public:
-    using Spot = std::function<void(const model::Spot&)>;
-    void setSpot(Spot s) { spot_ = std::move(s); }
-    void setRadius(double norm) { radius_ = norm; }
-    [[nodiscard]] double radius() const { return radius_; }
-    void setSpots(model::SpotList s) { spots_ = std::move(s); }
+    enum class Mode
+    {
+        Select,
+        Circle,
+        Brush,
+        Erase
+    };
+    using Commit = std::function<void(const model::RetouchShapes&)>;
+    using Selected = std::function<void(std::optional<std::size_t>)>;
+    using SizeChanged = std::function<void()>;
+
+    void setCommit(Commit c) { commit_ = std::move(c); }
+    void setSelectedCallback(Selected s) { selected_ = std::move(s); }
+    /// Kreisgröße bzw. Pinselbreite per Mausrad geändert (Regler nachziehen).
+    void setSizeChanged(SizeChanged s) { sizeChanged_ = std::move(s); }
+    void setMode(Mode m) { mode_ = m; }
+    [[nodiscard]] Mode mode() const { return mode_; }
+    /// Formen und Seitenverhältnis (Höhe/Breite) des Bilds.
+    void setShapes(model::RetouchShapes s, double aspect);
+    [[nodiscard]] const model::RetouchShapes& shapes() const { return shapes_; }
+    void setSelection(std::optional<std::size_t> i) { selection_ = i; }
+    [[nodiscard]] std::optional<std::size_t> selection() const { return selection_; }
+    /// Radius neuer Kreise bzw. Breite des Pinsels, normiert auf die Bildbreite.
+    void setCircleRadius(double r) { circleRadius_ = r; }
+    [[nodiscard]] double circleRadius() const { return circleRadius_; }
+    void setBrushWidth(double w) { brushWidth_ = w; }
+    [[nodiscard]] double brushWidth() const { return brushWidth_; }
+    /// Name für die nächste Form (Kreis n / Fläche n).
+    [[nodiscard]] std::string nextName(model::RetouchShape::Kind k) const;
 
     void paint(QPainter& p, const ViewMapping& m) override;
     bool mouse(QMouseEvent* e, const ViewMapping& m) override;
+    bool wheel(QWheelEvent* e, const ViewMapping& m) override;
 
 private:
-    double radius_ = 0.005;
-    model::SpotList spots_;
-    Spot spot_;
+    void select(std::optional<std::size_t> i);
+
+    Mode mode_ = Mode::Circle;
+    model::RetouchShapes shapes_;
+    double aspect_ = 1.0;
+    std::optional<std::size_t> selection_;
+    double circleRadius_ = 0.01;
+    double brushWidth_ = 0.01;
+    std::optional<model::RetouchStroke> stroke_; ///< laufender Pinselstrich
+    std::optional<QPointF> hover_;               ///< Mausposition (Vorschau der Größe)
+    Commit commit_;
+    Selected selected_;
+    SizeChanged sizeChanged_;
 };
 
 } // namespace autoneg::ui

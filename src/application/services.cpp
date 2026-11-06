@@ -41,6 +41,8 @@ ports::ParamKind kindOf(pipeline::ParamType t)
         return ports::ParamKind::Curve;
     case pipeline::ParamType::Spots:
         return ports::ParamKind::Spots;
+    case pipeline::ParamType::Shapes:
+        return ports::ParamKind::Shapes;
     }
     return ports::ParamKind::Double;
 }

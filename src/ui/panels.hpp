@@ -7,6 +7,7 @@
 
 #include <array>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@ class QComboBox;
 class QTimer;
 class QDoubleSpinBox;
 class QLabel;
+class QListWidget;
 class QPushButton;
 class QSlider;
 
@@ -192,6 +194,48 @@ private:
     QLabel* hint_ = nullptr;
     QPushButton* picker_ = nullptr;
     QComboBox* denoiseMethod_ = nullptr;
+};
+
+class NumberSlider;
+
+/// Staubretusche (LF-EDT-12, K-M10-23): Werkzeugwahl (Auswählen, Kreis, Pinsel, Radierer), die
+/// Optionen des gewählten Werkzeugs, Einstellungen der Fehlersuche und die Liste aller Formen
+/// (Name, Haken = an dieser Stelle retuschieren). Auswahl in Liste und Bild ist verknüpft.
+class RetouchPanel final : public ToolPanel
+{
+    Q_OBJECT
+
+public:
+    explicit RetouchPanel(UiController& ui, QWidget* parent = nullptr);
+    void bindList(const model::EditList& l) override;
+    /// Auswahl aus dem Bild übernehmen (ohne Signal).
+    void setSelection(std::optional<std::size_t> i);
+    /// Größe in Pixeln der Bildbreite anzeigen: Bildbreite und aktuelle Werte (normiert).
+    void setSizes(int imageWidth, double circleRadius, double brushWidth);
+    [[nodiscard]] QListWidget* list() const { return list_; }
+
+Q_SIGNALS:
+    void toolChosen(int mode); ///< RetouchTool::Mode
+    void circleRadiusChanged(double norm);
+    void brushWidthChanged(double norm);
+    void selectionChanged(std::optional<std::size_t> i);
+    /// Liste geändert (Haken, Name, Löschen): neue Formenliste.
+    void shapesEdited(const model::RetouchShapes& shapes);
+
+private:
+    void showOptions(int mode);
+
+    model::RetouchShapes shapes_;
+    int imageWidth_ = 1000;
+    QButtonGroup* tools_ = nullptr;
+    QWidget* circleOptions_ = nullptr;
+    QWidget* brushOptions_ = nullptr;
+    NumberSlider* circleSize_ = nullptr;
+    NumberSlider* brushSize_ = nullptr;
+    ParamSlider* sensitivity_ = nullptr;
+    ParamSlider* defectSize_ = nullptr;
+    QListWidget* list_ = nullptr;
+    QPushButton* remove_ = nullptr;
 };
 
 /// Schieberegler mit Zahlenfeld für einen frei skalierten Wert (nicht an ein Parameterschema

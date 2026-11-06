@@ -2,7 +2,7 @@
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets)
 autoneg_add_test(ui
     LABEL unit
-    SOURCES ui_test.cpp
+    SOURCES ui_test.cpp retouch_geometry_test.cpp
     DEPS ui steps
 )
 get_target_property(_qt_widgets_type Qt6::Widgets TYPE)
